@@ -1267,7 +1267,7 @@ function resolveCostCenterHourlyRate(row, rowOverrides, rowsByKey, nightPremiumE
 function buildCostCenterProjects() {
   const byProject = new Map();
   const persistedProjects = getCostCentersStore();
-  const pioConfig = state.studyConfig?.studySetup?.pioDefinitionFreightCustoms?.projects || {};
+  const pioProjectsByKey = new Map(buildPioDefinitionProjects().map((project) => [project.projectKey, project]));
   const mergedProjectParams = getMergedProjectGeneralParamsMap();
   const currencyCatalog = ["EUR", "USD", "AED", "SAR", "BRL", "CNY", "SGD", "INR", "GBP", "PLN"];
   const timePeriodCatalog = ["Day", "Night", "Shift", "Average", "Handback"];
@@ -1303,7 +1303,7 @@ function buildCostCenterProjects() {
 
     const projectName = params.project_name || workbook.fileName || projectKey;
     const persisted = persistedProjects[projectKey] || {};
-    const pioProject = pioConfig[projectKey] || {};
+    const pioProject = pioProjectsByKey.get(projectKey) || {};
     const pioRows = Array.isArray(pioProject.rows) ? pioProject.rows : [];
     const projectPioRow = pioRows.find((row) => row.origin === projectName) || pioRows[0] || null;
     const projectCaratUnit = projectPioRow?.caratUnit || "";
