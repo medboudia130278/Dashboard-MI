@@ -1,0 +1,1948 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <title>Cost Summary &amp; MI</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            primary: "#137fec",
+            "background-light": "#f6f7f8",
+            "background-dark": "#101922",
+          },
+          fontFamily: {
+            display: ["Inter", "sans-serif"],
+          },
+        },
+      },
+    };
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+  <style type="text/tailwindcss">
+    body { font-family: 'Inter', sans-serif; }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+    details > summary { list-style: none; }
+    details > summary::-webkit-details-marker { display: none; }
+    details[open] .details-chevron { transform: rotate(180deg); }
+    .details-chevron { transition: transform 0.2s ease; }
+  </style>
+</head>
+<body class="bg-background-light text-slate-900 min-h-screen font-display">
+  <div class="min-h-screen flex flex-col">
+    <header class="sticky top-0 z-20 bg-white/90 backdrop-blur-md border-b border-slate-200">
+      <div class="max-w-7xl mx-auto px-6 py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div class="space-y-2">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-50 text-cyan-700 border border-cyan-200 text-[11px] font-bold uppercase tracking-[0.18em]">
+            <span class="material-symbols-outlined text-[16px]">table_view</span>
+            Cost Summary &amp; MI
+          </div>
+          <div>
+            <h1 class="text-3xl font-black tracking-tight">Cost Summary &amp; MI</h1>
+            <p class="text-sm text-slate-500">Dedicated workspace for parameterized cost summary logic and Excel workbook generation.</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <a href="index_Vref.html" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold hover:bg-slate-100 transition-all">
+            <span class="material-symbols-outlined text-[18px]">arrow_back</span>
+            Back to dashboard
+          </a>
+          <button id="toggleThemeBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition-all">
+            <span class="material-symbols-outlined text-[18px]">dark_mode</span>
+            Theme
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="flex-1 max-w-7xl w-full mx-auto px-6 py-8 space-y-6">
+      <section id="costSummaryRuntimeAlert" class="hidden rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 shadow-sm">
+        <div class="flex items-start gap-3">
+          <span class="material-symbols-outlined text-[20px] text-rose-600">error</span>
+          <div>
+            <h2 class="text-sm font-bold text-rose-700">Cost Summary runtime issue</h2>
+            <p id="costSummaryRuntimeAlertText" class="mt-1 text-sm leading-6 text-rose-700">
+              The page could not initialize correctly.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Study bar — compact, all IDs preserved for JS -->
+      <div class="bg-white border border-slate-200 rounded-2xl px-5 py-3 shadow-sm flex flex-wrap items-center gap-3">
+        <span class="material-symbols-outlined text-[18px] text-slate-400">folder_open</span>
+        <select id="studySelector" class="rounded-xl border-slate-200 px-3 py-1.5 text-sm font-semibold min-w-[200px]"></select>
+        <button id="newStudyBtn" type="button" title="New study" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 transition-all">
+          <span class="material-symbols-outlined text-[16px]">add</span>New
+        </button>
+        <button id="renameStudyBtn" type="button" title="Rename study" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold hover:bg-slate-100 transition-all">
+          <span class="material-symbols-outlined text-[16px]">edit</span>Rename
+        </button>
+        <button id="deleteStudyBtn" type="button" title="Delete study" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white border border-rose-200 text-rose-700 text-xs font-semibold hover:bg-rose-50 transition-all">
+          <span class="material-symbols-outlined text-[16px]">delete</span>Delete
+        </button>
+        <span id="currentStudyStatus" class="ml-auto text-xs text-slate-400 font-medium"></span>
+        <!-- Hidden metadata nodes required by renderStudyWorkspace() -->
+        <span id="currentStudyId" class="hidden"></span>
+        <span id="currentStudyCreatedAt" class="hidden"></span>
+        <span id="currentStudyUpdatedAt" class="hidden"></span>
+      </div>
+
+      <section class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+        <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+          <div>
+            <h2 class="text-lg font-bold">Configuration Toolbar</h2>
+            <p class="text-sm text-slate-500 mt-1">Open each business sub-module in a dedicated right-side drawer without leaving the workspace.</p>
+          </div>
+          <div class="inline-flex items-center gap-2 rounded-xl bg-sky-50 border border-sky-200 text-sky-700 px-3 py-2 text-xs font-semibold">
+            <span class="material-symbols-outlined text-[16px]">right_panel_open</span>
+            Drawer workflow
+          </div>
+        </div>
+        <div id="costSummaryToolbar" class="mt-4 flex flex-wrap gap-3">
+          <div class="relative" data-toolbar-root="study_setup">
+            <button
+              type="button"
+              data-toolbar-trigger="study_setup"
+              class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-all"
+              aria-expanded="false"
+            >
+              <span class="material-symbols-outlined text-[18px] text-slate-500">schema</span>
+              Study Setup
+              <span data-status-dot-group="study_setup"></span>
+              <span class="material-symbols-outlined text-[18px] text-slate-400">expand_more</span>
+            </button>
+            <div data-toolbar-menu="study_setup" class="hidden absolute left-0 top-[calc(100%+8px)] z-30 min-w-[300px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+              <div class="border-b border-slate-100 px-4 py-3">
+                <p class="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Study Setup</p>
+              </div>
+              <div class="p-2">
+                <button type="button" data-toolbar-item="cost_centers" data-toolbar-group="study_setup" class="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left hover:bg-slate-50 transition-all">
+                  <span class="material-symbols-outlined mt-0.5 text-[18px] text-primary">chevron_right</span>
+                  <span class="flex-1 min-w-0">
+                    <span class="flex items-center gap-2"><span class="text-sm font-semibold text-slate-700">Cost Centers</span><span data-status-dot-item="cost_centers"></span></span>
+                    <span class="mt-1 block text-xs leading-5 text-slate-500">Define the cost-center structure and indirect allocation links.</span>
+                  </span>
+                </button>
+                <button type="button" data-toolbar-item="pio_definition_freight_customs" data-toolbar-group="study_setup" class="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left hover:bg-slate-50 transition-all">
+                  <span class="material-symbols-outlined mt-0.5 text-[18px] text-primary">chevron_right</span>
+                  <span class="flex-1 min-w-0">
+                    <span class="flex items-center gap-2"><span class="text-sm font-semibold text-slate-700">PIO Definition, Freight & Customs</span><span data-status-dot-item="pio_definition_freight_customs"></span></span>
+                    <span class="mt-1 block text-xs leading-5 text-slate-500">Prepare logistics and PIO cost rules for later export sheets.</span>
+                  </span>
+                </button>
+                <button type="button" data-toolbar-item="project_phases" data-toolbar-group="study_setup" class="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left hover:bg-slate-50 transition-all">
+                  <span class="material-symbols-outlined mt-0.5 text-[18px] text-primary">chevron_right</span>
+                  <span class="flex-1 min-w-0">
+                    <span class="flex items-center gap-2"><span class="text-sm font-semibold text-slate-700">Project Phases</span><span data-status-dot-item="project_phases"></span></span>
+                    <span class="mt-1 block text-xs leading-5 text-slate-500">Describe the study sequencing and phase structure.</span>
+                  </span>
+                </button>
+                <button type="button" data-toolbar-item="guide_planning_definition" data-toolbar-group="study_setup" class="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left hover:bg-slate-50 transition-all">
+                  <span class="material-symbols-outlined mt-0.5 text-[18px] text-primary">chevron_right</span>
+                  <span class="flex-1 min-w-0">
+                    <span class="flex items-center gap-2"><span class="text-sm font-semibold text-slate-700">Guide Planning Definition</span><span data-status-dot-item="guide_planning_definition"></span></span>
+                    <span class="mt-1 block text-xs leading-5 text-slate-500">Document the planning guide assumptions used by the study.</span>
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="relative" data-toolbar-root="data_sources">
+            <button
+              type="button"
+              data-toolbar-trigger="data_sources"
+              class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-all"
+              aria-expanded="false"
+            >
+              <span class="material-symbols-outlined text-[18px] text-slate-500">database</span>
+              Data sources
+              <span data-status-dot-group="data_sources"></span>
+              <span class="material-symbols-outlined text-[18px] text-slate-400">expand_more</span>
+            </button>
+            <div data-toolbar-menu="data_sources" class="hidden absolute left-0 top-[calc(100%+8px)] z-30 min-w-[280px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+              <div class="border-b border-slate-100 px-4 py-3">
+                <p class="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Data sources</p>
+              </div>
+              <div class="p-2">
+                <button type="button" data-toolbar-item="currency_exchange_rates" data-toolbar-group="data_sources" class="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left hover:bg-slate-50 transition-all">
+                  <span class="material-symbols-outlined mt-0.5 text-[18px] text-primary">chevron_right</span>
+                  <span class="flex-1 min-w-0">
+                    <span class="flex items-center gap-2"><span class="text-sm font-semibold text-slate-700">Currency & Exchange Rates</span><span data-status-dot-item="currency_exchange_rates"></span></span>
+                    <span class="mt-1 block text-xs leading-5 text-slate-500">Set target currency strategy, overrides, and refresh governance.</span>
+                  </span>
+                </button>
+                <button type="button" data-toolbar-item="firming_rules" data-toolbar-group="data_sources" class="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left hover:bg-slate-50 transition-all">
+                  <span class="material-symbols-outlined mt-0.5 text-[18px] text-primary">chevron_right</span>
+                  <span class="flex-1 min-w-0">
+                    <span class="flex items-center gap-2"><span class="text-sm font-semibold text-slate-700">Firming Rules</span><span data-status-dot-item="firming_rules"></span></span>
+                    <span class="mt-1 block text-xs leading-5 text-slate-500">Capture the rules used to convert draft estimates into firmed values.</span>
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="relative" data-toolbar-root="organization_risks">
+            <button
+              type="button"
+              data-toolbar-trigger="organization_risks"
+              class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-all"
+              aria-expanded="false"
+            >
+              <span class="material-symbols-outlined text-[18px] text-slate-500">groups</span>
+              Organization & Headcount
+              <span data-status-dot-group="organization_risks"></span>
+              <span class="material-symbols-outlined text-[18px] text-slate-400">expand_more</span>
+            </button>
+            <div data-toolbar-menu="organization_risks" class="hidden absolute left-0 top-[calc(100%+8px)] z-30 min-w-[300px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+              <div class="border-b border-slate-100 px-4 py-3">
+                <p class="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Organization & Headcount</p>
+              </div>
+              <div class="p-2">
+                <button type="button" data-toolbar-item="workload_synthesis" data-toolbar-group="organization_risks" class="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left hover:bg-slate-50 transition-all"><span class="material-symbols-outlined mt-0.5 text-[18px] text-primary">chevron_right</span><span class="flex-1 min-w-0"><span class="flex items-center gap-2"><span class="text-sm font-semibold text-slate-700">Workload Synthesis</span><span data-status-dot-item="workload_synthesis"></span></span><span class="mt-1 block text-xs leading-5 text-slate-500">Frame how workload consolidation will feed the MI engine.</span></span></button>
+                <button type="button" data-toolbar-item="white_collar_definition" data-toolbar-group="organization_risks" class="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left hover:bg-slate-50 transition-all"><span class="material-symbols-outlined mt-0.5 text-[18px] text-primary">chevron_right</span><span class="flex-1 min-w-0"><span class="flex items-center gap-2"><span class="text-sm font-semibold text-slate-700">White collars & Optimization</span><span data-status-dot-item="white_collar_definition"></span></span><span class="mt-1 block text-xs leading-5 text-slate-500">Prepare the white-collar population rules for organization costs.</span></span></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="relative" data-toolbar-root="support_costs">
+            <button
+              type="button"
+              data-toolbar-trigger="support_costs"
+              class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-all"
+              aria-expanded="false"
+            >
+              <span class="material-symbols-outlined text-[18px] text-slate-500">inventory_2</span>
+              Support Costs
+              <span data-status-dot-group="support_costs"></span>
+              <span class="material-symbols-outlined text-[18px] text-slate-400">expand_more</span>
+            </button>
+            <div data-toolbar-menu="support_costs" class="hidden absolute left-0 top-[calc(100%+8px)] z-30 min-w-[300px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+              <div class="border-b border-slate-100 px-4 py-3">
+                <p class="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Support Costs</p>
+              </div>
+              <div class="p-2">
+                <button type="button" data-toolbar-item="tools_consumables" data-toolbar-group="support_costs" class="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left hover:bg-slate-50 transition-all"><span class="material-symbols-outlined mt-0.5 text-[18px] text-primary">chevron_right</span><span class="flex-1 min-w-0"><span class="flex items-center gap-2"><span class="text-sm font-semibold text-slate-700">Tools & Consumables</span><span data-status-dot-item="tools_consumables"></span></span><span class="mt-1 block text-xs leading-5 text-slate-500">Prepare the support-cost structure for tools and expendables.</span></span></button>
+                <button type="button" data-toolbar-item="vehicles" data-toolbar-group="support_costs" class="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left hover:bg-slate-50 transition-all"><span class="material-symbols-outlined mt-0.5 text-[18px] text-primary">chevron_right</span><span class="flex-1 min-w-0"><span class="flex items-center gap-2"><span class="text-sm font-semibold text-slate-700">Vehicles</span><span data-status-dot-item="vehicles"></span></span><span class="mt-1 block text-xs leading-5 text-slate-500">Define fleet assumptions and cost allocation rules.</span></span></button>
+                <button type="button" data-toolbar-item="mandatory_training" data-toolbar-group="support_costs" class="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left hover:bg-slate-50 transition-all"><span class="material-symbols-outlined mt-0.5 text-[18px] text-primary">chevron_right</span><span class="flex-1 min-w-0"><span class="flex items-center gap-2"><span class="text-sm font-semibold text-slate-700">Mandatory Training</span><span data-status-dot-item="mandatory_training"></span></span><span class="mt-1 block text-xs leading-5 text-slate-500">Set the training rules that contribute to support costs.</span></span></button>
+                <button type="button" data-toolbar-item="other_support_costs" data-toolbar-group="support_costs" class="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left hover:bg-slate-50 transition-all"><span class="material-symbols-outlined mt-0.5 text-[18px] text-primary">chevron_right</span><span class="flex-1 min-w-0"><span class="flex items-center gap-2"><span class="text-sm font-semibold text-slate-700">Other Support Costs</span><span data-status-dot-item="other_support_costs"></span></span><span class="mt-1 block text-xs leading-5 text-slate-500">Create room for residual support-cost buckets.</span></span></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="relative" data-toolbar-root="pricing_risks">
+            <button
+              type="button"
+              data-toolbar-trigger="pricing_risks"
+              class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-all"
+              aria-expanded="false"
+            >
+              <span class="material-symbols-outlined text-[18px] text-slate-500">price_change</span>
+              Pricing & Risks
+              <span data-status-dot-group="pricing_risks"></span>
+              <span class="material-symbols-outlined text-[18px] text-slate-400">expand_more</span>
+            </button>
+            <div data-toolbar-menu="pricing_risks" class="hidden absolute left-0 top-[calc(100%+8px)] z-30 min-w-[300px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+              <div class="border-b border-slate-100 px-4 py-3">
+                <p class="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Pricing & Risks</p>
+              </div>
+              <div class="p-2">
+                <button type="button" data-toolbar-item="price_lists" data-toolbar-group="pricing_risks" class="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left hover:bg-slate-50 transition-all">
+                  <span class="material-symbols-outlined mt-0.5 text-[18px] text-primary">chevron_right</span>
+                  <span class="flex-1 min-w-0">
+                    <span class="flex items-center gap-2"><span class="text-sm font-semibold text-slate-700">Price Lists</span><span data-status-dot-item="price_lists"></span></span>
+                    <span class="mt-1 block text-xs leading-5 text-slate-500">Define the price-list sources, versions, and fallback hierarchy.</span>
+                  </span>
+                </button>
+                <button type="button" data-toolbar-item="risk_register" data-toolbar-group="pricing_risks" class="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left hover:bg-slate-50 transition-all">
+                  <span class="material-symbols-outlined mt-0.5 text-[18px] text-primary">chevron_right</span>
+                  <span class="flex-1 min-w-0">
+                    <span class="flex items-center gap-2"><span class="text-sm font-semibold text-slate-700">Risk Register</span><span data-status-dot-item="risk_register"></span></span>
+                    <span class="mt-1 block text-xs leading-5 text-slate-500">Define risk structure, scoring, and cost impact logic.</span>
+                  </span>
+                </button>
+                <button type="button" data-toolbar-item="wbs" data-toolbar-group="pricing_risks" class="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left hover:bg-slate-50 transition-all">
+                  <span class="material-symbols-outlined mt-0.5 text-[18px] text-primary">chevron_right</span>
+                  <span class="flex-1 min-w-0">
+                    <span class="flex items-center gap-2"><span class="text-sm font-semibold text-slate-700">WBS</span><span data-status-dot-item="wbs"></span></span>
+                    <span class="mt-1 block text-xs leading-5 text-slate-500">Define the work breakdown structure source and mapping levels.</span>
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="relative" data-toolbar-root="export_data">
+            <button
+              type="button"
+              data-toolbar-trigger="export_data"
+              class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-all"
+              aria-expanded="false"
+            >
+              <span class="material-symbols-outlined text-[18px] text-slate-500">upload_file</span>
+              Export data
+              <span data-status-dot-group="export_data"></span>
+              <span class="material-symbols-outlined text-[18px] text-slate-400">expand_more</span>
+            </button>
+            <div data-toolbar-menu="export_data" class="hidden absolute left-0 top-[calc(100%+8px)] z-30 min-w-[300px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+              <div class="border-b border-slate-100 px-4 py-3">
+                <p class="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Export data</p>
+              </div>
+              <div class="p-2">
+                <button type="button" data-toolbar-item="subsystem_summary" data-toolbar-group="export_data" class="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left hover:bg-slate-50 transition-all"><span class="material-symbols-outlined mt-0.5 text-[18px] text-primary">chevron_right</span><span class="flex-1 min-w-0"><span class="flex items-center gap-2"><span class="text-sm font-semibold text-slate-700">Subsystem Summary</span><span data-status-dot-item="subsystem_summary"></span></span><span class="mt-1 block text-xs leading-5 text-slate-500">Configure the subsystem-level output package.</span></span></button>
+                <button type="button" data-toolbar-item="mercury_interface" data-toolbar-group="export_data" class="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left hover:bg-slate-50 transition-all"><span class="material-symbols-outlined mt-0.5 text-[18px] text-primary">chevron_right</span><span class="flex-1 min-w-0"><span class="flex items-center gap-2"><span class="text-sm font-semibold text-slate-700">Mercury Interface</span><span data-status-dot-item="mercury_interface"></span></span><span class="mt-1 block text-xs leading-5 text-slate-500">Prepare the future export mapping for Mercury.</span></span></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="projectPhasesWorkspace" class="hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+        <div class="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
+          <div>
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-50 text-sky-700 border border-sky-200 text-[11px] font-bold uppercase tracking-[0.18em]">
+              <span class="material-symbols-outlined text-[16px]">schema</span>
+              Study Setup
+            </div>
+            <h2 class="mt-3 text-2xl font-black tracking-tight">Project Phases Workspace</h2>
+            <p class="mt-2 text-sm text-slate-500">Edit one project at a time with a wider layout dedicated to mobilisation, warranty, and phase sequencing.</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <div id="projectPhasesWorkspaceStatus" class="text-xs font-semibold text-slate-500">No project selected.</div>
+            <button id="closeProjectPhasesWorkspaceBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold hover:bg-slate-100 transition-all">
+              <span class="material-symbols-outlined text-[18px]">close</span>
+              Close
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-6 grid grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)] gap-6">
+          <aside class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">Projects</h3>
+                <p class="mt-1 text-xs text-slate-500">Select one project to edit its setup.</p>
+              </div>
+              <button id="refreshProjectPhasesWorkspaceBtn" type="button" class="inline-flex items-center justify-center size-9 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 transition-all">
+                <span class="material-symbols-outlined text-[18px]">refresh</span>
+              </button>
+            </div>
+            <div id="projectPhasesProjectList" class="mt-4 space-y-2"></div>
+          </aside>
+
+          <div class="space-y-6">
+            <div id="projectPhasesWorkspaceEmpty" class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-sm text-slate-500">
+              No project available yet. Import workbooks with <span class="font-semibold">General Parameters</span> in the main dashboard, then refresh this workspace.
+            </div>
+
+            <div id="projectPhasesWorkspaceContent" class="hidden space-y-6">
+              <section class="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+                <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                  <div>
+                    <h3 id="projectPhasesCurrentProjectTitle" class="text-xl font-black tracking-tight">Project</h3>
+                    <p id="projectPhasesCurrentProjectMeta" class="mt-2 text-sm text-slate-500">Context</p>
+                  </div>
+                  <div class="grid grid-cols-2 gap-3 text-sm">
+                    <div class="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                      <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Planning Year</p>
+                      <p id="projectPhasesPlanningYear" class="mt-2 font-semibold">--</p>
+                    </div>
+                    <div class="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                      <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Derived Contract Duration</p>
+                      <p id="projectPhasesDerivedDuration" class="mt-2 font-semibold">--</p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="grid grid-cols-1 2xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)] gap-6">
+                <div class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                  <h3 class="text-base font-bold">Project Identity</h3>
+                  <div id="projectPhasesIdentityGrid" class="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"></div>
+                </div>
+                <div class="space-y-6">
+                  <div class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                    <h3 class="text-base font-bold">Mobilisation & Warranty</h3>
+                    <div id="projectPhasesWarrantyGrid" class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+                  </div>
+                  <div class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                    <h3 class="text-base font-bold">Overhaul & Renewals</h3>
+                    <div id="projectPhasesOverhaulGrid" class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="rounded-2xl border border-sky-200 bg-sky-50 p-5">
+                <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                  <div>
+                    <h3 class="text-base font-bold">Phase Timeline</h3>
+                    <p class="mt-1 text-sm text-slate-500">Manage Total, Base, and Options in a dedicated wide table.</p>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-3">
+                    <button id="projectPhasesAddPhaseBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold hover:bg-slate-100 transition-all">
+                      <span class="material-symbols-outlined text-[18px]">add</span>
+                      Add phase
+                    </button>
+                    <button id="projectPhasesAddCustomPhaseBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold hover:bg-slate-100 transition-all">
+                      <span class="material-symbols-outlined text-[18px]">playlist_add</span>
+                      Add manual phase
+                    </button>
+                  </div>
+                </div>
+                <div class="mt-4 overflow-x-auto custom-scrollbar">
+                  <table class="min-w-full text-sm">
+                    <thead class="text-[10px] uppercase tracking-wider text-slate-400">
+                      <tr class="border-b border-slate-200">
+                        <th class="text-left py-3 pr-4">Phase</th>
+                        <th class="text-left py-3 px-4">Phase code</th>
+                        <th class="text-right py-3 px-4">Duration (years)</th>
+                        <th class="text-left py-3 px-4">Start</th>
+                        <th class="text-left py-3 px-4">End</th>
+                        <th class="text-left py-3 px-4">Post Warranty Start</th>
+                        <th class="text-left py-3 px-4">Post Warranty End</th>
+                        <th class="text-right py-3 pl-4">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody id="projectPhasesTableBody" class="divide-y divide-slate-200"></tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="costCentersWorkspace" class="hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+        <div class="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
+          <div>
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-bold uppercase tracking-[0.18em]">
+              <span class="material-symbols-outlined text-[16px]">groups</span>
+              Organization & Headcount
+            </div>
+            <h2 class="mt-3 text-2xl font-black tracking-tight">Cost Centers Workspace</h2>
+            <p class="mt-2 text-sm text-slate-500">Select one project, define its currency and annual working hours, then configure applicable positions and time periods.</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <div id="costCentersWorkspaceStatus" class="text-xs font-semibold text-slate-500">No project selected.</div>
+            <button id="closeCostCentersWorkspaceBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold hover:bg-slate-100 transition-all">
+              <span class="material-symbols-outlined text-[18px]">close</span>
+              Close
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-6 grid grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)] gap-6">
+          <aside class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">Projects</h3>
+                <p class="mt-1 text-xs text-slate-500">Choose one project to configure cost-center inputs.</p>
+              </div>
+              <button id="refreshCostCentersWorkspaceBtn" type="button" class="inline-flex items-center justify-center size-9 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 transition-all">
+                <span class="material-symbols-outlined text-[18px]">refresh</span>
+              </button>
+            </div>
+            <div id="costCentersProjectList" class="mt-4 space-y-2"></div>
+          </aside>
+
+          <div class="space-y-6">
+            <div id="costCentersWorkspaceEmpty" class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-sm text-slate-500">
+              No project available yet. Import workbooks with <span class="font-semibold">General Parameters</span> in the main dashboard, then refresh this workspace.
+            </div>
+
+            <div id="costCentersWorkspaceContent" class="hidden space-y-6">
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                  <div>
+                    <h3 id="costCentersCurrentProjectTitle" class="text-xl font-black tracking-tight">Project</h3>
+                    <p id="costCentersCurrentProjectMeta" class="mt-2 text-sm text-slate-500">Context</p>
+                  </div>
+                  <div class="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
+                    <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Annual hours source</p>
+                    <p id="costCentersAnnualHoursSource" class="mt-2 font-semibold">--</p>
+                  </div>
+                </div>
+              </section>
+
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div class="space-y-5">
+                  <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+                    <label class="block">
+                      <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Project Currency</p>
+                      <div class="mt-1 flex items-center gap-3">
+                        <select id="costCentersProjectCurrencySelect" class="flex-1 rounded-xl border-slate-200 px-3 py-2"></select>
+                        <button id="costCentersAddCurrencyBtn" type="button" class="inline-flex items-center justify-center size-10 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 transition-all">
+                          <span class="material-symbols-outlined text-[18px]">add</span>
+                        </button>
+                      </div>
+                    </label>
+                    <label class="block">
+                      <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Annual Working Hours</p>
+                      <input id="costCentersAnnualHoursInput" type="number" min="0" step="1" class="mt-1 w-full rounded-xl border-slate-200 px-3 py-2"/>
+                    </label>
+                  </div>
+
+                  <details class="rounded-2xl border border-slate-200 bg-white p-4">
+                    <summary class="cursor-pointer text-sm font-bold text-slate-700">Applicable Positions</summary>
+                    <div class="mt-4 flex items-center justify-end">
+                      <button id="costCentersAddPositionBtn" type="button" class="inline-flex items-center justify-center size-10 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 transition-all">
+                        <span class="material-symbols-outlined text-[18px]">add</span>
+                      </button>
+                    </div>
+                    <div id="costCentersPositionsSelector" class="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 text-sm"></div>
+                  </details>
+
+                  <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    <details class="rounded-2xl border border-slate-200 bg-white p-4">
+                      <summary class="cursor-pointer text-sm font-bold text-slate-700">Time Periods for Team Leader / Supervisor / Technician / Worker</summary>
+                      <div id="costCentersGeneralPeriodsSelector" class="mt-4 grid grid-cols-2 md:grid-cols-3 gap-2 text-sm"></div>
+                    </details>
+                    <details class="rounded-2xl border border-slate-200 bg-white p-4">
+                      <summary class="cursor-pointer text-sm font-bold text-slate-700">Time Periods for Engineer positions</summary>
+                      <div id="costCentersEngineerPeriodsSelector" class="mt-4 grid grid-cols-2 md:grid-cols-3 gap-2 text-sm"></div>
+                    </details>
+                  </div>
+                </div>
+              </section>
+
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div class="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 class="text-base font-bold">Cost Center Table</h3>
+                    <p class="mt-1 text-sm text-slate-500">Rows are generated from selected positions and time-period rules. Hourly rate and cost center remain manually editable.</p>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-3">
+                    <label class="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+                      <input id="costCentersNightPremiumToggle" type="checkbox" class="rounded border-slate-300 text-primary focus:ring-primary"/>
+                      Night uplift %
+                    </label>
+                    <input id="costCentersNightPremiumPercent" type="number" min="0" max="100" step="0.1" class="w-28 rounded-xl border-slate-200 px-3 py-2 text-right"/>
+                  </div>
+                  <div class="flex items-center gap-3">
+                    <input id="costCentersHourlyRateImportInput" type="file" accept=".xlsx,.xls" class="hidden"/>
+                    <button id="costCentersImportRatesBtn" type="button" class="inline-flex items-center justify-center size-10 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 transition-all" title="Import hourly rates">
+                      <span class="material-symbols-outlined text-[18px]">upload_file</span>
+                    </button>
+                  </div>
+                </div>
+                <div class="mt-4 overflow-x-auto custom-scrollbar">
+                  <table class="min-w-full text-sm">
+                    <thead class="text-[10px] uppercase tracking-wider text-slate-400">
+                      <tr class="border-b border-slate-200">
+                        <th class="text-left py-3 pr-4">Position</th>
+                        <th class="text-left py-3 px-4">Carat Unit</th>
+                        <th class="text-left py-3 px-4">Time Period</th>
+                        <th class="text-right py-3 px-4">Monthly working hours</th>
+                        <th class="text-left py-3 px-4">Currency</th>
+                        <th class="text-right py-3 px-4">Hourly rate</th>
+                        <th class="text-left py-3 pl-4">Cost Center</th>
+                      </tr>
+                    </thead>
+                    <tbody id="costCentersTableBody" class="divide-y divide-slate-200"></tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="pioDefinitionWorkspace" class="hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+        <div class="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
+          <div>
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-50 text-sky-700 border border-sky-200 text-[11px] font-bold uppercase tracking-[0.18em]">
+              <span class="material-symbols-outlined text-[16px]">schema</span>
+              Study Setup
+            </div>
+            <h2 class="mt-3 text-2xl font-black tracking-tight">PIO Definition, Freight & Customs Workspace</h2>
+            <p class="mt-2 text-sm text-slate-500">Define the origin structure per project and generate the initial PIO table.</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <div id="pioDefinitionWorkspaceStatus" class="text-xs font-semibold text-slate-500">No project selected.</div>
+            <button id="closePioDefinitionWorkspaceBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold hover:bg-slate-100 transition-all">
+              <span class="material-symbols-outlined text-[18px]">close</span>
+              Close
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-6 grid grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)] gap-6">
+          <aside class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">Projects</h3>
+                <p class="mt-1 text-xs text-slate-500">Choose one project to configure origins.</p>
+              </div>
+              <button id="refreshPioDefinitionWorkspaceBtn" type="button" class="inline-flex items-center justify-center size-9 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 transition-all">
+                <span class="material-symbols-outlined text-[18px]">refresh</span>
+              </button>
+            </div>
+            <div id="pioDefinitionProjectList" class="mt-4 space-y-2"></div>
+          </aside>
+
+          <div class="space-y-6">
+            <div id="pioDefinitionWorkspaceEmpty" class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-sm text-slate-500">
+              No project available yet. Import workbooks with <span class="font-semibold">General Parameters</span> in the main dashboard, then refresh this workspace.
+            </div>
+
+            <div id="pioDefinitionWorkspaceContent" class="hidden space-y-6">
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                  <div>
+                    <h3 id="pioDefinitionCurrentProjectTitle" class="text-xl font-black tracking-tight">Project</h3>
+                    <p id="pioDefinitionCurrentProjectMeta" class="mt-2 text-sm text-slate-500">Context</p>
+                  </div>
+                  <div class="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
+                    <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Annual Working Hours</p>
+                    <p id="pioDefinitionAnnualWorkingHours" class="mt-2 font-semibold">--</p>
+                  </div>
+                </div>
+              </section>
+
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <details class="rounded-2xl border border-slate-200 bg-white p-4" open>
+                  <summary class="cursor-pointer text-sm font-bold text-slate-700">PIO Definition</summary>
+                  <div class="mt-4 flex items-center justify-end">
+                    <button id="pioDefinitionAddOriginBtn" type="button" class="inline-flex items-center justify-center size-10 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 transition-all">
+                      <span class="material-symbols-outlined text-[18px]">add</span>
+                    </button>
+                  </div>
+                  <div id="pioDefinitionOriginSelector" class="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 text-sm"></div>
+                </details>
+              </section>
+
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div class="grid grid-cols-1 xl:grid-cols-[minmax(280px,0.7fr)_minmax(0,1.3fr)] gap-5">
+                  <div class="rounded-2xl border border-slate-200 bg-white p-4 space-y-4">
+                    <h3 class="text-sm font-bold text-slate-700">Freight</h3>
+                    <label class="block">
+                      <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Onshore Freight %</p>
+                      <input id="pioDefinitionOnshoreFreightInput" type="number" min="0" max="100" step="0.1" class="mt-1 w-full rounded-xl border-slate-200 px-3 py-2 text-right"/>
+                    </label>
+                    <label class="block">
+                      <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Offshore Freight %</p>
+                      <input id="pioDefinitionOffshoreFreightInput" type="number" min="0" max="100" step="0.1" class="mt-1 w-full rounded-xl border-slate-200 px-3 py-2 text-right"/>
+                    </label>
+                  </div>
+                  <div class="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div class="flex items-start justify-between gap-4">
+                      <div>
+                        <h3 class="text-sm font-bold text-slate-700">Custom Duties by Subsystem</h3>
+                        <p class="mt-1 text-xs text-slate-500">Subsystems are sourced from the project `Synthesis` sheet.</p>
+                      </div>
+                    </div>
+                    <div class="mt-4 overflow-x-auto custom-scrollbar">
+                      <table class="min-w-full text-sm">
+                        <thead class="text-[10px] uppercase tracking-wider text-slate-400">
+                          <tr class="border-b border-slate-200">
+                            <th class="text-left py-3 pr-4">Subsystem</th>
+                            <th class="text-right py-3 pl-4">Custom duties %</th>
+                          </tr>
+                        </thead>
+                        <tbody id="pioDefinitionCustomDutiesBody" class="divide-y divide-slate-200"></tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div class="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 class="text-base font-bold">PIO Definition Table</h3>
+                    <p class="mt-1 text-sm text-slate-500">The table is generated from the selected origins and remains manually editable.</p>
+                  </div>
+                </div>
+                <div class="mt-4 overflow-x-auto custom-scrollbar">
+                  <table class="min-w-full text-sm">
+                    <thead class="text-[10px] uppercase tracking-wider text-slate-400">
+                      <tr class="border-b border-slate-200">
+                        <th class="text-left py-3 pr-4">Origin</th>
+                        <th class="text-left py-3 px-4">Carat Unit</th>
+                        <th class="text-left py-3 px-4">Unit Role</th>
+                        <th class="text-left py-3 px-4">Source</th>
+                        <th class="text-right py-3 pl-4">Yearly Hours</th>
+                      </tr>
+                    </thead>
+                    <tbody id="pioDefinitionTableBody" class="divide-y divide-slate-200"></tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <input type="file" id="firmingRulesExcelFileInput" accept=".xlsx,.xls" class="hidden">
+      <input type="file" id="workloadExcelFileInput" accept=".xlsx,.xls,.xlsm" class="hidden">
+
+      <section id="currencyExchangeWorkspace" class="hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+        <div class="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
+          <div>
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold uppercase tracking-[0.18em]">
+              <span class="material-symbols-outlined text-[16px]">currency_exchange</span>
+              Data Sources
+            </div>
+            <h2 class="mt-3 text-2xl font-black tracking-tight">Currency & Exchange Rates Workspace</h2>
+            <p class="mt-2 text-sm text-slate-500">Select one project, define the target currency, and review the available exchange rates for currencies found in `Synthesis`.</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <div id="currencyExchangeWorkspaceStatus" class="text-xs font-semibold text-slate-500">No project selected.</div>
+            <button id="closeCurrencyExchangeWorkspaceBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold hover:bg-slate-100 transition-all">
+              <span class="material-symbols-outlined text-[18px]">close</span>
+              Close
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-6 grid grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)] gap-6">
+          <aside class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">Projects</h3>
+                <p class="mt-1 text-xs text-slate-500">Choose one project to configure exchange-rate assumptions.</p>
+              </div>
+              <button id="refreshCurrencyExchangeWorkspaceBtn" type="button" class="inline-flex items-center justify-center size-9 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 transition-all">
+                <span class="material-symbols-outlined text-[18px]">refresh</span>
+              </button>
+            </div>
+            <div id="currencyExchangeProjectList" class="mt-4 space-y-2"></div>
+          </aside>
+
+          <div class="space-y-6">
+            <div id="currencyExchangeWorkspaceEmpty" class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-sm text-slate-500">
+              No project available yet. Import workbooks with <span class="font-semibold">General Parameters</span> and <span class="font-semibold">Synthesis</span> in the main dashboard, then refresh this workspace.
+            </div>
+
+            <div id="currencyExchangeWorkspaceContent" class="hidden space-y-6">
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                  <div>
+                    <h3 id="currencyExchangeCurrentProjectTitle" class="text-xl font-black tracking-tight">Project</h3>
+                    <p id="currencyExchangeCurrentProjectMeta" class="mt-2 text-sm text-slate-500">Context</p>
+                  </div>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <label class="block min-w-[220px]">
+                      <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Target Currency</p>
+                      <div class="mt-1 flex items-center gap-3">
+                        <select id="currencyExchangeTargetCurrencySelect" class="flex-1 rounded-xl border-slate-200 px-3 py-2"></select>
+                        <button id="currencyExchangeAddCurrencyBtn" type="button" class="inline-flex items-center justify-center size-10 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 transition-all">
+                          <span class="material-symbols-outlined text-[18px]">add</span>
+                        </button>
+                      </div>
+                    </label>
+                    <div class="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm min-w-[220px]">
+                      <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Live source</p>
+                      <p id="currencyExchangeLiveSource" class="mt-2 font-semibold">--</p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div class="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 class="text-base font-bold">Conversion Table</h3>
+                    <p class="mt-1 text-sm text-slate-500">Rates are displayed for conversion from each project source currency to the selected target currency.</p>
+                  </div>
+                </div>
+                <div class="mt-4 overflow-x-auto custom-scrollbar">
+                  <table class="min-w-full text-sm">
+                    <thead class="text-[10px] uppercase tracking-wider text-slate-400">
+                      <tr class="border-b border-slate-200">
+                        <th class="text-left py-3 pr-4">Currency</th>
+                        <th class="text-left py-3 px-4">Live rate</th>
+                        <th class="text-left py-3 px-4">Manual override</th>
+                        <th class="text-left py-3 px-4">Effective rate</th>
+                        <th class="text-left py-3 pl-4">Source</th>
+                      </tr>
+                    </thead>
+                    <tbody id="currencyExchangeTableBody" class="divide-y divide-slate-200"></tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="firmingRulesWorkspace" class="hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+        <div class="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
+          <div>
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold uppercase tracking-[0.18em]">
+              <span class="material-symbols-outlined text-[16px]">gavel</span>
+              Data Sources
+            </div>
+            <h2 class="mt-3 text-2xl font-black tracking-tight">Firming Rules Workspace</h2>
+            <p class="mt-2 text-sm text-slate-500">Define, per project, the firming rule assumption applied to each source currency.</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <div id="firmingRulesWorkspaceStatus" class="text-xs font-semibold text-slate-500">No project selected.</div>
+            <button id="closeFirmingRulesWorkspaceBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold hover:bg-slate-100 transition-all">
+              <span class="material-symbols-outlined text-[18px]">close</span>
+              Close
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-5 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span class="material-symbols-outlined text-[20px] text-amber-500 shrink-0 mt-0.5">info</span>
+          <p>
+            To populate law name suggestions in the <span class="font-semibold">Firming Rule</span> cells, use the
+            <span class="font-semibold">Import Excel</span> button on the project card and select the
+            <span class="font-semibold">INFLATION MERCURY</span> file — the standard Mercury model output
+            retrieved by the Cost Manager for this study. Rows are automatically filtered to match
+            the project's <span class="font-semibold">Bid Year</span>; if no match is found, the first available year in the file is used as a fallback.
+          </p>
+        </div>
+
+        <div class="mt-6 grid grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)] gap-6">
+          <aside class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">Projects</h3>
+                <p class="mt-1 text-xs text-slate-500">Choose one project to configure its firming rules.</p>
+              </div>
+              <button id="refreshFirmingRulesWorkspaceBtn" type="button" class="inline-flex items-center justify-center size-9 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 transition-all">
+                <span class="material-symbols-outlined text-[18px]">refresh</span>
+              </button>
+            </div>
+            <div id="firmingRulesProjectList" class="mt-4 space-y-2"></div>
+          </aside>
+
+          <div class="space-y-6">
+            <div id="firmingRulesWorkspaceEmpty" class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-sm text-slate-500">
+              No project available yet. Import workbooks with <span class="font-semibold">General Parameters</span> and <span class="font-semibold">Synthesis</span> in the main dashboard, then refresh this workspace.
+            </div>
+
+            <div id="firmingRulesWorkspaceContent" class="hidden space-y-6">
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                  <div>
+                    <h3 id="firmingRulesCurrentProjectTitle" class="text-xl font-black tracking-tight">Project</h3>
+                    <p id="firmingRulesCurrentProjectMeta" class="mt-2 text-sm text-slate-500">Context</p>
+                  </div>
+                  <button id="firmingRulesImportBtn" type="button" data-fallback-firming-import="" data-project-key="" data-bid-year="" data-currencies="[]" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 transition-all shrink-0">
+                    <span class="material-symbols-outlined text-[18px]">upload_file</span>
+                    Import Excel
+                  </button>
+                </div>
+              </section>
+
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div class="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 class="text-base font-bold">Firming Rules Table</h3>
+                    <p class="mt-1 text-sm text-slate-500">Enter the firming assumption applied to each source currency for this project.</p>
+                  </div>
+                </div>
+                <div class="mt-4 overflow-x-auto custom-scrollbar">
+                  <table class="min-w-full text-sm">
+                    <thead class="text-[10px] uppercase tracking-wider text-slate-400">
+                      <tr class="border-b border-slate-200">
+                        <th class="text-left py-3 pr-4 w-32">Currency</th>
+                        <th class="text-left py-3 pl-4">Firming Rule</th>
+                      </tr>
+                    </thead>
+                    <tbody id="firmingRulesTableBody" class="divide-y divide-slate-200"></tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="workloadSynthesisWorkspace" class="hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+        <div class="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
+          <div>
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200 text-[11px] font-bold uppercase tracking-[0.18em]">
+              <span class="material-symbols-outlined text-[16px]">groups</span>
+              Organization &amp; Headcount
+            </div>
+            <h2 class="mt-3 text-2xl font-black tracking-tight">Workload Synthesis Workspace</h2>
+            <p class="mt-2 text-sm text-slate-500">Automatically computed from Synthesis and Hours Report data per project.</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <div id="workloadSynthesisWorkspaceStatus" class="text-xs font-semibold text-slate-500">No project selected.</div>
+            <button id="closeWorkloadSynthesisWorkspaceBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold hover:bg-slate-100 transition-all">
+              <span class="material-symbols-outlined text-[18px]">close</span>
+              Close
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-6 grid grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)] gap-6">
+          <aside class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">Projects</h3>
+                <p class="mt-1 text-xs text-slate-500">Choose one project to view its workload table.</p>
+              </div>
+              <button id="refreshWorkloadSynthesisWorkspaceBtn" type="button" class="inline-flex items-center justify-center size-9 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 transition-all">
+                <span class="material-symbols-outlined text-[18px]">refresh</span>
+              </button>
+            </div>
+            <div id="workloadSynthesisProjectList" class="mt-4 space-y-2"></div>
+          </aside>
+
+          <div class="space-y-6">
+            <div id="workloadSynthesisWorkspaceEmpty" class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-sm text-slate-500">
+              No project available yet. Import workbooks with <span class="font-semibold">General Parameters</span>, <span class="font-semibold">Synthesis</span> and <span class="font-semibold">Hours Report</span> sheets in the main dashboard, then refresh this workspace.
+            </div>
+
+            <div id="workloadSynthesisWorkspaceContent" class="hidden space-y-6">
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                  <div>
+                    <h3 id="workloadSynthesisCurrentProjectTitle" class="text-xl font-black tracking-tight">Project</h3>
+                    <p id="workloadSynthesisCurrentProjectMeta" class="mt-2 text-sm text-slate-500">Context</p>
+                  </div>
+                  <div id="workloadSynthesisGapAlert" class="hidden shrink-0"></div>
+                </div>
+                <div id="workloadSynthesisMissingData" class="hidden mt-4 space-y-2"></div>
+              </section>
+
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div class="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 class="text-base font-bold">Workload Table</h3>
+                    <p class="mt-1 text-sm text-slate-500">Computed from Synthesis and Hours Report — one row per subsystem per shift.</p>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <button id="workloadSynthesisAddRowBtn" type="button" title="Add a custom row" class="inline-flex items-center justify-center size-8 rounded-xl border border-slate-200 bg-white text-slate-500 hover:text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50 transition-all shrink-0">
+                      <span class="material-symbols-outlined text-[18px]">add</span>
+                    </button>
+                    <button id="workloadSynthesisEditToggle" type="button" data-active="false" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-all shrink-0">
+                      <span class="material-symbols-outlined text-[18px]">edit</span>
+                      Edit
+                    </button>
+                  </div>
+                </div>
+                <div id="workloadTableSourceBanner" class="hidden mt-4"></div>
+                <div class="mt-4 overflow-x-auto custom-scrollbar">
+                  <table class="min-w-full text-sm">
+                    <thead class="text-[10px] uppercase tracking-wider text-slate-400">
+                      <tr class="border-b border-slate-200">
+                        <th class="text-left py-3 pr-3 whitespace-nowrap">Subsystem</th>
+                        <th class="text-left py-3 px-3 whitespace-nowrap">Shift</th>
+                        <th class="text-right py-3 px-3 whitespace-nowrap">Preventive Hrs</th>
+                        <th class="text-right py-3 px-3 whitespace-nowrap">Day/Night %</th>
+                        <th class="text-right py-3 px-3 whitespace-nowrap">Remaining Hrs</th>
+                        <th class="text-right py-3 px-3 whitespace-nowrap">Paliative Hrs</th>
+                        <th class="text-right py-3 px-3 whitespace-nowrap">Corrective Hrs</th>
+                        <th class="text-right py-3 px-3 whitespace-nowrap">All Corrective Hrs</th>
+                        <th class="text-right py-3 px-3 whitespace-nowrap">Corr/Prev %</th>
+                        <th class="text-right py-3 px-3 whitespace-nowrap">Gap Hrs</th>
+                        <th class="text-right py-3 px-3 whitespace-nowrap">Prev. Techs</th>
+                        <th class="text-right py-3 px-3 whitespace-nowrap">Corr. Techs</th>
+                        <th class="text-right py-3 px-3 whitespace-nowrap">Prev. Supervisors</th>
+                        <th class="text-right py-3 pl-3 whitespace-nowrap">Corr. Supervisors</th>
+                        <th class="py-3 pl-3 w-8"></th>
+                      </tr>
+                    </thead>
+                    <tbody id="workloadSynthesisTableBody" class="divide-y divide-slate-200"></tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Headcount & Optimization Workspace -->
+      <section id="whiteCollarDefinitionWorkspace" class="hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+        <div class="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
+          <div>
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200 text-[11px] font-bold uppercase tracking-[0.18em]">
+              <span class="material-symbols-outlined text-[16px]">groups</span>
+              Organization &amp; Headcount
+            </div>
+            <h2 class="mt-3 text-2xl font-black tracking-tight">Headcount &amp; Optimization Workspace</h2>
+            <p class="mt-2 text-sm text-slate-500">Define staffing rates per phase, subsystem and period code — computed from Phase Timeline and Workload Table.</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <div id="whiteCollarWorkspaceStatus" class="text-xs font-semibold text-slate-500">No project selected.</div>
+            <button type="button" onclick="document.getElementById('wcHelpModal').classList.remove('hidden')" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-50 border border-violet-200 text-violet-700 text-sm font-semibold hover:bg-violet-100 transition-all">
+              <span class="material-symbols-outlined text-[18px]">help</span>
+              How it works
+            </button>
+            <button id="closeWhiteCollarWorkspaceBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold hover:bg-slate-100 transition-all">
+              <span class="material-symbols-outlined text-[18px]">close</span>
+              Close
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-6 grid grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)] gap-6">
+          <aside class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">Projects</h3>
+                <p class="mt-1 text-xs text-slate-500">Choose one project to view its White Collar table.</p>
+              </div>
+              <button id="refreshWhiteCollarWorkspaceBtn" type="button" class="inline-flex items-center justify-center size-9 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 transition-all">
+                <span class="material-symbols-outlined text-[18px]">refresh</span>
+              </button>
+            </div>
+            <div id="whiteCollarProjectList" class="mt-4 space-y-2"></div>
+          </aside>
+
+          <div class="space-y-6">
+            <div id="whiteCollarWorkspaceEmpty" class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-sm text-slate-500">
+              No project available. Ensure Phase Timeline is configured in <strong>Project Phases Workspace</strong> and subsystems are defined in <strong>Workload Synthesis Workspace</strong>.
+            </div>
+
+            <div id="whiteCollarWorkspaceContent" class="hidden space-y-6">
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                  <div>
+                    <h3 id="whiteCollarCurrentProjectTitle" class="text-xl font-black tracking-tight">Project</h3>
+                    <p id="whiteCollarCurrentProjectMeta" class="mt-2 text-sm text-slate-500">Context</p>
+                  </div>
+                </div>
+                <div id="whiteCollarMissingData" class="hidden mt-4 space-y-2"></div>
+              </section>
+
+              <!-- Optimization coefficient table -->
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 overflow-hidden">
+                <details open>
+                  <summary class="flex items-center justify-between gap-4 px-5 py-4 cursor-pointer select-none list-none hover:bg-slate-100/60 transition-colors">
+                    <div>
+                      <h3 class="text-base font-bold">Optimization coefficient table</h3>
+                      <p class="mt-0.5 text-sm text-slate-500">Rates per Phase × Subsystem × Period code. Default values auto-computed — all cells editable.</p>
+                    </div>
+                    <span class="material-symbols-outlined text-[20px] text-slate-400 shrink-0 details-chevron">expand_more</span>
+                  </summary>
+                  <div class="px-5 pb-5 overflow-x-auto custom-scrollbar">
+                    <table class="min-w-full text-sm">
+                      <thead class="text-[10px] uppercase tracking-wider text-slate-400">
+                        <tr class="border-b border-slate-200">
+                          <th class="text-left py-3 pr-3 whitespace-nowrap">Phase</th>
+                          <th class="text-left py-3 px-3 whitespace-nowrap">Subsystem</th>
+                          <th class="text-left py-3 px-3 whitespace-nowrap">Period</th>
+                          <th class="text-center py-3 px-3 whitespace-nowrap min-w-[90px]">Supervisor<br><span class="normal-case text-slate-300">rate %</span></th>
+                          <th class="text-center py-3 px-3 whitespace-nowrap min-w-[90px]">Technician<br><span class="normal-case text-slate-300">rate %</span></th>
+                          <th class="text-center py-3 px-3 whitespace-nowrap min-w-[90px]">Worker<br><span class="normal-case text-slate-300">rate %</span></th>
+                          <th class="text-center py-3 px-3 whitespace-nowrap min-w-[90px]">Engineer<br><span class="normal-case text-slate-300">rate %</span></th>
+                          <th class="text-center py-3 px-3 whitespace-nowrap min-w-[90px]">Manager<br><span class="normal-case text-slate-300">rate %</span></th>
+                          <th class="text-center py-3 px-3 whitespace-nowrap min-w-[90px]">Material<br><span class="normal-case text-slate-300">rate %</span></th>
+                          <th class="text-center py-3 pl-3 whitespace-nowrap min-w-[90px]">Subcontract<br><span class="normal-case text-slate-300">rate %</span></th>
+                        </tr>
+                      </thead>
+                      <tbody id="whiteCollarTableBody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                  </div>
+                </details>
+              </section>
+
+              <!-- White Collar Table -->
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 overflow-hidden">
+                <details open>
+                  <summary class="flex items-center justify-between gap-4 px-5 py-4 cursor-pointer select-none list-none hover:bg-slate-100/60 transition-colors">
+                    <div>
+                      <h3 class="text-base font-bold">White Collar Table</h3>
+                      <p class="mt-0.5 text-sm text-slate-500">Quantity per Phase × Period × Position (white-collar positions from Cost Centers, excluding Technician / Supervisor / Worker). All cells editable.</p>
+                    </div>
+                    <span class="material-symbols-outlined text-[20px] text-slate-400 shrink-0 details-chevron">expand_more</span>
+                  </summary>
+                  <div class="px-5 pb-5 overflow-x-auto custom-scrollbar">
+                    <table class="min-w-full text-sm">
+                      <thead class="text-[10px] uppercase tracking-wider text-slate-400">
+                        <tr class="border-b border-slate-200">
+                          <th class="text-left py-3 pr-3 whitespace-nowrap">Phase</th>
+                          <th class="text-left py-3 px-3 whitespace-nowrap">Period</th>
+                          <th class="text-left py-3 px-3 whitespace-nowrap">Position</th>
+                          <th class="text-center py-3 pl-3 whitespace-nowrap min-w-[90px]">Quantity</th>
+                        </tr>
+                      </thead>
+                      <tbody id="whiteCollarPositionsTableBody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                  </div>
+                </details>
+              </section>
+
+              <!-- Headcount Summary Table -->
+              <section class="rounded-2xl border border-violet-200 bg-violet-50/30 overflow-hidden">
+                <details open>
+                  <summary class="flex items-center justify-between gap-4 px-5 py-4 cursor-pointer select-none list-none hover:bg-violet-50/60 transition-colors">
+                    <div>
+                      <h3 class="text-base font-bold">Headcount Summary</h3>
+                      <p class="mt-0.5 text-sm text-slate-500">Read-only. Derived from Workload Table × Optimization Coefficients. Subsystem rows show Technicians / Workers / Supervisors. "Project total" rows add white-collar Engineers and Managers.</p>
+                    </div>
+                    <span class="material-symbols-outlined text-[20px] text-violet-400 shrink-0 details-chevron">expand_more</span>
+                  </summary>
+                  <div class="px-5 pb-5 overflow-x-auto custom-scrollbar">
+                    <table class="min-w-full text-sm">
+                      <thead class="text-[10px] uppercase tracking-wider text-slate-400">
+                        <tr class="border-b border-slate-200">
+                          <th class="text-left py-3 pr-3 whitespace-nowrap">Phase</th>
+                          <th class="text-left py-3 px-3 whitespace-nowrap">Subsystem</th>
+                          <th class="text-left py-3 px-3 whitespace-nowrap">Period</th>
+                          <th class="text-center py-3 px-3 whitespace-nowrap">Technicians</th>
+                          <th class="text-center py-3 px-3 whitespace-nowrap">Workers</th>
+                          <th class="text-center py-3 px-3 whitespace-nowrap">Supervisors</th>
+                          <th class="text-center py-3 px-3 whitespace-nowrap">Engineers</th>
+                          <th class="text-center py-3 pl-3 whitespace-nowrap">Managers</th>
+                        </tr>
+                      </thead>
+                      <tbody id="headcountSummaryTableBody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                  </div>
+                </details>
+              </section>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tools & Consumables Workspace -->
+      <section id="toolsConsumablesWorkspace" class="hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+        <div class="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
+          <div>
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-50 text-orange-700 border border-orange-200 text-[11px] font-bold uppercase tracking-[0.18em]">
+              <span class="material-symbols-outlined text-[16px]">inventory_2</span>
+              Support Costs
+            </div>
+            <h2 class="mt-3 text-2xl font-black tracking-tight">Tools &amp; Consumables Workspace</h2>
+            <p class="mt-2 text-sm text-slate-500">Cost per Phase × Subsystem × Period — imported from the "Project Cost Matrix" sheet of each project's Excel file.</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <div id="tcWorkspaceStatus" class="text-xs font-semibold text-slate-500">No project selected.</div>
+            <button id="closeTcWorkspaceBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold hover:bg-slate-100 transition-all">
+              <span class="material-symbols-outlined text-[18px]">close</span>
+              Close
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-6 grid grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)] gap-6">
+          <aside class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">Projects</h3>
+                <p class="mt-1 text-xs text-slate-500">Choose one project to view its data.</p>
+              </div>
+              <button id="refreshTcWorkspaceBtn" type="button" class="inline-flex items-center justify-center size-9 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 transition-all">
+                <span class="material-symbols-outlined text-[18px]">refresh</span>
+              </button>
+            </div>
+            <div id="tcProjectList" class="mt-4 space-y-2"></div>
+          </aside>
+
+          <div class="space-y-6">
+            <div id="tcWorkspaceEmpty" class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-sm text-slate-500">
+              No project available. Ensure Phase Timeline is configured in <strong>Project Phases Workspace</strong> and subsystems are defined in <strong>Workload Synthesis Workspace</strong>.
+            </div>
+
+            <div id="tcWorkspaceContent" class="hidden space-y-6">
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                  <div>
+                    <h3 id="tcCurrentProjectTitle" class="text-xl font-black tracking-tight">Project</h3>
+                    <p id="tcCurrentProjectMeta" class="mt-2 text-sm text-slate-500">Context</p>
+                  </div>
+                  <label class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-orange-50 border border-orange-200 text-orange-700 text-sm font-semibold hover:bg-orange-100 transition-all cursor-pointer">
+                    <span class="material-symbols-outlined text-[18px]">upload_file</span>
+                    Import Excel
+                    <input id="tcExcelFileInput" type="file" accept=".xlsx,.xls" class="hidden">
+                  </label>
+                </div>
+                <!-- Currency selector — populated by JS -->
+                <div id="tcCurrencyRow" class="hidden mt-4 flex flex-wrap items-center gap-3 border-t border-slate-200 pt-4">
+                  <span class="material-symbols-outlined text-[18px] text-slate-400">currency_exchange</span>
+                  <label for="tcCurrencySelect" class="text-xs font-bold uppercase tracking-wider text-slate-500">Display currency</label>
+                  <select id="tcCurrencySelect" class="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-1 focus:ring-orange-400 min-w-[160px]"></select>
+                  <span id="tcCurrencyRateLabel" class="text-xs text-slate-400 font-mono"></span>
+                </div>
+                <div id="tcMissingData" class="hidden mt-4 space-y-2"></div>
+              </section>
+
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 overflow-hidden">
+                <details open>
+                  <summary class="flex items-center justify-between gap-4 px-5 py-4 cursor-pointer select-none list-none hover:bg-slate-100/60 transition-colors">
+                    <div>
+                      <h3 class="text-base font-bold">Tools &amp; Consumables table</h3>
+                      <p class="mt-0.5 text-sm text-slate-500">Cost per Phase × Subsystem × Period. Import from Excel to populate — all cells editable.</p>
+                    </div>
+                    <span class="material-symbols-outlined text-[20px] text-slate-400 shrink-0 details-chevron">expand_more</span>
+                  </summary>
+                  <div class="px-5 pb-5 overflow-x-auto custom-scrollbar">
+                    <table class="min-w-full text-sm">
+                      <thead class="text-[10px] uppercase tracking-wider text-slate-400">
+                        <tr class="border-b border-slate-200">
+                          <th class="text-left py-3 pr-3 whitespace-nowrap">Phase</th>
+                          <th class="text-left py-3 px-3 whitespace-nowrap">Subsystem</th>
+                          <th class="text-left py-3 px-3 whitespace-nowrap">Period</th>
+                          <th class="text-center py-3 px-3 whitespace-nowrap min-w-[110px]">Individual tools<br><span class="normal-case text-slate-300">Tooling · Technician</span></th>
+                          <th class="text-center py-3 px-3 whitespace-nowrap min-w-[110px]">Collective tools<br><span class="normal-case text-slate-300">Tooling · Team</span></th>
+                          <th class="text-center py-3 px-3 whitespace-nowrap min-w-[110px]">Special tools<br><span class="normal-case text-slate-300">Tooling · Depot</span></th>
+                          <th class="text-center py-3 px-3 whitespace-nowrap min-w-[110px]">Consumables<br><span class="normal-case text-slate-300">Consumables</span></th>
+                          <th class="text-center py-3 pl-3 whitespace-nowrap min-w-[110px]">PPE<br><span class="normal-case text-slate-300">PPE (all alloc.)</span></th>
+                        </tr>
+                      </thead>
+                      <tbody id="tcTableBody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                  </div>
+                </details>
+              </section>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="vehiclesWorkspace" class="hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+        <div class="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
+          <div>
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-50 text-orange-700 border border-orange-200 text-[11px] font-bold uppercase tracking-[0.18em]">
+              <span class="material-symbols-outlined text-[16px]">directions_car</span>
+              Support Costs
+            </div>
+            <h2 class="mt-3 text-2xl font-black tracking-tight">Vehicles Workspace</h2>
+            <p class="mt-2 text-sm text-slate-500">Fleet cost per Phase × Subsystem × Period — imported from the "Fleet Cost Matrix" sheet of each project's Excel file.</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <div id="vehiclesWorkspaceStatus" class="text-xs font-semibold text-slate-500">No project selected.</div>
+            <button id="closeVehiclesWorkspaceBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold hover:bg-slate-100 transition-all">
+              <span class="material-symbols-outlined text-[18px]">close</span>
+              Close
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-6 grid grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)] gap-6">
+          <aside class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">Projects</h3>
+                <p class="mt-1 text-xs text-slate-500">Choose one project to view its data.</p>
+              </div>
+              <button id="refreshVehiclesWorkspaceBtn" type="button" class="inline-flex items-center justify-center size-9 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 transition-all">
+                <span class="material-symbols-outlined text-[18px]">refresh</span>
+              </button>
+            </div>
+            <div id="vehiclesProjectList" class="mt-4 space-y-2"></div>
+          </aside>
+
+          <div class="space-y-6">
+            <div id="vehiclesWorkspaceEmpty" class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-sm text-slate-500">
+              No project available. Ensure Phase Timeline is configured in <strong>Project Phases Workspace</strong> and subsystems are defined in <strong>Workload Synthesis Workspace</strong>.
+            </div>
+
+            <div id="vehiclesWorkspaceContent" class="hidden space-y-6">
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                  <div>
+                    <h3 id="vehiclesCurrentProjectTitle" class="text-xl font-black tracking-tight">Project</h3>
+                    <p id="vehiclesCurrentProjectMeta" class="mt-2 text-sm text-slate-500">Context</p>
+                  </div>
+                  <label class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-orange-50 border border-orange-200 text-orange-700 text-sm font-semibold hover:bg-orange-100 transition-all cursor-pointer">
+                    <span class="material-symbols-outlined text-[18px]">upload_file</span>
+                    Import Excel
+                    <input id="vehiclesExcelFileInput" type="file" accept=".xlsx,.xls" class="hidden">
+                  </label>
+                </div>
+                <!-- Currency selector — populated by JS -->
+                <div id="vehiclesCurrencyRow" class="hidden mt-4 flex flex-wrap items-center gap-3 border-t border-slate-200 pt-4">
+                  <span class="material-symbols-outlined text-[18px] text-slate-400">currency_exchange</span>
+                  <label for="vehiclesCurrencySelect" class="text-xs font-bold uppercase tracking-wider text-slate-500">Display currency</label>
+                  <select id="vehiclesCurrencySelect" class="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-1 focus:ring-orange-400 min-w-[160px]"></select>
+                  <span id="vehiclesCurrencyRateLabel" class="text-xs text-slate-400 font-mono"></span>
+                </div>
+                <!-- Total fleet quantity KPI -->
+                <div id="vehiclesTotalQuantityRow" class="hidden mt-4 flex flex-wrap items-center gap-3 border-t border-slate-200 pt-4">
+                  <span class="material-symbols-outlined text-[18px] text-slate-400">directions_car</span>
+                  <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Total fleet quantity</span>
+                  <span id="vehiclesTotalQuantity" class="inline-flex items-center px-3 py-1 rounded-full bg-orange-50 text-orange-700 border border-orange-200 text-sm font-bold">—</span>
+                  <span class="text-xs text-slate-400">vehicles (sum from imported Excel)</span>
+                </div>
+              </section>
+
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 overflow-hidden">
+                <details open>
+                  <summary class="flex items-center justify-between gap-4 px-5 py-4 cursor-pointer select-none list-none hover:bg-slate-100/60 transition-colors">
+                    <div>
+                      <h3 class="text-base font-bold">Fleet Cost table</h3>
+                      <p class="mt-0.5 text-sm text-slate-500">Cost per Phase × Subsystem × Period. Import from Excel to populate — cost cells editable.</p>
+                    </div>
+                    <span class="material-symbols-outlined text-[20px] text-slate-400 shrink-0 details-chevron">expand_more</span>
+                  </summary>
+                  <div class="px-5 pb-5 overflow-x-auto custom-scrollbar">
+                    <table class="min-w-full text-sm">
+                      <thead class="text-[10px] uppercase tracking-wider text-slate-400">
+                        <tr class="border-b border-slate-200">
+                          <th class="text-left py-3 pr-3 whitespace-nowrap">Phase</th>
+                          <th class="text-left py-3 px-3 whitespace-nowrap">Subsystem</th>
+                          <th class="text-left py-3 px-3 whitespace-nowrap">Period</th>
+                          <th class="text-left py-3 px-3 whitespace-nowrap min-w-[110px]">Strategy</th>
+                          <th class="text-center py-3 px-3 whitespace-nowrap min-w-[120px]">Capex cost<br><span class="normal-case text-slate-300">Investment: mob / dem</span></th>
+                          <th class="text-center py-3 px-3 whitespace-nowrap min-w-[120px]">Fuel annual cost<br><span class="normal-case text-slate-300">Rec only</span></th>
+                          <th class="text-center py-3 pl-3 whitespace-nowrap min-w-[140px]">Operating annual cost<br><span class="normal-case text-slate-300">Rec only</span></th>
+                        </tr>
+                      </thead>
+                      <tbody id="vehiclesTableBody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                  </div>
+                </details>
+              </section>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="oscWorkspace" class="hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+        <div class="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
+          <div>
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-50 text-orange-700 border border-orange-200 text-[11px] font-bold uppercase tracking-[0.18em]">
+              <span class="material-symbols-outlined text-[16px]">category</span>
+              Support Costs
+            </div>
+            <h2 class="mt-3 text-2xl font-black tracking-tight">Other Support Costs Workspace</h2>
+            <p class="mt-2 text-sm text-slate-500">Cost per Phase × Period (Mob / Rec) — imported from the "Synthesis" sheet of each project's Excel file.</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <div id="oscWorkspaceStatus" class="text-xs font-semibold text-slate-500">No project selected.</div>
+            <button id="closeOscWorkspaceBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold hover:bg-slate-100 transition-all">
+              <span class="material-symbols-outlined text-[18px]">close</span>
+              Close
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-6 grid grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)] gap-6">
+          <aside class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">Projects</h3>
+                <p class="mt-1 text-xs text-slate-500">Choose one project to view its data.</p>
+              </div>
+              <button id="refreshOscWorkspaceBtn" type="button" class="inline-flex items-center justify-center size-9 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 transition-all">
+                <span class="material-symbols-outlined text-[18px]">refresh</span>
+              </button>
+            </div>
+            <div id="oscProjectList" class="mt-4 space-y-2"></div>
+          </aside>
+
+          <div class="space-y-6">
+            <div id="oscWorkspaceEmpty" class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-sm text-slate-500">
+              No project available. Ensure Phase Timeline is configured in <strong>Project Phases Workspace</strong>.
+            </div>
+
+            <div id="oscWorkspaceContent" class="hidden space-y-6">
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                  <div>
+                    <h3 id="oscCurrentProjectTitle" class="text-xl font-black tracking-tight">Project</h3>
+                    <p id="oscCurrentProjectMeta" class="mt-2 text-sm text-slate-500">Context</p>
+                  </div>
+                  <label class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-orange-50 border border-orange-200 text-orange-700 text-sm font-semibold hover:bg-orange-100 transition-all cursor-pointer">
+                    <span class="material-symbols-outlined text-[18px]">upload_file</span>
+                    Import Excel
+                    <input id="oscExcelFileInput" type="file" accept=".xlsx,.xls" class="hidden">
+                  </label>
+                </div>
+                <!-- Currency selector — populated by JS -->
+                <div id="oscCurrencyRow" class="hidden mt-4 flex flex-wrap items-center gap-3 border-t border-slate-200 pt-4">
+                  <span class="material-symbols-outlined text-[18px] text-slate-400">currency_exchange</span>
+                  <label for="oscCurrencySelect" class="text-xs font-bold uppercase tracking-wider text-slate-500">Display currency</label>
+                  <select id="oscCurrencySelect" class="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-1 focus:ring-orange-400 min-w-[160px]"></select>
+                  <span id="oscCurrencyRateLabel" class="text-xs text-slate-400 font-mono"></span>
+                </div>
+              </section>
+
+              <!-- Bloc 1 : Synthesis reference table (read-only) -->
+              <section id="oscRefSection" class="hidden rounded-2xl border border-slate-200 bg-slate-50 overflow-hidden">
+                <details open>
+                  <summary class="flex items-center justify-between gap-4 px-5 py-4 cursor-pointer select-none list-none hover:bg-slate-100/60 transition-colors">
+                    <div>
+                      <h3 class="text-base font-bold">Synthesis reference <span class="ml-2 text-[11px] font-normal text-slate-400 italic">(read-only — imported from Excel)</span></h3>
+                      <p class="mt-0.5 text-sm text-slate-500">Raw data from the "Synthesis" sheet for traceability.</p>
+                    </div>
+                    <span class="material-symbols-outlined text-[20px] text-slate-400 shrink-0 details-chevron">expand_more</span>
+                  </summary>
+                  <div class="px-5 pb-5 overflow-x-auto custom-scrollbar">
+                    <table class="min-w-full text-sm">
+                      <thead class="text-[10px] uppercase tracking-wider text-slate-400">
+                        <tr class="border-b border-slate-200">
+                          <th class="text-left py-3 px-3 whitespace-nowrap">Module</th>
+                          <th class="text-left py-3 px-3 whitespace-nowrap">Scope</th>
+                          <th class="text-right py-3 px-3 whitespace-nowrap min-w-[110px]">Capex</th>
+                          <th class="text-right py-3 px-3 whitespace-nowrap min-w-[110px]">Annual</th>
+                          <th class="text-center py-3 pl-3 whitespace-nowrap">Currency</th>
+                        </tr>
+                      </thead>
+                      <tbody id="oscRefTableBody" class="divide-y divide-slate-100 bg-white"></tbody>
+                    </table>
+                  </div>
+                </details>
+              </section>
+
+              <!-- Bloc 2 : Phase × Period cost table -->
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 overflow-hidden">
+                <details open>
+                  <summary class="flex items-center justify-between gap-4 px-5 py-4 cursor-pointer select-none list-none hover:bg-slate-100/60 transition-colors">
+                    <div>
+                      <h3 class="text-base font-bold">Other Support Costs table</h3>
+                      <p class="mt-0.5 text-sm text-slate-500">Cost per Phase × Period. Import from Excel to populate — all cells editable.</p>
+                    </div>
+                    <span class="material-symbols-outlined text-[20px] text-slate-400 shrink-0 details-chevron">expand_more</span>
+                  </summary>
+                  <div class="px-5 pb-5 overflow-x-auto custom-scrollbar">
+                    <table class="min-w-full text-sm">
+                      <thead class="text-[10px] uppercase tracking-wider text-slate-400">
+                        <tr class="border-b border-slate-200">
+                          <th class="text-left py-3 pr-3 whitespace-nowrap">Phase</th>
+                          <th class="text-left py-3 px-3 whitespace-nowrap">Period</th>
+                          <th class="text-center py-3 px-3 whitespace-nowrap min-w-[130px]">Capex Cost<br><span class="normal-case text-slate-300">Mob only · sum of Capex</span></th>
+                          <th class="text-center py-3 pl-3 whitespace-nowrap min-w-[130px]">Annual Opex<br><span class="normal-case text-slate-300">Rec only · sum of Annual</span></th>
+                        </tr>
+                      </thead>
+                      <tbody id="oscTableBody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                  </div>
+                </details>
+              </section>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="mandatoryTrainingWorkspace" class="hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+        <div class="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
+          <div>
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-50 text-orange-700 border border-orange-200 text-[11px] font-bold uppercase tracking-[0.18em]">
+              <span class="material-symbols-outlined text-[16px]">school</span>
+              Support Costs
+            </div>
+            <h2 class="mt-3 text-2xl font-black tracking-tight">Mandatory Training Workspace</h2>
+            <p class="mt-2 text-sm text-slate-500">Yearly training costs per Phase (Rec period only) — Workload auto-computed from Headcount Summary.</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <div id="mtWorkspaceStatus" class="text-xs font-semibold text-slate-500">No project selected.</div>
+            <button id="closeMtWorkspaceBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold hover:bg-slate-100 transition-all">
+              <span class="material-symbols-outlined text-[18px]">close</span>
+              Close
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-6 grid grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)] gap-6">
+          <aside class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">Projects</h3>
+                <p class="mt-1 text-xs text-slate-500">Choose one project to view its data.</p>
+              </div>
+              <button id="refreshMtWorkspaceBtn" type="button" class="inline-flex items-center justify-center size-9 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 transition-all">
+                <span class="material-symbols-outlined text-[18px]">refresh</span>
+              </button>
+            </div>
+            <div id="mtProjectList" class="mt-4 space-y-2"></div>
+          </aside>
+
+          <div class="space-y-6">
+            <div id="mtWorkspaceEmpty" class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-sm text-slate-500">
+              No project available. Ensure Phase Timeline is configured in <strong>Project Phases Workspace</strong>.
+            </div>
+
+            <div id="mtWorkspaceContent" class="hidden space-y-6">
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                  <div>
+                    <h3 id="mtCurrentProjectTitle" class="text-xl font-black tracking-tight">Project</h3>
+                    <p id="mtCurrentProjectMeta" class="mt-2 text-sm text-slate-500">Context</p>
+                  </div>
+                  <label class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-orange-50 border border-orange-200 text-orange-700 text-sm font-semibold hover:bg-orange-100 transition-all cursor-pointer">
+                    <span class="material-symbols-outlined text-[18px]">upload_file</span>
+                    Import Excel
+                    <input id="mtExcelFileInput" type="file" accept=".xlsx,.xls" class="hidden">
+                  </label>
+                </div>
+                <!-- Currency selector — populated by JS -->
+                <div id="mtCurrencyRow" class="hidden mt-4 flex flex-wrap items-center gap-3 border-t border-slate-200 pt-4">
+                  <span class="material-symbols-outlined text-[18px] text-slate-400">currency_exchange</span>
+                  <label for="mtCurrencySelect" class="text-xs font-bold uppercase tracking-wider text-slate-500">Display currency</label>
+                  <select id="mtCurrencySelect" class="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-1 focus:ring-orange-400 min-w-[160px]"></select>
+                  <span id="mtCurrencyRateLabel" class="text-xs text-slate-400 font-mono"></span>
+                </div>
+              </section>
+
+              <!-- Training tables per phase — injected by JS -->
+              <div id="mtTableContainer" class="space-y-6"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="guidePlanningWorkspace" class="hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+        <div class="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
+          <div>
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-50 text-sky-700 border border-sky-200 text-[11px] font-bold uppercase tracking-[0.18em]">
+              <span class="material-symbols-outlined text-[16px]">schema</span>
+              Study Setup
+            </div>
+            <h2 class="mt-3 text-2xl font-black tracking-tight">Guide Planning Definition Workspace</h2>
+            <p class="mt-2 text-sm text-slate-500">Start with mobilization planning rules. The project selector is horizontal to preserve width for phase and position logic.</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <div id="guidePlanningWorkspaceStatus" class="text-xs font-semibold text-slate-500">No project selected.</div>
+            <button id="closeGuidePlanningWorkspaceBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold hover:bg-slate-100 transition-all">
+              <span class="material-symbols-outlined text-[18px]">close</span>
+              Close
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-6 space-y-6">
+          <section class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">Projects</h3>
+                <p class="mt-1 text-xs text-slate-500">Choose one project to define its guide planning rules.</p>
+              </div>
+              <button id="refreshGuidePlanningWorkspaceBtn" type="button" class="inline-flex items-center justify-center size-9 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 transition-all">
+                <span class="material-symbols-outlined text-[18px]">refresh</span>
+              </button>
+            </div>
+            <div id="guidePlanningProjectList" class="mt-4 flex gap-3 overflow-x-auto custom-scrollbar pb-1"></div>
+          </section>
+
+          <div id="guidePlanningWorkspaceEmpty" class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-sm text-slate-500">
+            No project available yet. Import workbooks with <span class="font-semibold">General Parameters</span>, then configure <span class="font-semibold">Project Phases</span> and <span class="font-semibold">Cost Centers</span> before using this workspace.
+          </div>
+
+          <div id="guidePlanningWorkspaceContent" class="hidden space-y-6">
+            <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <h3 id="guidePlanningCurrentProjectTitle" class="text-xl font-black tracking-tight">Project</h3>
+              <p id="guidePlanningCurrentProjectMeta" class="mt-2 text-sm text-slate-500">Context</p>
+            </section>
+
+            <section class="space-y-6">
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <details open>
+                  <summary class="flex cursor-pointer list-none items-center justify-between gap-3">
+                    <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-[0.18em]" style="background-color:#d1fae5; border:1px solid #6ee7b7; color:#065f46;">
+                      <span class="material-symbols-outlined text-[16px]">rocket_launch</span>
+                      Mobilization Period
+                    </span>
+                    <span class="material-symbols-outlined text-slate-400">expand_more</span>
+                  </summary>
+                  <div class="mt-5 space-y-5">
+                  <div class="rounded-2xl border border-slate-200 bg-white p-4">
+                    <h3 class="text-sm font-bold text-slate-700">Workload</h3>
+                    <p class="mt-1 text-xs text-slate-500">Define one mobilization duration per position. It will be applied to every eligible phase starting in the Service Year.</p>
+                    <div id="guidePlanningMobilisationWorkloadSelector" class="mt-4 space-y-4"></div>
+                    <details class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4" open>
+                      <summary class="cursor-pointer text-sm font-bold text-slate-700">Mobilization Workload Guide Planning Table</summary>
+                      <div class="mt-3 flex justify-end">
+                        <button type="button" data-guide-custom-row-add="workload" id="guidePlanningWorkloadAddRowBtn" class="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-all">
+                          <span class="material-symbols-outlined text-[16px]">add</span>
+                          Add row
+                        </button>
+                      </div>
+                      <div class="mt-4 overflow-x-auto custom-scrollbar">
+                        <table class="min-w-full text-sm">
+                          <thead class="text-[10px] uppercase tracking-wider text-slate-400">
+                            <tr class="border-b border-slate-200">
+                              <th class="text-left py-3 pr-4">Phase</th>
+                              <th class="text-left py-3 px-4">Position</th>
+                              <th class="text-left py-3 px-4">Start date</th>
+                              <th class="text-left py-3 px-4">End date</th>
+                              <th class="text-left py-3 pl-4">Guide planning code</th>
+                              <th class="text-left py-3 pl-4">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody id="guidePlanningMobilisationWorkloadTableBody" class="divide-y divide-slate-200"></tbody>
+                        </table>
+                      </div>
+                    </details>
+                  </div>
+                  <div class="rounded-2xl border border-slate-200 bg-white p-4">
+                    <h3 class="text-sm font-bold text-slate-700">Materials</h3>
+                    <p class="mt-2 text-sm text-slate-500">Select the material types that require mobilization for phases starting in the Service Year.</p>
+                    <details class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4" open>
+                      <summary class="cursor-pointer text-sm font-bold text-slate-700">Material Types with Mobilization</summary>
+                      <div id="guidePlanningMaterialsSelector" class="mt-4 grid grid-cols-2 xl:grid-cols-5 gap-2 text-sm"></div>
+                    </details>
+                    <details class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4" open>
+                      <summary class="cursor-pointer text-sm font-bold text-slate-700">Materials Mobilization Guide Planning Table</summary>
+                      <div class="mt-3 flex justify-end">
+                        <button type="button" data-guide-custom-row-add="materials" id="guidePlanningMaterialsAddRowBtn" class="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-all">
+                          <span class="material-symbols-outlined text-[16px]">add</span>
+                          Add row
+                        </button>
+                      </div>
+                      <div class="mt-4 overflow-x-auto custom-scrollbar">
+                        <table class="min-w-full text-sm">
+                          <thead class="text-[10px] uppercase tracking-wider text-slate-400">
+                            <tr class="border-b border-slate-200">
+                              <th class="text-left py-3 pr-4">Phase</th>
+                              <th class="text-left py-3 px-4">Material Type</th>
+                              <th class="text-left py-3 px-4">Start date</th>
+                              <th class="text-left py-3 px-4">End date</th>
+                              <th class="text-left py-3 pl-4">Guide planning code</th>
+                              <th class="text-left py-3 pl-4">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody id="guidePlanningMaterialsTableBody" class="divide-y divide-slate-200"></tbody>
+                        </table>
+                      </div>
+                    </details>
+                  </div>
+                  <div class="rounded-2xl border border-slate-200 bg-white p-4">
+                    <h3 class="text-sm font-bold text-slate-700">Subcontracting Activities</h3>
+                    <details class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4" open>
+                      <summary class="cursor-pointer text-sm font-bold text-slate-700">Applicable Subcontracting Types</summary>
+                      <div id="guidePlanningSubcontractingSelector" class="mt-4 flex flex-wrap gap-3"></div>
+                    </details>
+                    <details class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4" open>
+                      <summary class="cursor-pointer text-sm font-bold text-slate-700">Subcontracting Mobilization Guide Planning Table</summary>
+                      <div class="mt-3 flex justify-end">
+                        <button type="button" data-guide-custom-row-add="subcontracting" id="guidePlanningSubcontractingAddRowBtn" class="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-all">
+                          <span class="material-symbols-outlined text-[16px]">add</span>
+                          Add row
+                        </button>
+                      </div>
+                      <div class="mt-4 overflow-x-auto custom-scrollbar">
+                        <table class="min-w-full text-sm">
+                          <thead class="text-[10px] uppercase tracking-wider text-slate-400">
+                            <tr class="border-b border-slate-200">
+                              <th class="text-left py-3 pr-4">Phase</th>
+                              <th class="text-left py-3 px-4">Subcontracting Type</th>
+                              <th class="text-left py-3 px-4">Start date</th>
+                              <th class="text-left py-3 px-4">End date</th>
+                              <th class="text-left py-3 pl-4">Guide planning code</th>
+                              <th class="text-left py-3 pl-4">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody id="guidePlanningSubcontractingTableBody" class="divide-y divide-slate-200"></tbody>
+                        </table>
+                      </div>
+                    </details>
+                  </div>
+                  </div>
+                </details>
+              </section>
+
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <details open>
+                  <summary class="flex cursor-pointer list-none items-center justify-between gap-3">
+                    <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-[0.18em]" style="background-color:#dbeafe; border:1px solid #93c5fd; color:#1e3a8a;">
+                      <span class="material-symbols-outlined text-[16px]">sync</span>
+                      Reccurent Period
+                    </span>
+                    <span class="material-symbols-outlined text-slate-400">expand_more</span>
+                  </summary>
+                  <div id="guidePlanningRecurrentPlaceholder" class="mt-4 rounded-2xl border border-slate-200 bg-white p-4"></div>
+                </details>
+              </section>
+
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <details open>
+                  <summary class="flex cursor-pointer list-none items-center justify-between gap-3">
+                    <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-[0.18em]" style="background-color:#fef3c7; border:1px solid #f59e0b; color:#92400e;">
+                      <span class="material-symbols-outlined text-[16px]">logout</span>
+                      Demobilization Period
+                    </span>
+                    <span class="material-symbols-outlined text-slate-400">expand_more</span>
+                  </summary>
+                  <div id="guidePlanningDemobilisationPlaceholder" class="mt-4 rounded-2xl border border-slate-200 bg-white p-4"></div>
+                </details>
+              </section>
+
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <details open>
+                  <summary class="flex cursor-pointer list-none items-center justify-between gap-3">
+                    <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-[0.18em]" style="background-color:#ede9fe; border:1px solid #a78bfa; color:#5b21b6;">
+                      <span class="material-symbols-outlined text-[16px]">build_circle</span>
+                      Overhaul & Renewals Period
+                    </span>
+                    <span class="material-symbols-outlined text-slate-400">expand_more</span>
+                  </summary>
+                  <div id="guidePlanningOverhaulPlaceholder" class="mt-4 rounded-2xl border border-slate-200 bg-white p-4"></div>
+                </details>
+              </section>
+
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <details open>
+                  <summary class="flex cursor-pointer list-none items-center justify-between gap-3">
+                    <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-[0.18em]" style="background-color:#ffe4e6; border:1px solid #fb7185; color:#9f1239;">
+                      <span class="material-symbols-outlined text-[16px]">crisis_alert</span>
+                      Risks Period
+                    </span>
+                    <span class="material-symbols-outlined text-slate-400">expand_more</span>
+                  </summary>
+                  <div id="guidePlanningRisksPlaceholder" class="mt-4 rounded-2xl border border-slate-200 bg-white p-4"></div>
+                </details>
+              </section>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div>
+            <h2 class="text-lg font-bold">Source Data</h2>
+            <p class="text-sm text-slate-500 mt-1">Workbooks loaded from the dashboard shared store.</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2 text-xs text-slate-500">
+              <span>Target: <strong id="sharedTargetCurrency" class="text-slate-700">--</strong></span>
+              <span class="text-slate-300">|</span>
+              <span>Base: <strong id="sharedExchangeBase" class="text-slate-700">--</strong></span>
+              <span class="text-slate-300">|</span>
+              <span id="sharedLastUpdated" class="text-slate-400">--</span>
+            </div>
+            <button id="refreshSharedStoreBtn" type="button" class="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold hover:bg-slate-50 transition-all">
+              <span class="material-symbols-outlined text-[16px]">refresh</span>
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-4 flex flex-wrap gap-3">
+          <div class="inline-flex items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Workbooks</span>
+            <span id="sharedWorkbookCount" class="text-xl font-black text-slate-800">0</span>
+          </div>
+          <div class="inline-flex items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Projects</span>
+            <span id="sharedProjectCount" class="text-xl font-black text-slate-800">0</span>
+          </div>
+          <div class="inline-flex items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Currencies</span>
+            <span id="sharedCurrencyCount" class="text-xl font-black text-slate-800">0</span>
+          </div>
+          <p class="ml-auto self-center text-xs text-slate-500" id="projectPreviewStatus"></p>
+        </div>
+
+        <div class="mt-5 overflow-x-auto custom-scrollbar">
+          <table class="min-w-full text-sm">
+            <thead class="text-[10px] uppercase tracking-wider text-slate-400">
+              <tr class="border-b border-slate-100">
+                <th class="text-left py-3 pr-4">Project</th>
+                <th class="text-left py-3 px-4">Kind</th>
+                <th class="text-right py-3 px-4">Synthesis</th>
+                <th class="text-right py-3 px-4">Corrective</th>
+                <th class="text-right py-3 px-4">Overhaul</th>
+                <th class="text-right py-3 px-4">Subcontracting</th>
+                <th class="text-left py-3 px-4">Bid / Service</th>
+                <th class="text-left py-3 pl-4">Contract Duration</th>
+              </tr>
+            </thead>
+            <tbody id="sharedProjectPreviewBody" class="divide-y divide-slate-100">
+              <tr><td colspan="8" class="py-6 text-center text-sm text-slate-500">No data available.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <details class="mt-5 group">
+          <summary class="cursor-pointer select-none text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-[14px] transition-transform group-open:rotate-90">chevron_right</span>
+            Sheet coverage per workbook
+          </summary>
+          <div class="mt-3 overflow-x-auto custom-scrollbar">
+            <table class="min-w-full text-sm">
+              <thead class="text-[10px] uppercase tracking-wider text-slate-400">
+                <tr class="border-b border-slate-100">
+                  <th class="text-left py-3 pr-4">Workbook</th>
+                  <th class="text-left py-3 px-4">Project Key</th>
+                  <th class="text-right py-3 px-4">Planning</th>
+                  <th class="text-right py-3 px-4">Tech Needed</th>
+                  <th class="text-right py-3 px-4">Synthesis</th>
+                  <th class="text-right py-3 px-4">Corrective</th>
+                  <th class="text-right py-3 px-4">Overhaul</th>
+                  <th class="text-right py-3 px-4">Subcontracting</th>
+                  <th class="text-right py-3 pl-4">Hours Report</th>
+                </tr>
+              </thead>
+              <tbody id="sharedCoverageBody" class="divide-y divide-slate-100">
+                <tr><td colspan="9" class="py-6 text-center text-sm text-slate-500">No data available.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+
+        <!-- Required by JS — populated but not displayed -->
+        <div id="sharedWorkbookList" class="hidden"></div>
+      </section>
+
+      <section class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <h2 class="text-lg font-bold">Working Notes</h2>
+            <p class="text-sm text-slate-500 mt-1">Capture the functional rules before coding the calculation engine.</p>
+          </div>
+          <span id="draftSavedLabel" class="text-xs font-semibold text-slate-400">Draft not saved yet</span>
+        </div>
+        <textarea id="notesInput" class="mt-4 w-full min-h-[220px] rounded-2xl border-slate-200 px-4 py-3 text-sm" placeholder="List the future MI sheets, KPI rules, aggregation logic, export formatting constraints, and validation rules here..."></textarea>
+      </section>
+    </main>
+  </div>
+
+  <!-- White Collar "How it works" modal -->
+  <div id="wcHelpModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm">
+    <div class="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl border border-slate-200 p-8">
+      <button type="button" onclick="document.getElementById('wcHelpModal').classList.add('hidden')" class="absolute top-5 right-5 inline-flex items-center justify-center size-9 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 transition-all">
+        <span class="material-symbols-outlined text-[18px]">close</span>
+      </button>
+
+      <div class="flex items-center gap-3 mb-6">
+        <span class="material-symbols-outlined text-[24px] text-violet-600">help</span>
+        <h2 class="text-xl font-black tracking-tight">How Headcount &amp; Optimization works</h2>
+      </div>
+
+      <div class="space-y-5 text-sm text-slate-700 leading-6">
+
+        <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+          <p class="font-bold text-slate-800 mb-1">Overall logic</p>
+          <p>This workspace bridges two upstream tables to produce the <strong>Headcount Summary</strong>: the <em>Workload Table</em> (from Workload Synthesis) provides Technician and Supervisor counts per subsystem, while the <em>White Collar Table</em> (defined here) provides Engineer and Manager quantities per phase. The <strong>Optimization coefficient table</strong> contains percentage multipliers that control how many of those people are actually counted in each period.</p>
+        </div>
+
+        <div>
+          <p class="font-bold text-slate-800 mb-2">Optimization coefficient table — column by column</p>
+          <ul class="space-y-3 pl-1">
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-700 text-[11px] font-bold">T</span>
+              <div><span class="font-semibold">Technician rate %</span> — share of the Workload Table technicians that remain classified as <em>Technicians</em> in the Headcount Summary. Example: 80 % keeps 8 out of 10 techs as Technicians.</div>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 text-[11px] font-bold">W</span>
+              <div><span class="font-semibold">Worker rate %</span> — share of the same Technician pool that is reclassified as <em>Workers</em>. Setting Technician = 80 % and Worker = 20 % splits 10 techs into 8 Technicians + 2 Workers. Default is <strong>0 %</strong> (no Workers unless explicitly set).</div>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-bold">S</span>
+              <div><span class="font-semibold">Supervisor rate %</span> — share of the Workload Table supervisors that appear in the Headcount Summary. Use this to reduce the supervisor count below the automatic calculation. Example: 50 % halves the supervisor headcount for a given period.</div>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-700 text-[11px] font-bold">E</span>
+              <div><span class="font-semibold">Engineer rate %</span> — applied to the Engineer quantities defined in the White Collar Table. Not subsystem-dependent; Engineers are a project-level resource and appear only in the <em>Project total</em> rows of Headcount Summary.</div>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-rose-100 text-rose-700 text-[11px] font-bold">M</span>
+              <div><span class="font-semibold">Manager rate %</span> — same principle as Engineer rate, applied to Manager positions from the White Collar Table.</div>
+            </li>
+          </ul>
+        </div>
+
+        <div>
+          <p class="font-bold text-slate-800 mb-2">Period defaults</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+              <thead class="bg-slate-100 text-slate-600">
+                <tr>
+                  <th class="px-3 py-2 text-left font-bold">Period</th>
+                  <th class="px-3 py-2 text-center">Technician</th>
+                  <th class="px-3 py-2 text-center">Worker</th>
+                  <th class="px-3 py-2 text-center">Supervisor</th>
+                  <th class="px-3 py-2 text-center">Engineer / Manager</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <tr>
+                  <td class="px-3 py-2 font-semibold">Mobilisation</td>
+                  <td class="px-3 py-2 text-center">0 %</td>
+                  <td class="px-3 py-2 text-center">0 %</td>
+                  <td class="px-3 py-2 text-center">0 %</td>
+                  <td class="px-3 py-2 text-center">0 %</td>
+                </tr>
+                <tr class="bg-slate-50">
+                  <td class="px-3 py-2 font-semibold">Recurrent</td>
+                  <td class="px-3 py-2 text-center">100 %</td>
+                  <td class="px-3 py-2 text-center">0 %</td>
+                  <td class="px-3 py-2 text-center">100 %</td>
+                  <td class="px-3 py-2 text-center">100 %</td>
+                </tr>
+                <tr>
+                  <td class="px-3 py-2 font-semibold">Demobilisation</td>
+                  <td class="px-3 py-2 text-center">0 %</td>
+                  <td class="px-3 py-2 text-center">0 %</td>
+                  <td class="px-3 py-2 text-center">0 %</td>
+                  <td class="px-3 py-2 text-center">0 %</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="mt-2 text-xs text-slate-500">During Mobilisation, the default assumption is that nobody is on-site yet. Setting a coefficient — for example 50 % — means half the workforce is already present at the start of the phase; the other half joins at the beginning of Recurrent.</p>
+        </div>
+
+        <div class="rounded-xl border border-violet-100 bg-violet-50 px-4 py-3">
+          <p class="font-semibold text-violet-800 mb-1">Headcount Summary is updated automatically</p>
+          <p class="text-violet-700">Any change to the Optimization coefficient table, the White Collar Table, or the Workload Table immediately recalculates the Headcount Summary — no manual refresh needed.</p>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div id="moduleDrawerBackdrop" class="hidden fixed inset-0 z-40 bg-slate-950/30 backdrop-blur-sm"></div>
+  <aside id="moduleDrawer" class="fixed inset-y-0 right-0 z-50 w-full max-w-xl translate-x-full border-l border-slate-200 bg-white shadow-2xl transition-transform duration-200 ease-out">
+    <div class="flex h-full flex-col">
+      <div class="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
+        <div>
+          <div id="moduleDrawerSectionBadge" class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-50 text-sky-700 border border-sky-200 text-[11px] font-bold uppercase tracking-[0.18em]">
+            <span class="material-symbols-outlined text-[16px]">tune</span>
+            Module
+          </div>
+          <h2 id="moduleDrawerTitle" class="mt-3 text-2xl font-black tracking-tight">Configuration Module</h2>
+          <p id="moduleDrawerSubtitle" class="mt-2 text-sm text-slate-500">Module details will be configured progressively.</p>
+        </div>
+        <button id="closeModuleDrawerBtn" type="button" class="inline-flex items-center justify-center size-10 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-100 transition-all">
+          <span class="material-symbols-outlined text-[18px]">close</span>
+        </button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto custom-scrollbar px-6 py-6 space-y-6">
+        <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+          <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">Intent</h3>
+          <p id="moduleDrawerDescription" class="mt-3 text-sm leading-6 text-slate-600">Define the business perimeter for this module before wiring calculations and export rules.</p>
+        </section>
+
+        <section class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div class="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+            <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Module Group</p>
+            <p id="moduleDrawerGroup" class="mt-2 text-sm font-semibold">--</p>
+          </div>
+          <div class="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+            <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Delivery Mode</p>
+            <p class="mt-2 text-sm font-semibold">Right-side drawer</p>
+          </div>
+          <div class="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+            <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Implementation</p>
+            <p class="mt-2 text-sm font-semibold">Placeholder only</p>
+          </div>
+        </section>
+
+        <section class="rounded-2xl border border-slate-200 bg-white p-5">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <h3 class="text-base font-bold">Planned Inputs</h3>
+              <p class="text-sm text-slate-500 mt-1">Initial scaffolding for future fields, tables, and rule selectors.</p>
+            </div>
+          </div>
+          <div id="moduleDrawerInputs" class="mt-4 space-y-3"></div>
+        </section>
+
+        <section class="rounded-2xl border border-slate-200 bg-white p-5">
+          <h3 class="text-base font-bold">Next Build Steps</h3>
+          <div id="moduleDrawerSteps" class="mt-4 space-y-3"></div>
+        </section>
+      </div>
+    </div>
+  </aside>
+
+  <script src="cost_summary_mi_ui.js"></script>
+  <script type="module" src="cost_summary_mi.js"></script>
+</body>
+</html>

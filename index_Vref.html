@@ -1,0 +1,811 @@
+<!doctype html>
+<html class="light" lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Project Info and Resource Planning Dashboard</title>
+
+  <style>
+    :root{ --primary:#137fec; }
+        html, body { height: 100%; }
+    body { margin: 0; }
+.bar-fill{ background: var(--primary); }
+.drop-zone-active {
+  border-color: #137fec !important;
+  background-color: rgba(19, 127, 236, 0.08);
+}
+  </style>
+
+
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "primary": "#137fec",
+            "teal-accent": "#14b8a6",
+            "background-light": "#f6f7f8",
+            "background-dark": "#101922",
+          },
+          fontFamily: { "display": ["Inter", "sans-serif"] },
+          borderRadius: {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+        },
+      },
+    };
+  </script>
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="shared/dashboard_config.js"></script>
+  <script src="shared/dashboard_utils.js"></script>
+  <script src="shared/dashboard_workbook_mirror.js"></script>
+  <style type="text/tailwindcss">
+    body { font-family: 'Inter', sans-serif; }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #233648; }
+
+    /* tiny helper for dropdown open on click (no hover-only) */
+    .dropdown-open { display: block !important; }
+  </style>
+</head>
+
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 h-screen flex overflow-hidden font-display">
+
+  <!-- SIDEBAR -->
+  <aside class="w-20 lg:w-64 flex-shrink-0 border-r border-slate-200 dark:border-slate-800 flex flex-col bg-white dark:bg-background-dark">
+    <div class="p-6 flex items-center gap-3">
+      <div class="bg-primary rounded-lg p-2 text-white flex-shrink-0">
+        <span class="material-symbols-outlined">engineering</span>
+      </div>
+      <div class="hidden lg:block overflow-hidden">
+        <h1 class="text-lg font-bold tracking-tight truncate">Industrial Ops</h1>
+        <p class="text-xs text-slate-500 dark:text-slate-400 truncate">Bid Technical Manager</p>
+      </div>
+    </div>
+
+    <nav class="flex-1 px-4 space-y-1">
+      <a class="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" href="#">
+        <span class="material-symbols-outlined">dashboard</span>
+        <span class="hidden lg:block">Dashboard</span>
+      </a>
+      <a data-view="workload"
+        class="nav-item flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg bg-primary/10 text-primary"
+        href="#">
+        <span class="material-symbols-outlined">calendar_today</span>
+        <span class="hidden lg:block">Workload</span>
+      </a>
+      <a data-view="materials"
+        class="nav-item flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        href="#">
+        <span class="material-symbols-outlined">inventory_2</span>
+        <span class="hidden lg:block">Materials</span>
+      </a>
+      <a data-view="overhaul"
+        class="nav-item flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        href="#">
+        <span class="material-symbols-outlined">precision_manufacturing</span>
+        <span class="hidden lg:block">Overhaul &amp; Renewals</span>
+      </a>
+      <a data-view="subcontracting"
+        class="nav-item flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        href="#">
+        <span class="material-symbols-outlined">groups</span>
+        <span class="hidden lg:block">Subcontracting Activities</span>
+      </a>
+      <a data-view="benchmark"
+        class="nav-item flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        href="#">
+        <span class="material-symbols-outlined">query_stats</span>
+        <span class="hidden lg:block">Benchmark &amp; Cost drivers</span>
+      </a>
+      <a
+        class="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        href="cost_summary_mi.html" target="_blank" rel="noopener noreferrer">
+        <span class="material-symbols-outlined">table_view</span>
+        <span class="hidden lg:block">Cost Summary &amp; MI</span>
+      </a>
+      
+    </nav>
+
+    <div class="p-4 border-t border-slate-200 dark:border-slate-800">
+      <div class="flex items-center gap-3 p-2">
+        <img alt="User profile" class="size-8 rounded-full border border-slate-200 dark:border-slate-700 flex-shrink-0" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDld0tNhTQPG1u35_g8wYTg9AHwTOL-SeXxLf3fLie3mPtmGm3GCGX21nfmZL5QwlwXJByU4qOihEAUmDdmFk1Ck4Fr9sS811CmHXfuomIRskP5VYyiu5EuM78_VoI7gDMDbcPPmhfzwxzL8fepyw_mSibYg0d3YhQD1K5muG3-fWPo2HBKzpnbTY_ej12ODrYThTV6IZQTJKF359htfDLFRgu0yDvg4awrGhU2l2r3bzy385N9OScjKLEsxGLtQuQp6sWQQLxMbvGJ"/>
+        <div class="flex-1 min-w-0 hidden lg:block">
+          <p class="text-sm font-medium truncate">Mohamed BOUDIA</p>
+          <p class="text-xs text-slate-500 truncate">Maintenance Engineering Manager</p>
+        </div>
+        <span class="material-symbols-outlined text-slate-400 cursor-pointer hover:text-primary transition-colors hidden lg:block">settings</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-50 dark:bg-background-dark">
+
+    <!-- HEADER -->
+    <header class="sticky top-0 z-20 flex items-center justify-between px-8 py-4 bg-white/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
+      <div class="flex items-center gap-6">
+        <nav class="flex text-sm text-slate-500 dark:text-slate-400">
+          <span class="hover:text-primary cursor-pointer">Analytics</span>
+          <span class="mx-2">/</span>
+          <span class="text-slate-900 dark:text-slate-100 font-semibold">Maintenance Performance</span>
+        </nav>
+
+        <!-- Data Sources dropdown (click) -->
+        <div class="relative" id="dataSourcesWrap">
+          <button id="dataSourcesBtn" class="flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all border border-slate-200 dark:border-slate-700" type="button">
+            <span class="material-symbols-outlined text-primary text-[18px]">database</span>
+            <span>Data Sources</span>
+            <span class="material-symbols-outlined text-slate-400 text-[18px]">keyboard_arrow_down</span>
+          </button>
+
+          <div id="dataSourcesPanel" class="absolute left-0 mt-2 w-96 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl hidden z-30">
+            <div class="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Connected Files</h3>
+              <div class="flex items-center gap-2">
+                <button id="deleteFilesBtn"
+                        class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                        type="button"
+                        title="Remove selected files"
+                        disabled>
+                  Delete Selected
+                </button>
+                <input id="excelInput" class="hidden" type="file" accept=".xlsx,.xls" multiple />
+                <button id="uploadBtn" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-primary text-white hover:bg-primary opacity-90 transition-all" type="button">
+                  Upload Excel
+                </button>
+              </div>
+            </div>
+
+            <div id="dropZone" class="mx-4 my-3 px-4 py-5 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 text-center text-xs text-slate-500 dark:text-slate-400 transition-all cursor-pointer">
+              <div class="flex flex-col items-center gap-2">
+                <span class="material-symbols-outlined text-primary text-2xl">file_upload</span>
+                <p class="text-sm font-semibold text-slate-700 dark:text-slate-200">Drag &amp; Drop Excel files</p>
+                <p class="text-[11px]">...or click Upload Excel to browse</p>
+                <p class="text-[10px] text-slate-400 dark:text-slate-500">Files stay in your browser.</p>
+              </div>
+            </div>
+
+            <div class="mx-4 mb-3 p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40">
+              <div class="flex items-start gap-3">
+                <span class="material-symbols-outlined text-primary text-[20px] mt-0.5">link</span>
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-semibold text-slate-700 dark:text-slate-200">Import from URL</p>
+                  <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                    Add a direct Excel link. The dashboard checks remote links for updates automatically while this page stays open.
+                  </p>
+                  <div class="mt-3 flex items-center gap-2">
+                    <input id="remoteExcelUrlInput"
+                           type="url"
+                           placeholder="https://example.com/planning.xlsx"
+                           class="flex-1 min-w-0 rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm" />
+                    <button id="addRemoteExcelUrlBtn"
+                            class="shrink-0 text-xs font-semibold px-3 py-2 rounded-lg bg-primary text-white hover:bg-primary/90 transition-all"
+                            type="button">
+                      Add Link
+                    </button>
+                  </div>
+                  <div class="mt-2 flex items-start gap-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 px-3 py-2">
+                    <span class="material-symbols-outlined text-amber-500 dark:text-amber-400 text-[14px] mt-0.5 flex-shrink-0">warning</span>
+                    <p class="text-[11px] text-amber-700 dark:text-amber-300 leading-relaxed">
+                      <strong>CORS limitation:</strong> most servers block browser requests.
+                      If the import fails, download the file manually and use <em>Upload Excel</em>.
+                      Public SharePoint / OneDrive links generally work.
+                    </p>
+                  </div>
+                  <div class="mt-2 flex items-center gap-2">
+                    <button id="linkLocalExcelBtn"
+                            class="shrink-0 text-xs font-semibold px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                            type="button">
+                      Link Local Excel
+                    </button>
+                    <p class="text-[10px] text-slate-400 dark:text-slate-500">
+                      Best option for local files that must auto-refresh while the page is open.
+                    </p>
+                  </div>
+                  <p id="remoteExcelUrlStatus" class="mt-2 text-[11px] text-slate-500 dark:text-slate-400"></p>
+                </div>
+              </div>
+            </div>
+
+            <div class="p-2 space-y-1 max-h-[360px] overflow-y-auto custom-scrollbar" id="filesList">
+              <!-- injected -->
+              <div class="p-3 rounded-lg border border-dashed border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400">
+                <p class="text-xs font-semibold">No file uploaded yet.</p>
+                <p class="text-[11px] mt-1">Upload one or more Excel files. We'll merge all sheets.</p>
+              </div>
+            </div>
+
+            <div class="p-3 border-t border-slate-100 dark:border-slate-800">
+              <p class="text-[11px] text-slate-500 dark:text-slate-400" id="schemaHint">
+                Fichier "Output Planning" attendu : feuilles "Planning Complet" (durées par équipement), "Technicians Needed Per Day" (effectifs jour/nuit par date), "Synthesis" (effectifs optimisés par sous-système et shift).
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Subsystem filter -->
+        <div id="subsystemWrap" class="relative hidden md:flex items-center gap-2">
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Subsystem</span>
+          <button id="subsystemBtn" type="button" class="min-w-[220px] inline-flex items-center justify-between gap-3 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all">
+            <span id="subsystemSummary" class="truncate text-left">All subsystems</span>
+            <span class="material-symbols-outlined text-[18px] text-slate-500 dark:text-slate-400">expand_more</span>
+          </button>
+          <div id="subsystemPanel" class="hidden absolute left-0 top-full mt-2 w-[320px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-40">
+            <div class="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div>
+                <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Subsystem</p>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Check one or many subsystems to filter analytics.</p>
+              </div>
+              <button id="subsystemCloseBtn" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800" type="button">
+                <span class="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+            <div id="subsystemList" class="p-3 max-h-[280px] overflow-y-auto custom-scrollbar">
+              <div class="p-3 rounded-lg border border-dashed border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-sm">
+                No subsystem available yet.
+              </div>
+            </div>
+            <div class="p-3 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2">
+              <button id="subsystemAllBtn" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700" type="button">
+                All
+              </button>
+              <button id="subsystemClearBtn" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700" type="button">
+                Clear
+              </button>
+            </div>
+          </div>
+        </div>
+        <!-- Project Name filter -->
+        <div id="projectWrap" class="relative hidden md:flex items-center gap-2">
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Project</span>
+          <button id="projectBtn" type="button" class="min-w-[220px] inline-flex items-center justify-between gap-3 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all">
+            <span id="projectSummary" class="truncate text-left">All projects</span>
+            <span class="material-symbols-outlined text-[18px] text-slate-500 dark:text-slate-400">expand_more</span>
+          </button>
+          <div id="projectPanel" class="hidden absolute left-0 top-full mt-2 w-[320px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-40">
+            <div class="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div>
+                <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Project</p>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Check one or many projects to filter analytics.</p>
+              </div>
+              <button id="projectCloseBtn" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800" type="button">
+                <span class="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+            <div id="projectList" class="p-3 max-h-[280px] overflow-y-auto custom-scrollbar">
+              <div class="p-3 rounded-lg border border-dashed border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-sm">
+                No project available yet.
+              </div>
+            </div>
+            <div class="p-3 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2">
+              <button id="projectAllBtn" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700" type="button">
+                All
+              </button>
+              <button id="projectClearBtn" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700" type="button">
+                Clear
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Project Type filter -->
+        <div class="hidden md:flex items-center gap-2">
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Type</span>
+          <select id="projectTypeFilter"
+                  class="text-sm rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2">
+            <option value="__ALL__">All types</option>
+          </select>
+        </div>
+        <div id="contractDurationWrap" class="relative hidden md:flex items-center gap-2">
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Contract Duration</span>
+          <button id="contractDurationBtn" type="button" class="min-w-[240px] inline-flex items-center justify-between gap-3 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all">
+            <span id="contractDurationSummary" class="truncate text-left">Auto duration</span>
+            <span class="material-symbols-outlined text-[18px] text-slate-500 dark:text-slate-400">expand_more</span>
+          </button>
+          <div id="contractDurationPanel" class="hidden absolute left-0 top-full mt-2 w-[420px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-40">
+            <div class="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div>
+                <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Contract Duration Override</p>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Manual values override the calculated contract duration for the matching project.</p>
+              </div>
+              <button id="contractDurationCloseBtn" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800" type="button">
+                <span class="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+            <div id="contractDurationList" class="p-3 max-h-[320px] overflow-y-auto custom-scrollbar">
+              <div class="p-3 rounded-lg border border-dashed border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-sm">
+                No project available yet.
+              </div>
+            </div>
+            <div class="p-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+              <p class="text-[11px] text-slate-500 dark:text-slate-400">Blank value keeps automatic calculation.</p>
+              <button id="contractDurationResetBtn" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700" type="button">
+                Reset all
+              </button>
+            </div>
+          </div>
+        </div>
+        <!-- Project scope selector (one or many uploaded files) -->
+        <div class="relative hidden md:flex items-center">
+          <button id="scopeBtn"
+                  class="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+                  type="button"
+                  title="Select project file(s)">
+            <span class="material-symbols-outlined text-[18px] text-slate-600 dark:text-slate-300">filter_alt</span>
+          </button>
+
+          <div id="scopePanel"
+              class="hidden absolute right-0 top-full mt-2 w-[360px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-40">
+            <div class="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div>
+                <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Project scope</p>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Choose one or many uploaded files to display.</p>
+              </div>
+              <button id="scopeCloseBtn" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800" type="button">
+                <span class="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <div class="p-3 max-h-[320px] overflow-y-auto custom-scrollbar" id="scopeList">
+              <div class="p-3 rounded-lg border border-dashed border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-sm">
+                Upload files first from <b>Data Sources</b>.
+              </div>
+            </div>
+
+            <div class="p-3 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2">
+              <button id="scopeAllBtn" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700" type="button">
+                All files
+              </button>
+              <button id="scopeNoneBtn" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700" type="button">
+                None
+              </button>
+              <div class="flex-1 text-right text-[11px] text-slate-500 dark:text-slate-400" id="scopeSummary">All files</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-4">
+        <button id="exportBtn" class="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary opacity-90 transition-all shadow-sm" type="button" aria-label="Export Report">
+          <span class="material-symbols-outlined text-[18px]">download</span>
+          <span class="export-label whitespace-nowrap">Export Report</span>
+        </button>
+      </div>
+    </header>
+
+    <div id="scrollArea" class="flex-1 overflow-y-auto custom-scrollbar">
+
+    <!-- CONTENT -->
+    <div id="view-workload" class="view px-8 pb-8 space-y-8 max-w-full">
+
+            <section id="summarySticky" class="-mx-8 px-8 pt-8 pb-6 bg-slate-50 dark:bg-background-dark border-b border-slate-200 dark:border-slate-800">
+        <div class="space-y-6">
+          <div class="flex flex-col xl:flex-row xl:items-end justify-between gap-6">
+                  <div class="flex flex-col gap-1">
+                    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold uppercase tracking-[0.18em] w-fit mb-2">
+                      <span class="material-symbols-outlined text-[16px]">engineering</span>
+                      Workload
+                    </div>
+                    <h2 class="text-3xl font-bold tracking-tight">Resource Planning Dashboard</h2>
+                    <p class="text-slate-500 dark:text-slate-400 text-sm">Industrial maintenance management for resource planning and analytics</p>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-2" id="statusLine">Using demo data (upload Excel to refresh)</p>
+                  </div>
+
+                  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm flex flex-wrap gap-8 items-center">
+                    <div class="flex items-center gap-3">
+                      <div class="bg-primary opacity-10 text-primary p-2 rounded-lg">
+                        <span class="material-symbols-outlined text-[20px]">location_on</span>
+                      </div>
+                      <div>
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Project Name</p>
+                        <p class="text-sm font-bold" id="projectName">Riyadh Metro</p>
+                      </div>
+                    </div>
+
+                    <div class="w-px h-8 bg-slate-100 dark:bg-slate-800 hidden md:block"></div>
+                    <div>
+                      <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Project Type</p>
+                      <p class="text-sm font-bold" id="projectType">Metro / APM</p>
+                    </div>
+
+                    <div class="w-px h-8 bg-slate-100 dark:bg-slate-800 hidden md:block"></div>
+                    <div>
+                      <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Line Length</p>
+                      <p class="text-sm font-bold" id="lineLength">176.5 Km <span class="text-[10px] font-normal text-slate-400">STK</span></p>
+                    </div>
+
+                    <div class="w-px h-8 bg-slate-100 dark:bg-slate-800 hidden md:block"></div>
+                    <div>
+                      <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Bid / Service Year</p>
+                      <p class="text-sm font-bold" id="serviceYear">2018 / 2024</p>
+                    </div>
+                    <div class="w-px h-8 bg-slate-100 dark:bg-slate-800 hidden md:block"></div>
+                    <div>
+                      <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Contract Duration</p>
+                      <p class="text-sm font-bold" id="contractDuration">—</p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- KPI CARDS -->
+                <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-4" id="kpiGrid">
+                  <div class="col-span-full p-4 rounded-xl border border-dashed border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-sm">
+                    Upload an <span class="font-semibold">Output Planning</span> Excel file to populate KPIs from <span class="font-mono">Synthesis</span>.
+                  </div>
+                </div>
+
+                <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm flex flex-col gap-3">
+                  <div class="flex flex-wrap items-center gap-3">
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Activity</span>
+                    <select id="activityFilter" class="text-sm rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 min-w-[180px]">
+                      <option value="__ALL__">All</option>
+                    </select>
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Equipment</span>
+                    <select id="workloadEquipmentFilter" class="text-sm rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 min-w-[180px]">
+                      <option value="__ALL__">All equipment</option>
+                    </select>
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Location</span>
+                    <select id="workloadLocationFilter" class="text-sm rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 min-w-[180px]">
+                      <option value="__ALL__">All locations</option>
+                    </select>
+                  </div>
+                  <p class="text-[11px] text-slate-500 dark:text-slate-400">Filters all charts in the Workload view based on the selected activity.</p>
+                </div>
+
+        </div>
+      </section>
+
+      <div id="workloadTreeCard" class="bg-white dark:bg-slate-900/50 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div class="flex flex-col gap-1 mb-6">
+          <h3 class="text-lg font-bold">Technician Breakdown Tree</h3>
+          <p id="workloadTreeSubtitle" class="text-xs text-slate-500 dark:text-slate-400">Headcount decomposition by project, subsystem and shift.</p>
+        </div>
+        <div id="workloadTreeBody" class="space-y-4 min-h-[260px]"></div>
+        <div id="workloadTreeEmpty" class="hidden min-h-[260px] flex items-center justify-center text-sm text-slate-500 dark:text-slate-400">No technician headcount available for the current selection.</div>
+      </div>
+
+      <!-- LINE CHART -->
+      <div id="lineCard" class="bg-white dark:bg-slate-900/50 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div class="flex items-center justify-between mb-8">
+          <div class="flex flex-col gap-1">
+            <h3 class="text-lg font-bold">Daily Technician Requirement Evolution</h3>
+            <p id="lineSubtitle" class="text-xs text-slate-500">Annual trend and seasonal workload fluctuations for 2024</p>
+          </div>
+          <div class="flex items-center gap-4 text-xs font-medium">
+            <div class="flex items-center gap-1.5">
+              <span class="size-2.5 rounded-full" style="background:#0f172a;"></span>
+              <span class="text-slate-600 dark:text-slate-400">1 color = 1 project</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="inline-block h-0.5 w-5 rounded-full bg-slate-700 dark:bg-slate-200"></span>
+              <span class="text-slate-600 dark:text-slate-400">Solid line = Night</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="inline-block h-0.5 w-5 border-t-2 border-dashed border-slate-500 dark:border-slate-300"></span>
+              <span class="text-slate-600 dark:text-slate-400">Dashed line = Day</span>
+            </div>
+          </div>
+        </div>
+
+        <div id="lineProjectsLegend" class="mb-6 flex flex-wrap items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400"></div>
+
+        <div id="lineChartOuter" class="relative w-full" style="height:350px">
+          <div class="absolute left-0 top-0 bottom-0 flex flex-col justify-between pr-2" style="width:72px; font-size:10px; line-height:1; color:#64748b; text-align:right;">
+            <div id="lineTickTop">0</div>
+            <div id="lineTickMid">0</div>
+            <div id="lineTickLow">0</div>
+            <div id="lineTickZero">0</div>
+          </div>
+          <div style="margin-left:72px; height:100%;">
+            <svg class="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 1000 300" id="lineSvg">
+            <defs>
+              <linearGradient id="gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="#137fec" stop-opacity="0.1"></stop>
+                <stop offset="100%" stop-color="#137fec" stop-opacity="0"></stop>
+              </linearGradient>
+            </defs>
+
+            <g id="lineGrid" opacity="0.6">
+              <line id="gridTop" x1="0" y1="20" x2="1000" y2="20" stroke="#e2e8f0" stroke-width="1"></line>
+              <line id="gridMid" x1="0" y1="102" x2="1000" y2="102" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4,6"></line>
+              <line id="gridLow" x1="0" y1="181" x2="1000" y2="181" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4,6"></line>
+              <line id="gridZero" x1="0" y1="260" x2="1000" y2="260" stroke="#e2e8f0" stroke-width="1"></line>
+            </g>
+
+            <!-- hover crosshair & dots (for tooltip) -->
+            <g id="hoverLayer" pointer-events="none">
+              <line id="hoverLine" x1="0" y1="20" x2="0" y2="260" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4,4" opacity="0"></line>
+              <g id="hoverDots"></g>
+            </g>
+
+
+            <!-- updated by JS -->
+            <g id="projectLineLayer"></g>
+            <path id="nightPath" d="M0,150 Q125,50 250,180 T500,120 T750,220 T1000,100" fill="none" stroke="#137fec" stroke-width="4"></path>
+            <path id="dayPath" d="M0,170 Q125,120 250,200 T500,160 T750,240 T1000,140" fill="none" stroke="#14b8a6" stroke-dasharray="8,4" stroke-width="2"></path>
+            <path id="nightArea" d="M0,150 Q125,50 250,180 T500,120 T750,220 T1000,100 V300 H0 Z" fill="url(#gradient)"></path>
+
+            <circle id="p1" cx="250" cy="180" fill="#137fec" r="5"></circle>
+            <circle id="p2" cx="500" cy="120" fill="#137fec" r="5"></circle>
+            <circle id="p3" cx="750" cy="220" fill="#137fec" r="5"></circle>
+          </svg>
+
+          
+
+          <!-- Hover tooltip (shown on pointer move) -->
+          <div id="lineTooltip" class="pointer-events-none absolute z-10 hidden" style="min-width:170px;">
+            <div class="bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm px-3 py-2">
+              <div id="ttDate" class="text-[11px] font-semibold text-slate-700 dark:text-slate-200"></div>
+              <div id="ttProjects" class="mt-1 space-y-1 text-[11px]"></div>
+            </div>
+          </div>
+    <!-- misplaced secondary views kept commented out; proper views are rendered below workload
+      <div class="bg-white dark:bg-slate-900/50 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+        <h3 class="text-lg font-bold">Materials</h3>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mt-2">Coming soon…</p>
+      </div>
+    </div>
+
+    <div id="view-overhaul" class="view hidden px-8 pb-8 space-y-8 max-w-full">
+      <div class="bg-white dark:bg-slate-900/50 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+        <h3 class="text-lg font-bold">Overhaul & Renewals</h3>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mt-2">Coming soon…</p>
+      </div>
+    </div>
+
+    <div id="view-subcontracting" class="view hidden px-8 pb-8 space-y-8 max-w-full">
+      <div class="bg-white dark:bg-slate-900/50 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+        <h3 class="text-lg font-bold">Subcontracting Activities</h3>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mt-2">Coming soon…</p>
+      </div>
+    </div>
+-->
+<div class="absolute bottom-0 left-0 right-0 flex justify-between pointer-events-none text-[10px] font-bold text-slate-400 uppercase pt-4 border-t border-slate-100 dark:border-slate-800" style="left:72px; right:0;">
+            <span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>May</span><span>Jun</span><span>Jul</span><span>Aug</span><span>Sep</span><span>Oct</span><span>Nov</span><span>Dec</span>
+          </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="durationLineCard" class="bg-white dark:bg-slate-900/50 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div class="flex items-center justify-between mb-8">
+          <div class="flex flex-col gap-1">
+            <h3 class="text-lg font-bold">Daily Intervention Duration Evolution</h3>
+            <p id="durationLineSubtitle" class="text-xs text-slate-500">Daily intervention duration trend by project and time of day</p>
+          </div>
+          <div class="flex items-center gap-4 text-xs font-medium">
+            <div class="flex items-center gap-1.5">
+              <span class="size-2.5 rounded-full" style="background:#0f172a;"></span>
+              <span class="text-slate-600 dark:text-slate-400">1 color = 1 project</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="inline-block h-0.5 w-5 rounded-full bg-slate-700 dark:bg-slate-200"></span>
+              <span class="text-slate-600 dark:text-slate-400">Solid line = Night</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="inline-block h-0.5 w-5 border-t-2 border-dashed border-slate-500 dark:border-slate-300"></span>
+              <span class="text-slate-600 dark:text-slate-400">Dashed line = Day</span>
+            </div>
+          </div>
+        </div>
+
+        <div id="durationLineProjectsLegend" class="mb-6 flex flex-wrap items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400"></div>
+
+        <div id="durationLineChartOuter" class="relative w-full" style="height:350px">
+          <div class="absolute left-0 top-0 bottom-0 flex flex-col justify-between pr-2" style="width:72px; font-size:10px; line-height:1; color:#64748b; text-align:right;">
+            <div id="durationLineTickTop">0h</div>
+            <div id="durationLineTickMid">0h</div>
+            <div id="durationLineTickLow">0h</div>
+            <div id="durationLineTickZero">0h</div>
+          </div>
+          <div style="margin-left:72px; height:100%;">
+            <svg class="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 1000 300" id="durationLineSvg">
+              <g id="durationLineGrid" opacity="0.6">
+                <line id="durationGridTop" x1="0" y1="20" x2="1000" y2="20" stroke="#e2e8f0" stroke-width="1"></line>
+                <line id="durationGridMid" x1="0" y1="102" x2="1000" y2="102" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4,6"></line>
+                <line id="durationGridLow" x1="0" y1="181" x2="1000" y2="181" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4,6"></line>
+                <line id="durationGridZero" x1="0" y1="260" x2="1000" y2="260" stroke="#e2e8f0" stroke-width="1"></line>
+              </g>
+              <g id="durationHoverLayer" pointer-events="none">
+                <line id="durationHoverLine" x1="0" y1="20" x2="0" y2="260" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4,4" opacity="0"></line>
+                <g id="durationHoverDots"></g>
+              </g>
+              <g id="durationProjectLineLayer"></g>
+            </svg>
+
+            <div id="durationLineTooltip" class="pointer-events-none absolute z-10 hidden" style="min-width:200px;">
+              <div class="bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm px-3 py-2">
+                <div id="durationTtDate" class="text-[11px] font-semibold text-slate-700 dark:text-slate-200"></div>
+                <div id="durationTtProjects" class="mt-1 space-y-1 text-[11px]"></div>
+              </div>
+            </div>
+          </div>
+          <div class="absolute bottom-0 left-0 right-0 flex justify-between pointer-events-none text-[10px] font-bold text-slate-400 uppercase pt-4 border-t border-slate-100 dark:border-slate-800" style="left:72px; right:0;">
+            <span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>May</span><span>Jun</span><span>Jul</span><span>Aug</span><span>Sep</span><span>Oct</span><span>Nov</span><span>Dec</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- BOTTOM GRID -->
+      <div id="workloadSecondaryGrid" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        <!-- BAR CHART -->
+        <div id="barsCard" class="bg-white dark:bg-slate-900/50 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-visible">
+          <div class="flex items-center justify-between mb-8">
+            <h3 class="text-sm font-semibold flex items-center gap-2">
+              <span class="material-symbols-outlined text-primary text-sm">precision_manufacturing</span>
+              Intervention Duration per Equipment
+            </h3>
+
+            <div class="flex items-center gap-4">
+              <div id="barsLegend" class="flex flex-wrap items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400"></div>
+              <span class="text-[10px] font-bold text-slate-400 uppercase">Y-Axis: Total Hours</span>
+            </div>
+          </div>
+
+          <div class="h-64 flex items-end gap-3 pr-2 border-l border-b border-slate-200 dark:border-slate-800 relative mb-16" id="barsWrap" style="height:24rem; padding-left:72px; padding-bottom:48px;">
+            <div class="absolute left-0 top-0 flex flex-col justify-between text-[11px] font-bold text-slate-400 pr-2 text-right pointer-events-none whitespace-nowrap"
+                style="width:72px; padding-top:6px; padding-bottom:48px; height:100%;">
+              <span id="barTickTop">150h</span>
+              <span id="barTickMid">100h</span>
+              <span id="barTickLow">50h</span>
+              <span>0h</span>
+            </div>
+
+            <!-- bars injected by JS -->
+          </div>
+
+          <div id="barsNav" class="hidden mt-3 pl-[72px] pr-2">
+            <div class="flex items-center gap-3">
+              <span id="barsNavLabel" class="shrink-0 text-[10px] font-medium uppercase tracking-wide text-slate-400">Showing 1-8 of 8</span>
+              <input id="barsNavRange" type="range" min="0" max="0" value="0" step="1" class="h-1 flex-1 cursor-ew-resize accent-primary">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-4 gap-4 pt-4 border-t border-slate-100 dark:border-slate-800" id="barsStats">
+            <div class="space-y-1">
+              <p class="text-[9px] font-bold text-slate-400 uppercase">Avg Hours</p>
+              <p class="text-xs font-bold" id="avgHours">42.5h</p>
+            </div>
+            <div class="space-y-1">
+              <p class="text-[9px] font-bold text-slate-400 uppercase">Peak Load</p>
+              <p class="text-xs font-bold" id="peakLoad">142h</p>
+            </div>
+            <div class="space-y-1">
+              <p class="text-[9px] font-bold text-slate-400 uppercase">Total Equipment</p>
+              <p class="text-xs font-bold" id="totalEquip">124 Units</p>
+            </div>
+            <div class="space-y-1">
+              <p class="text-[9px] font-bold text-slate-400 uppercase">Efficiency</p>
+              <p class="text-xs font-bold text-emerald-500" id="efficiency">94%</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- PIE -->
+        <div id="pieCard" class="bg-white dark:bg-slate-900/50 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col">
+          <h3 class="text-sm font-semibold mb-2 flex items-center gap-2">
+            <span class="material-symbols-outlined text-primary text-sm">pie_chart</span>
+            Preventive vs Corrective Hours Split
+          </h3>
+          <!-- Projects legend (filled by JS when multiple projects selected) -->
+          <div id="pieProjectsLegend" class="flex flex-wrap items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400 mb-4"></div>
+          
+          <div class="flex-1 flex flex-col items-center justify-center">
+            <div class="relative size-64">
+              <svg id="pieSvg" class="size-full -rotate-90" viewBox="0 0 64 64"></svg>
+                
+
+              <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <span class="text-3xl font-black text-slate-900 dark:text-white leading-none" id="totalHours">2,840</span>
+                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Total Hours</span>
+              </div>
+
+              <div class="absolute -top-2 left-1/2 -translate-x-1/2 bg-white dark:bg-slate-800 px-2 py-1 rounded shadow-sm border border-slate-100 dark:border-slate-700 z-10">
+                <span class="text-[10px] font-bold text-primary" id="nightPct">0% Corrective</span>
+              </div>
+              <div class="absolute bottom-4 -right-8 bg-white dark:bg-slate-800 px-2 py-1 rounded shadow-sm border border-slate-100 dark:border-slate-700 z-10">
+                <span class="text-[10px] font-bold text-teal-600" id="dayPct">0% Preventive</span>
+              </div>
+            </div>
+
+            <div class="flex gap-10 mt-10">
+              <div class="flex flex-col items-center gap-1">
+                <div class="flex items-center gap-2">
+                  <span class="size-3 rounded-full bg-primary"></span>
+                  <span class="text-xs font-semibold text-slate-600 dark:text-slate-400">Corrective</span>
+                </div>
+                <span class="text-xl font-extrabold text-slate-900 dark:text-white" id="nightHours">0h</span>
+                <span class="text-[10px] text-slate-400 font-medium" id="nightCount">0 projects</span>
+              </div>
+
+              <div class="flex flex-col items-center gap-1">
+                <div class="flex items-center gap-2">
+                  <span class="size-3 rounded-full bg-teal-accent"></span>
+                  <span class="text-xs font-semibold text-slate-600 dark:text-slate-400">Preventive</span>
+                </div>
+                <span class="text-xl font-extrabold text-slate-900 dark:text-white" id="dayHours">0h</span>
+                <span class="text-[10px] text-slate-400 font-medium" id="dayCount">0 projects</span>
+              </div>
+            </div>
+
+          </div>
+        
+        <!-- SYNTHESIS TABLE -->
+        <div class="bg-white dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm mt-6" id="synthesisCard">
+          <div class="flex items-center justify-between gap-4 mb-4">
+            <h3 class="text-sm font-semibold flex items-center gap-2">
+              <span class="material-symbols-outlined text-primary text-sm">table</span>
+              Synthesis — Optimized Headcounts
+            </h3>
+            <div class="text-[11px] text-slate-500 dark:text-slate-400" id="synthesisNote">Upload an Output Planning file to populate this table.</div>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+              <thead class="text-[10px] uppercase tracking-wider text-slate-400">
+                <tr class="border-b border-slate-100 dark:border-slate-800">
+                  <th class="text-left py-2 pr-4">Subsystem</th>
+
+                  <th class="text-right py-2 px-2">Day HC (Opt)</th>
+                  <th class="text-right py-2 px-2">Night HC (Opt)</th>
+
+                  <th class="text-right py-2 px-2">Prev Dur Day (h)</th>
+                  <th class="text-right py-2 px-2">Prev Dur Night (h)</th>
+                  <th class="text-right py-2 px-2">Prev Dur Total (h)</th>
+
+                  <th class="text-right py-2 px-2">Corr Palliative (h)</th>
+                  <th class="text-right py-2 px-2">Corr Replacement (h)</th>
+                  <th class="text-right py-2 pl-2">Corr Total (h)</th>
+                </tr>
+              </thead>
+              <tbody id="synthesisTableBody" class="divide-y divide-slate-100 dark:divide-slate-800">
+                <tr>
+                  <td class="py-3 text-slate-500 dark:text-slate-400" colspan="9">No data yet.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+</div>
+
+      </div>
+
+      <div id="view-materials" class="view hidden px-8 pb-8 space-y-8 max-w-full"></div>
+
+      <div id="view-overhaul" class="view hidden px-8 pb-8 space-y-8 max-w-full">
+        <div class="bg-white dark:bg-slate-900/50 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <h3 class="text-lg font-bold">Overhaul &amp; Renewals</h3>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-2">Coming soon...</p>
+        </div>
+      </div>
+
+      <div id="view-subcontracting" class="view hidden px-8 pb-8 space-y-8 max-w-full">
+        <div class="bg-white dark:bg-slate-900/50 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <h3 class="text-lg font-bold">Subcontracting Activities</h3>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-2">Coming soon...</p>
+        </div>
+      </div>
+
+    </div>
+
+    </div>
+  </main>
+
+<script src="index_Vref.js"></script>
+
+</body>
+</html>

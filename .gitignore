@@ -1,0 +1,27 @@
+# Private/local project material
+archives/
+Excel files/
+
+# Excel workbooks and temporary Office lock files
+*.xlsx
+*.xls
+*.xlsm
+*.xlsb
+~$*
+
+# Generated exports
+*.pptx
+*.pdf
+
+# Local OS/editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+
