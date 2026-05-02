@@ -644,6 +644,7 @@ function findToolbarItem(menuKey, itemKey) {
 }
 
 const fallbackWorkspaceItems = new Set([
+  "firming_rules",
   "workload_synthesis",
   "white_collar_definition",
   "tools_consumables",

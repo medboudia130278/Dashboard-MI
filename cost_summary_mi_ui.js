@@ -6904,6 +6904,10 @@
           closeMandatoryTrainingWorkspace();
           closeDrawer();
 
+          if (itemKey === "firming_rules") {
+            renderFallbackFirmingRulesWorkspace();
+            return true;
+          }
           if (itemKey === "workload_synthesis") {
             renderFallbackWorkloadSynthesisWorkspace();
             return true;
