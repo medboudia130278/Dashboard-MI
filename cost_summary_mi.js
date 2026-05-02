@@ -593,6 +593,22 @@ function computeModuleStatus(moduleKey) {
       const s = readFallbackStudySlice("cost-summary-mi-white-collar-fallback-v1");
       return Object.values(s).some(p => p && Object.keys(p).length > 0) ? "filled" : "empty";
     }
+    case "tools_consumables": {
+      const s = readFallbackStudySlice("cost-summary-mi-tools-consumables-fallback-v1");
+      return Object.values(s).some(p => p && Object.keys(p).length > 0) ? "filled" : "empty";
+    }
+    case "vehicles": {
+      const s = readFallbackStudySlice("cost-summary-mi-vehicles-fallback-v1");
+      return Object.values(s).some(p => p && Object.keys(p).length > 0) ? "filled" : "empty";
+    }
+    case "other_support_costs": {
+      const s = readFallbackStudySlice("cost-summary-mi-osc-fallback-v1");
+      return Object.values(s).some(p => p && Object.keys(p).length > 0) ? "filled" : "empty";
+    }
+    case "mandatory_training": {
+      const s = readFallbackStudySlice("cost-summary-mi-mandatory-training-fallback-v1");
+      return Object.values(s).some(p => p && Object.keys(p).length > 0) ? "filled" : "empty";
+    }
     default:
       return "na";
   }
