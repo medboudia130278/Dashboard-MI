@@ -3982,6 +3982,7 @@
       }
 
       function closeFirmingRulesWorkspace() {
+        setFallbackDetailWorkspaceActive(false);
         $("firmingRulesWorkspace")?.classList.add("hidden");
       }
 
@@ -3995,7 +3996,22 @@
         $("pioDefinitionWorkspace")?.classList.add("hidden");
       }
 
+      function setFallbackDetailWorkspaceActive(active) {
+        window.__costSummaryUseFallbackDetailWorkspace = !!active;
+      }
+
+      function fallbackInteractionIsActive() {
+        return !!(
+          window.__costSummaryUseFallbackProjectPhases ||
+          window.__costSummaryUseFallbackCostCenters ||
+          window.__costSummaryUseFallbackPioDefinition ||
+          window.__costSummaryUseFallbackGuidePlanning ||
+          window.__costSummaryUseFallbackDetailWorkspace
+        );
+      }
+
       function closeWorkloadSynthesisWorkspace() {
+        setFallbackDetailWorkspaceActive(false);
         $("workloadSynthesisWorkspace")?.classList.add("hidden");
       }
 
@@ -4321,6 +4337,7 @@
       }
 
       function closeToolsConsumablesWorkspace() {
+        setFallbackDetailWorkspaceActive(false);
         $("toolsConsumablesWorkspace")?.classList.add("hidden");
       }
 
@@ -4787,6 +4804,7 @@
       }
 
       function closeVehiclesWorkspace() {
+        setFallbackDetailWorkspaceActive(false);
         $("vehiclesWorkspace")?.classList.add("hidden");
       }
 
@@ -5246,6 +5264,7 @@
       }
 
       function closeOscWorkspace() {
+        setFallbackDetailWorkspaceActive(false);
         $("oscWorkspace")?.classList.add("hidden");
       }
 
@@ -5599,6 +5618,7 @@
       ];
 
       function closeMandatoryTrainingWorkspace() {
+        setFallbackDetailWorkspaceActive(false);
         $("mandatoryTrainingWorkspace")?.classList.add("hidden");
       }
 
@@ -5980,6 +6000,7 @@
       }
 
       function closeWhiteCollarDefinitionWorkspace() {
+        setFallbackDetailWorkspaceActive(false);
         $("whiteCollarDefinitionWorkspace")?.classList.add("hidden");
       }
 
@@ -6903,6 +6924,7 @@
           closeOscWorkspace();
           closeMandatoryTrainingWorkspace();
           closeDrawer();
+          setFallbackDetailWorkspaceActive(true);
 
           if (itemKey === "firming_rules") {
             renderFallbackFirmingRulesWorkspace();
@@ -7077,7 +7099,7 @@
       document.addEventListener("DOMContentLoaded", function () {
         updateToolbarStatusDots();
         document.addEventListener("click", function (event) {
-          if (window.__costSummaryModuleReady && !window.__costSummaryUseFallbackProjectPhases && !window.__costSummaryUseFallbackCostCenters && !window.__costSummaryUseFallbackPioDefinition && !window.__costSummaryUseFallbackGuidePlanning) return;
+          if (window.__costSummaryModuleReady && !fallbackInteractionIsActive()) return;
 
           const trigger = event.target.closest("[data-toolbar-trigger]");
           if (trigger) {
@@ -7679,7 +7701,7 @@
         });
 
         document.addEventListener("keydown", function (event) {
-          if (window.__costSummaryModuleReady && !window.__costSummaryUseFallbackProjectPhases && !window.__costSummaryUseFallbackCostCenters && !window.__costSummaryUseFallbackPioDefinition && !window.__costSummaryUseFallbackGuidePlanning) return;
+          if (window.__costSummaryModuleReady && !fallbackInteractionIsActive()) return;
           if (event.key === "Escape") {
             closeMenus();
             closeDrawer();
@@ -7694,7 +7716,7 @@
         });
 
         document.addEventListener("change", function (event) {
-          if (window.__costSummaryModuleReady && !window.__costSummaryUseFallbackProjectPhases && !window.__costSummaryUseFallbackCostCenters && !window.__costSummaryUseFallbackPioDefinition && !window.__costSummaryUseFallbackGuidePlanning) return;
+          if (window.__costSummaryModuleReady && !fallbackInteractionIsActive()) return;
 
           const projectField = event.target.closest("[data-fallback-project-field]");
           if (projectField) {
