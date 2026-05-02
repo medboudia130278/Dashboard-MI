@@ -643,6 +643,15 @@ function findToolbarItem(menuKey, itemKey) {
   return item ? { group, item } : null;
 }
 
+const fallbackWorkspaceItems = new Set([
+  "workload_synthesis",
+  "white_collar_definition",
+  "tools_consumables",
+  "vehicles",
+  "mandatory_training",
+  "other_support_costs",
+]);
+
 function closeToolbarMenus() {
   state.activeToolbarMenuKey = "";
   document.querySelectorAll("[data-toolbar-menu]").forEach((menu) => {
@@ -804,6 +813,24 @@ function renderModuleDrawer(menuKey, itemKey) {
     window.__costSummaryUseFallbackPioDefinition = false;
     openPioDefinitionWorkspace();
     renderPioDefinitionWorkspace();
+    return;
+  }
+
+  if (
+    fallbackWorkspaceItems.has(itemKey) &&
+    typeof window.__costSummaryFallback?.openWorkspaceFromMain === "function"
+  ) {
+    closeModuleDrawer();
+    state.activeDrawerModuleKey = drawerModuleKey;
+    window.__costSummaryUseFallbackProjectPhases = false;
+    window.__costSummaryUseFallbackCostCenters = false;
+    window.__costSummaryUseFallbackPioDefinition = false;
+    closeProjectPhasesWorkspace();
+    closeCostCentersWorkspace();
+    closeCurrencyExchangeWorkspace();
+    closeGuidePlanningWorkspace();
+    closePioDefinitionWorkspace();
+    window.__costSummaryFallback.openWorkspaceFromMain(itemKey);
     return;
   }
 

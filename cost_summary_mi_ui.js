@@ -6884,6 +6884,52 @@
           renderFallbackGuidePlanningWorkspace();
         },
         closeGuidePlanning: closeGuidePlanningWorkspace,
+        openWorkspaceFromMain: function (itemKey) {
+          window.__costSummaryUseFallbackProjectPhases = false;
+          window.__costSummaryUseFallbackCostCenters = false;
+          window.__costSummaryUseFallbackPioDefinition = false;
+          window.__costSummaryUseFallbackGuidePlanning = false;
+          closeMenus();
+          closeProjectPhasesWorkspace();
+          closeCostCentersWorkspace();
+          closeCurrencyExchangeWorkspace();
+          closeFirmingRulesWorkspace();
+          closePioDefinitionWorkspace();
+          closeGuidePlanningWorkspace();
+          closeWorkloadSynthesisWorkspace();
+          closeWhiteCollarDefinitionWorkspace();
+          closeToolsConsumablesWorkspace();
+          closeVehiclesWorkspace();
+          closeOscWorkspace();
+          closeMandatoryTrainingWorkspace();
+          closeDrawer();
+
+          if (itemKey === "workload_synthesis") {
+            renderFallbackWorkloadSynthesisWorkspace();
+            return true;
+          }
+          if (itemKey === "white_collar_definition") {
+            renderFallbackWhiteCollarWorkspace();
+            return true;
+          }
+          if (itemKey === "tools_consumables") {
+            renderFallbackToolsConsumablesWorkspace();
+            return true;
+          }
+          if (itemKey === "vehicles") {
+            renderFallbackVehiclesWorkspace();
+            return true;
+          }
+          if (itemKey === "other_support_costs") {
+            renderFallbackOscWorkspace();
+            return true;
+          }
+          if (itemKey === "mandatory_training") {
+            renderFallbackMandatoryTrainingWorkspace();
+            return true;
+          }
+          return false;
+        },
         openWorkloadSynthesis: function () {
           if (window.__costSummaryModuleReady) return;
           window.__costSummaryUseFallbackProjectPhases = false;
