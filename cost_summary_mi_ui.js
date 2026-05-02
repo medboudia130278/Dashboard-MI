@@ -6825,6 +6825,16 @@
       }
 
       window.__costSummaryFallback = {
+        closeDetailWorkspacesFromMain: function () {
+          closeFirmingRulesWorkspace();
+          closeWorkloadSynthesisWorkspace();
+          closeWhiteCollarDefinitionWorkspace();
+          closeToolsConsumablesWorkspace();
+          closeVehiclesWorkspace();
+          closeOscWorkspace();
+          closeMandatoryTrainingWorkspace();
+          setFallbackDetailWorkspaceActive(false);
+        },
         openProjectPhases: function () {
           if (window.__costSummaryModuleReady) return;
           window.__costSummaryUseFallbackProjectPhases = true;

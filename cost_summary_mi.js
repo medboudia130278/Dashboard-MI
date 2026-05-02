@@ -632,11 +632,13 @@ function findToolbarGroup(menuKey) {
   return toolbarModules.find((group) => group.key === menuKey) || null;
 }
 
+const toolbarItemGroupAliases = {
+  cost_centers: "organization_risks",
+  wbs: "data_sources",
+};
+
 function findToolbarItem(menuKey, itemKey) {
-  const normalizedMenuKey =
-    itemKey === "cost_centers" && menuKey === "study_setup"
-      ? "organization_risks"
-      : menuKey;
+  const normalizedMenuKey = toolbarItemGroupAliases[itemKey] || menuKey;
   const group = findToolbarGroup(normalizedMenuKey);
   if (!group) return null;
   const item = group.items.find((entry) => entry.key === itemKey) || null;
@@ -749,6 +751,7 @@ function renderModuleDrawer(menuKey, itemKey) {
   const { group, item } = match;
   const drawerModuleKey = `${group.key}:${itemKey}`;
   state.activeDrawerModuleKey = drawerModuleKey;
+  window.__costSummaryFallback?.closeDetailWorkspacesFromMain?.();
 
   if (itemKey === "project_phases") {
     closeModuleDrawer();
