@@ -1,0 +1,17 @@
+{
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/index_Vref.html"
+    },
+    {
+      "source": "/dashboard",
+      "destination": "/index_Vref.html"
+    },
+    {
+      "source": "/cost-summary-mi",
+      "destination": "/cost_summary_mi.html"
+    }
+  ]
+}
