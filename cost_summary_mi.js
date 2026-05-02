@@ -615,9 +615,11 @@ function computeModuleStatus(moduleKey) {
 }
 
 function computeGroupStatus(groupKey) {
-  const group = toolbarModules.find(g => g.key === groupKey);
-  if (!group) return "na";
-  const statuses = group.items.map(item => computeModuleStatus(item.key));
+  const toolbarButtons = Array.from(document.querySelectorAll("[data-toolbar-item]"))
+    .filter((button) => button.getAttribute("data-toolbar-group") === groupKey);
+  const statuses = toolbarButtons.length
+    ? toolbarButtons.map((button) => computeModuleStatus(button.getAttribute("data-toolbar-item")))
+    : (toolbarModules.find(g => g.key === groupKey)?.items || []).map(item => computeModuleStatus(item.key));
   const implemented = statuses.filter(s => s !== "na");
   if (!implemented.length) return "na";
   if (implemented.every(s => s === "filled")) return "filled";
