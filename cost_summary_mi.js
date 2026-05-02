@@ -633,7 +633,11 @@ function findToolbarGroup(menuKey) {
 }
 
 function findToolbarItem(menuKey, itemKey) {
-  const group = findToolbarGroup(menuKey);
+  const normalizedMenuKey =
+    itemKey === "cost_centers" && menuKey === "study_setup"
+      ? "organization_risks"
+      : menuKey;
+  const group = findToolbarGroup(normalizedMenuKey);
   if (!group) return null;
   const item = group.items.find((entry) => entry.key === itemKey) || null;
   return item ? { group, item } : null;
@@ -733,11 +737,12 @@ function renderModuleDrawer(menuKey, itemKey) {
   if (!match) return;
 
   const { group, item } = match;
-  state.activeDrawerModuleKey = `${menuKey}:${itemKey}`;
+  const drawerModuleKey = `${group.key}:${itemKey}`;
+  state.activeDrawerModuleKey = drawerModuleKey;
 
   if (itemKey === "project_phases") {
     closeModuleDrawer();
-    state.activeDrawerModuleKey = `${menuKey}:${itemKey}`;
+    state.activeDrawerModuleKey = drawerModuleKey;
     closeCurrencyExchangeWorkspace();
     closeCostCentersWorkspace();
     closePioDefinitionWorkspace();
@@ -750,7 +755,7 @@ function renderModuleDrawer(menuKey, itemKey) {
 
   if (itemKey === "cost_centers") {
     closeModuleDrawer();
-    state.activeDrawerModuleKey = `${menuKey}:${itemKey}`;
+    state.activeDrawerModuleKey = drawerModuleKey;
     closeProjectPhasesWorkspace();
     closeCurrencyExchangeWorkspace();
     closePioDefinitionWorkspace();
@@ -763,7 +768,7 @@ function renderModuleDrawer(menuKey, itemKey) {
 
   if (itemKey === "currency_exchange_rates") {
     closeModuleDrawer();
-    state.activeDrawerModuleKey = `${menuKey}:${itemKey}`;
+    state.activeDrawerModuleKey = drawerModuleKey;
     window.__costSummaryUseFallbackProjectPhases = false;
     window.__costSummaryUseFallbackCostCenters = false;
     window.__costSummaryUseFallbackPioDefinition = false;
@@ -778,7 +783,7 @@ function renderModuleDrawer(menuKey, itemKey) {
 
   if (itemKey === "guide_planning_definition") {
     closeModuleDrawer();
-    state.activeDrawerModuleKey = `${menuKey}:${itemKey}`;
+    state.activeDrawerModuleKey = drawerModuleKey;
     window.__costSummaryUseFallbackGuidePlanning = false;
     closeProjectPhasesWorkspace();
     closeCostCentersWorkspace();
@@ -791,7 +796,7 @@ function renderModuleDrawer(menuKey, itemKey) {
 
   if (itemKey === "pio_definition_freight_customs") {
     closeModuleDrawer();
-    state.activeDrawerModuleKey = `${menuKey}:${itemKey}`;
+    state.activeDrawerModuleKey = drawerModuleKey;
     closeProjectPhasesWorkspace();
     closeCostCentersWorkspace();
     closeCurrencyExchangeWorkspace();
