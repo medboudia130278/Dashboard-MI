@@ -541,6 +541,15 @@ function hasAnyProjectConfig(projects = {}, predicate = hasObjectValues) {
   return Object.values(projects || {}).some((project) => predicate(project));
 }
 
+function getPrimaryProjectConfigs(container) {
+  if (!container || typeof container !== "object") return {};
+  return container.projects && typeof container.projects === "object" ? container.projects : {};
+}
+
+function hasPrimaryProjectConfig(container, predicate = hasObjectValues) {
+  return hasAnyProjectConfig(getPrimaryProjectConfigs(container), predicate);
+}
+
 function computeModuleStatus(moduleKey) {
   switch (moduleKey) {
     case "cost_centers": {
@@ -626,6 +635,12 @@ function computeModuleStatus(moduleKey) {
       return (fallbackHasOverrides || fallbackHasCustom) ? "filled" : "empty";
     }
     case "firming_rules": {
+      const hasPrimaryRules = hasPrimaryProjectConfig(state.studyConfig?.dataSources?.firmingRules, (project) => {
+        if (!project) return false;
+        return (project.firmingTexts && Object.values(project.firmingTexts).some(t => String(t || "").trim())) ||
+               hasObjectValues(project.importedOptions);
+      });
+      if (hasPrimaryRules) return "filled";
       const s = readFallbackStudySlice("cost-summary-mi-firming-rules-fallback-v1");
       const hasRules = Object.values(s).some(p => {
         if (!p) return false;
@@ -635,26 +650,40 @@ function computeModuleStatus(moduleKey) {
       return hasRules ? "filled" : "empty";
     }
     case "workload_synthesis": {
+      if (hasPrimaryProjectConfig(state.studyConfig?.organizationRisks?.workloadSynthesis)) return "filled";
       const s = readFallbackStudySlice("cost-summary-mi-workload-overrides-fallback-v1");
       return Object.values(s).some(p => p && Object.keys(p).length > 0) ? "filled" : "empty";
     }
     case "white_collar_definition": {
+      if (hasPrimaryProjectConfig(state.studyConfig?.organizationRisks?.whiteCollarDefinition)) return "filled";
       const s = readFallbackStudySlice("cost-summary-mi-white-collar-fallback-v1");
       return Object.values(s).some(p => p && Object.keys(p).length > 0) ? "filled" : "empty";
     }
     case "tools_consumables": {
+      if (hasPrimaryProjectConfig(state.studyConfig?.supportCosts?.toolsConsumables)) return "filled";
       const s = readFallbackStudySlice("cost-summary-mi-tools-consumables-fallback-v1");
       return Object.values(s).some(p => p && Object.keys(p).length > 0) ? "filled" : "empty";
     }
+    case "ppe": {
+      if (hasPrimaryProjectConfig(state.studyConfig?.supportCosts?.ppe)) return "filled";
+      const s = readFallbackStudySlice("cost-summary-mi-tools-consumables-fallback-v1");
+      const hasPpeValues = Object.values(s).some(p =>
+        p && Object.keys(p).some(key => String(key).endsWith("|ppe"))
+      );
+      return hasPpeValues ? "filled" : "empty";
+    }
     case "vehicles": {
+      if (hasPrimaryProjectConfig(state.studyConfig?.supportCosts?.vehicles)) return "filled";
       const s = readFallbackStudySlice("cost-summary-mi-vehicles-fallback-v1");
       return Object.values(s).some(p => p && Object.keys(p).length > 0) ? "filled" : "empty";
     }
     case "other_support_costs": {
+      if (hasPrimaryProjectConfig(state.studyConfig?.supportCosts?.otherSupportCosts)) return "filled";
       const s = readFallbackStudySlice("cost-summary-mi-osc-fallback-v1");
       return Object.values(s).some(p => p && Object.keys(p).length > 0) ? "filled" : "empty";
     }
     case "mandatory_training": {
+      if (hasPrimaryProjectConfig(state.studyConfig?.supportCosts?.mandatoryTraining)) return "filled";
       const s = readFallbackStudySlice("cost-summary-mi-mandatory-training-fallback-v1");
       return Object.values(s).some(p => p && Object.keys(p).length > 0) ? "filled" : "empty";
     }
