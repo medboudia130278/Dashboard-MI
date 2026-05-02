@@ -1471,6 +1471,9 @@
       function buildFallbackFirmingRulesProjects() {
         const persisted = readFirmingRulesFallbackState();
         const costCentersState = readCostCentersFallbackState();
+        const primaryCostCentersState = window.__costSummaryCostCentersStore && typeof window.__costSummaryCostCentersStore === "object"
+          ? window.__costSummaryCostCentersStore
+          : {};
         const workbooks = getSharedWorkbooksForWorkspace();
         if (!workbooks.length) return [];
 
@@ -1499,8 +1502,11 @@
         });
 
         return Array.from(byProject.values()).map(function (project) {
-          const current = readPersistedFallbackProjectState(persisted, Array.from(project.persistedKeysSet || [project.projectKey]));
-          const costCenterProject = readPersistedFallbackProjectState(costCentersState, Array.from(project.persistedKeysSet || [project.projectKey]));
+          const persistedKeys = Array.from(project.persistedKeysSet || [project.projectKey]);
+          const current = readPersistedFallbackProjectState(persisted, persistedKeys);
+          const fallbackCostCenterProject = readPersistedFallbackProjectState(costCentersState, persistedKeys);
+          const primaryCostCenterProject = readPersistedFallbackProjectState(primaryCostCentersState, persistedKeys);
+          const costCenterProject = Object.assign({}, fallbackCostCenterProject, primaryCostCenterProject);
           const projectCurrency = String(costCenterProject.projectCurrency || "").trim().toUpperCase();
           if (projectCurrency) project.currencySet.add(projectCurrency);
 
@@ -1516,6 +1522,7 @@
             projectType: project.projectType,
             projectContext: project.projectContext,
             bidYear: project.bidYear,
+            projectCurrency: projectCurrency,
             currencies: currencies,
             firmingTexts: firmingTexts,
             importedOptions: importedOptions,
@@ -3840,6 +3847,9 @@
               return (
                 '<tr>' +
                   '<td class="py-3 pr-4 font-semibold w-32">' + escapeHtml(currency) + '</td>' +
+                  '<td class="py-3 px-4">' + (currKey === String(currentProject.projectCurrency || "").toUpperCase()
+                    ? '<span class="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">' + escapeHtml(currentProject.projectCurrency) + '</span>'
+                    : '<span class="text-slate-300">--</span>') + '</td>' +
                   '<td class="py-3 pl-4">' +
                     '<input data-fallback-firming-rule-text data-project-key="' + escapeHtml(currentProject.projectKey) + '" data-currency="' + escapeHtml(currency) + '" type="text"' + (options.length ? ' list="' + datalistId + '"' : '') + ' class="w-full rounded-xl border-slate-200 px-3 py-2" placeholder="e.g. Fixed rate at contract signature" value="' + escapeHtml(currentProject.firmingTexts[currKey] || "") + '"/>' +
                     (options.length ? '<datalist id="' + datalistId + '">' + options.map(function (opt) { return '<option value="' + escapeHtml(opt) + '">'; }).join("") + '</datalist>' : '') +
@@ -3847,7 +3857,7 @@
                 '</tr>'
               );
             }).join("")
-          : '<tr><td colspan="2" class="py-6 text-center text-sm text-slate-500">No currency found in Synthesis or Cost Centers for this project.</td></tr>';
+          : '<tr><td colspan="3" class="py-6 text-center text-sm text-slate-500">No currency found in Synthesis or Cost Centers for this project.</td></tr>';
       }
 
       function saveFallbackProjectField(projectKey, field, value) {

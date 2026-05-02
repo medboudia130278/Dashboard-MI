@@ -1206,6 +1206,10 @@ function getCostCentersStore() {
   return mergedProjects;
 }
 
+function publishCostCentersBridge() {
+  window.__costSummaryCostCentersStore = getCostCentersStore();
+}
+
 function isCostCenterShiftPosition(position) {
   return /team leader|supervisor|technician|worker/i.test(position || "");
 }
@@ -2161,6 +2165,7 @@ async function saveCostCentersState(mutator) {
       },
     },
   });
+  publishCostCentersBridge();
   updateToolbarStatusDots();
 }
 
@@ -5185,6 +5190,7 @@ async function switchToStudy(studyId) {
   state.studyConfig = persistedConfig;
   state.draft = composeDraftFromStudy(study, state.draft, persistedConfig);
   setLastOpenStudyId(studyId);
+  publishCostCentersBridge();
   applyDraftToForm(state.draft);
   renderStudyWorkspace();
   refreshStatus(state.draft);
@@ -5199,6 +5205,7 @@ async function initCostSummaryMIPage() {
     const draft = state.draft;
     renderStudyWorkspace();
     renderConfigurationToolbar();
+    publishCostCentersBridge();
     updateToolbarStatusDots();
     renderCalculationBlocks();
     renderWorkbookOutline();
