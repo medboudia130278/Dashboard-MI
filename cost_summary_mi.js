@@ -533,11 +533,18 @@ function readFallbackStudySlice(storageKey) {
   } catch { return {}; }
 }
 
+function hasObjectValues(value) {
+  return Boolean(value && typeof value === "object" && Object.keys(value).length > 0);
+}
+
+function hasAnyProjectConfig(projects = {}, predicate = hasObjectValues) {
+  return Object.values(projects || {}).some((project) => predicate(project));
+}
+
 function computeModuleStatus(moduleKey) {
   switch (moduleKey) {
     case "cost_centers": {
-      const s = readFallbackStudySlice("cost-summary-mi-cost-centers-fallback-v1");
-      const projects = Object.values(s);
+      const projects = Object.values(getCostCentersStore());
       const hasPositions = projects.some(p => Array.isArray(p?.selectedPositions) && p.selectedPositions.length > 0);
       const hasRates = projects.some(p => p?.rowOverrides && Object.keys(p.rowOverrides).length > 0);
       if (hasPositions && hasRates) return "filled";
@@ -545,10 +552,27 @@ function computeModuleStatus(moduleKey) {
       return "empty";
     }
     case "pio_definition_freight_customs": {
+      const primaryProjects = getPioDefinitionStore();
+      const hasPrimaryConfig = hasAnyProjectConfig(primaryProjects, (project) =>
+        Array.isArray(project?.selectedOrigins) && project.selectedOrigins.length > 0 ||
+        Array.isArray(project?.customOrigins) && project.customOrigins.length > 0 ||
+        hasObjectValues(project?.rowOverrides) ||
+        hasObjectValues(project?.customDutiesBySubsystem) ||
+        toNumber(project?.onshoreFreightPercent) !== null ||
+        toNumber(project?.offshoreFreightPercent) !== null
+      );
+      if (hasPrimaryConfig) return "filled";
       const s = readFallbackStudySlice("cost-summary-mi-pio-definition-fallback-v1");
       return Object.values(s).some(p => Array.isArray(p?.rows) && p.rows.length > 0) ? "filled" : "empty";
     }
     case "project_phases": {
+      const primaryProjects = Object.values(getProjectPhaseStore());
+      const primaryHasActive = primaryProjects.some(p =>
+        p?.phases && Object.values(p.phases).some(ph => ph?.enabled && (toNumber(ph.durationYears) || 0) > 0)
+      );
+      if (primaryHasActive) return "filled";
+      const primaryHasAny = primaryProjects.some(p => p?.phases && Object.keys(p.phases).length > 0);
+      if (primaryHasAny) return "partial";
       const s = readFallbackStudySlice("cost-summary-mi-project-phases-fallback-v1");
       const projects = Object.values(s);
       const hasActive = projects.some(p =>
@@ -559,6 +583,27 @@ function computeModuleStatus(moduleKey) {
       return hasAny ? "partial" : "empty";
     }
     case "guide_planning_definition": {
+      const primaryProjects = Object.values(getGuidePlanningStore());
+      const primaryHasMob  = primaryProjects.some(p => hasObjectValues(p?.mobilizationWorkloadMonthsByPosition));
+      const primaryHasDemob = primaryProjects.some(p =>
+        hasObjectValues(p?.demobilizationWorkloadMonthsByPosition) ||
+        hasObjectValues(p?.demobilizationMaterialMonthsByType) ||
+        hasObjectValues(p?.demobilizationSubcontractingMonthsByType)
+      );
+      const primaryHasCustom = primaryProjects.some(p =>
+        (Array.isArray(p?.customWorkloadRows) && p.customWorkloadRows.length > 0) ||
+        (Array.isArray(p?.customMaterialRows) && p.customMaterialRows.length > 0) ||
+        (Array.isArray(p?.customSubcontractingRows) && p.customSubcontractingRows.length > 0) ||
+        (Array.isArray(p?.riskRows) && p.riskRows.length > 0) ||
+        hasObjectValues(p?.rowOverrides)
+      );
+      const primaryHasSelections = primaryProjects.some(p =>
+        (Array.isArray(p?.selectedMaterialTypes) && p.selectedMaterialTypes.length > 0) ||
+        (Array.isArray(p?.selectedSubcontractingTypes) && p.selectedSubcontractingTypes.length > 0) ||
+        (Array.isArray(p?.selectedRecurrentMaterialTypes) && p.selectedRecurrentMaterialTypes.length > 0) ||
+        (Array.isArray(p?.selectedRecurrentSubcontractingTypes) && p.selectedRecurrentSubcontractingTypes.length > 0)
+      );
+      if (primaryHasMob || primaryHasDemob || primaryHasCustom || primaryHasSelections) return "filled";
       const s = readFallbackStudySlice("cost-summary-mi-guide-planning-fallback-v1");
       const projects = Object.values(s);
       const hasMob  = projects.some(p => p?.mobilizationWorkloadMonthsByPosition && Object.keys(p.mobilizationWorkloadMonthsByPosition).length > 0);
@@ -570,11 +615,15 @@ function computeModuleStatus(moduleKey) {
       return (hasMob || hasDemob || hasCustom) ? "filled" : "empty";
     }
     case "currency_exchange_rates": {
-      const s = readFallbackStudySlice("cost-summary-mi-currency-exchange-fallback-v1");
-      const projects = Object.values(s);
+      const projects = Object.values(getCurrencyExchangeStore());
       const hasOverrides = projects.some(p => p?.manualOverrides && Object.keys(p.manualOverrides).length > 0);
       const hasCustom    = projects.some(p => Array.isArray(p?.customCurrencies) && p.customCurrencies.length > 0);
-      return (hasOverrides || hasCustom) ? "filled" : "empty";
+      if (hasOverrides || hasCustom) return "filled";
+      const s = readFallbackStudySlice("cost-summary-mi-currency-exchange-fallback-v1");
+      const fallbackProjects = Object.values(s);
+      const fallbackHasOverrides = fallbackProjects.some(p => p?.manualOverrides && Object.keys(p.manualOverrides).length > 0);
+      const fallbackHasCustom    = fallbackProjects.some(p => Array.isArray(p?.customCurrencies) && p.customCurrencies.length > 0);
+      return (fallbackHasOverrides || fallbackHasCustom) ? "filled" : "empty";
     }
     case "firming_rules": {
       const s = readFallbackStudySlice("cost-summary-mi-firming-rules-fallback-v1");
@@ -2083,6 +2132,7 @@ async function saveCostCentersState(mutator) {
       },
     },
   });
+  updateToolbarStatusDots();
 }
 
 async function refreshPioDefinitionSource() {
@@ -2116,6 +2166,7 @@ async function savePioDefinitionState(mutator) {
       },
     },
   });
+  updateToolbarStatusDots();
 }
 
 async function refreshCurrencyExchangeSource() {
@@ -2142,6 +2193,7 @@ async function saveCurrencyExchangeState(mutator) {
       },
     },
   });
+  updateToolbarStatusDots();
 }
 
 async function saveSingleCurrencyExchangeProject(projectKey, mutator) {
@@ -2207,6 +2259,7 @@ async function saveGuidePlanningState(mutator) {
       },
     },
   });
+  updateToolbarStatusDots();
 }
 
 async function saveSingleGuidePlanningProject(projectKey, mutator) {
@@ -2747,6 +2800,7 @@ async function saveProjectPhasesState(mutator) {
       },
     },
   });
+  updateToolbarStatusDots();
 }
 
 function renderProjectPhasesWorkspace() {
