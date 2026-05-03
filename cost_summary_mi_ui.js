@@ -327,6 +327,21 @@
         return data;
       }
 
+      function forceZeroMobWithoutPostWarranty(projectData, phases) {
+        const data = Object.assign({}, projectData || {});
+        (Array.isArray(phases) ? phases : []).forEach(function (phase) {
+          const hasPostWarranty = !!(phase && phase.postWarrantyStartDate && phase.postWarrantyEndDate);
+          if (hasPostWarranty || !phase || !phase.key) return;
+          const prefix = phase.key + "|";
+          Object.keys(data).forEach(function (key) {
+            if (key.indexOf(prefix) === 0 && key.indexOf("|mob|") !== -1) {
+              data[key] = 0;
+            }
+          });
+        });
+        return data;
+      }
+
       function buildCombinedProjectPhaseProjects() {
         const fallbackProjects = buildFallbackProjectPhaseProjects();
         const primaryProjects = Array.isArray(window.__costSummaryProjectPhaseProjects)
@@ -4715,8 +4730,11 @@
           return '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ' + cls + '">' + escapeHtml(period.label) + '</span>';
         }
 
-        const projData = fillMissingImportedPhaseValues(
-          readPersistedFallbackProjectState(readToolsConsumablesFallbackState(), getProjectLookupKeys(cur)),
+        const projData = forceZeroMobWithoutPostWarranty(
+          fillMissingImportedPhaseValues(
+            readPersistedFallbackProjectState(readToolsConsumablesFallbackState(), getProjectLookupKeys(cur)),
+            cur.phases
+          ),
           cur.phases
         );
 
@@ -4726,7 +4744,7 @@
           return Math.round(eurVal * displayRate * 100) / 100;
         }
 
-        function tcCellInput(phaseKey, subsystem, periodType, colKey, val) {
+        function tcCellInput(phaseKey, subsystem, periodType, colKey, val, disabled) {
           return (
             '<input type="number" min="0" step="any" ' +
               'data-tc-cell ' +
@@ -4737,7 +4755,8 @@
               'data-col="'         + escapeHtml(colKey)           + '" ' +
               'data-tc-rate="'     + escapeHtml(String(displayRate)) + '" ' +
               'value="' + escapeHtml(String(val)) + '" ' +
-              'class="w-full min-w-[80px] rounded-lg border border-slate-200 bg-white px-2 py-1 text-center text-sm tabular-nums focus:outline-none focus:ring-1 focus:ring-orange-400">'
+              (disabled ? 'disabled ' : '') +
+              'class="w-full min-w-[80px] rounded-lg border ' + (disabled ? 'border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed' : 'border-slate-200 bg-white') + ' px-2 py-1 text-center text-sm tabular-nums focus:outline-none focus:ring-1 focus:ring-orange-400">'
           );
         }
 
@@ -4748,6 +4767,7 @@
 
         cur.phases.forEach(function (phase, phaseIdx) {
           const subsystems = cur.subsystems.length ? cur.subsystems : [];
+          const phaseHasWarranty = !!(phase.postWarrantyStartDate && phase.postWarrantyEndDate);
           const isCollapsed = collapsedPhases.has(phase.key);
           const hasSharedData = Object.keys(projData).some(function (k) { return k.indexOf(phase.key + "|__shared__|") === 0; });
 
@@ -4808,9 +4828,10 @@
               rowHtml += '<td class="py-2 px-3 whitespace-nowrap">' + periodBadge(period) + '</td>';
 
               TC_COLS.forEach(function (col, colIdx) {
-                const val = resolveCell(phase.key, subsystem, period.type, col.key);
+                const mobForced = period.type === "mob" && !phaseHasWarranty;
+                const val = mobForced ? 0 : resolveCell(phase.key, subsystem, period.type, col.key);
                 const isLast = colIdx === TC_COLS.length - 1;
-                rowHtml += '<td class="py-1.5 ' + (isLast ? "pl-3" : "px-3") + ' text-center">' + tcCellInput(phase.key, subsystem, period.type, col.key, val) + '</td>';
+                rowHtml += '<td class="py-1.5 ' + (isLast ? "pl-3" : "px-3") + ' text-center">' + tcCellInput(phase.key, subsystem, period.type, col.key, val, mobForced) + '</td>';
               });
 
               rowHtml += '</tr>';
@@ -4842,9 +4863,10 @@
               rowHtml += '<td class="py-2 px-3 whitespace-nowrap' + (isFirstShared ? " border-t border-amber-200" : "") + '">' + periodBadge(period) + '</td>';
 
               TC_COLS.forEach(function (col, colIdx) {
-                const val = resolveCell(phase.key, "__shared__", period.type, col.key);
+                const mobForced = period.type === "mob" && !phaseHasWarranty;
+                const val = mobForced ? 0 : resolveCell(phase.key, "__shared__", period.type, col.key);
                 const isLast = colIdx === TC_COLS.length - 1;
-                rowHtml += '<td class="py-1.5 ' + (isLast ? "pl-3" : "px-3") + ' text-center bg-amber-50">' + tcCellInput(phase.key, "__shared__", period.type, col.key, val) + '</td>';
+                rowHtml += '<td class="py-1.5 ' + (isLast ? "pl-3" : "px-3") + ' text-center bg-amber-50">' + tcCellInput(phase.key, "__shared__", period.type, col.key, val, mobForced) + '</td>';
               });
 
               rowHtml += '</tr>';
@@ -4985,7 +5007,7 @@
                 });
               });
             });
-            newProjData = fillMissingImportedPhaseValues(newProjData, phases);
+            newProjData = forceZeroMobWithoutPostWarranty(fillMissingImportedPhaseValues(newProjData, phases), phases);
 
             if (!Object.keys(newProjData).length) {
               window.alert(
