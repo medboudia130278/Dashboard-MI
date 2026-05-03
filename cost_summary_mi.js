@@ -1210,6 +1210,16 @@ function publishCostCentersBridge() {
   window.__costSummaryCostCentersStore = getCostCentersStore();
 }
 
+function publishProjectPhasesBridge() {
+  window.__costSummaryProjectPhaseProjects = buildProjectPhaseProjects().map((project) => ({
+    ...project,
+    persistedKeys: Array.from(new Set([
+      project.projectKey,
+      project.projectName,
+    ].filter(Boolean))),
+  }));
+}
+
 function isCostCenterShiftPosition(position) {
   return /team leader|supervisor|technician|worker/i.test(position || "");
 }
@@ -2837,6 +2847,7 @@ async function saveProjectPhasesState(mutator) {
       },
     },
   });
+  publishProjectPhasesBridge();
   updateToolbarStatusDots();
 }
 
@@ -5176,6 +5187,8 @@ function renderSharedCoverageTable() {
 
 async function refreshSharedSnapshot() {
   await hydrateSharedState();
+  publishProjectPhasesBridge();
+  publishCostCentersBridge();
   renderStudyWorkspace();
   renderSharedStoreSummary();
   renderProjectDataPreview();
@@ -5193,6 +5206,7 @@ async function switchToStudy(studyId) {
   state.studyConfig = persistedConfig;
   state.draft = composeDraftFromStudy(study, state.draft, persistedConfig);
   setLastOpenStudyId(studyId);
+  publishProjectPhasesBridge();
   publishCostCentersBridge();
   applyDraftToForm(state.draft);
   renderStudyWorkspace();
@@ -5208,6 +5222,7 @@ async function initCostSummaryMIPage() {
     const draft = state.draft;
     renderStudyWorkspace();
     renderConfigurationToolbar();
+    publishProjectPhasesBridge();
     publishCostCentersBridge();
     updateToolbarStatusDots();
     renderCalculationBlocks();

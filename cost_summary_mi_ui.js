@@ -248,6 +248,73 @@
         return merged;
       }
 
+      function readCombinedCostCenterProject(projectKey, keys) {
+        const state = readCombinedCostCentersState();
+        const candidates = Array.from(new Set([]
+          .concat(Array.isArray(keys) ? keys : [])
+          .concat(projectKey ? [projectKey] : [])
+        ));
+        return readPersistedFallbackProjectState(state, candidates);
+      }
+
+      function getProjectLookupKeys(project) {
+        const rawKeys = []
+          .concat(Array.isArray(project && project.persistedKeys) ? project.persistedKeys : [])
+          .concat([
+            project && project.projectKey,
+            project && project.projectName,
+          ])
+          .filter(function (value) { return value !== undefined && value !== null && String(value).trim() !== ""; });
+        const expanded = [];
+        rawKeys.forEach(function (value) {
+          const text = String(value).trim();
+          expanded.push(text);
+          expanded.push(normalizeWorkspaceKey(text));
+        });
+        return Array.from(new Set(expanded.filter(Boolean)));
+      }
+
+      function buildCombinedProjectPhaseProjects() {
+        const fallbackProjects = buildFallbackProjectPhaseProjects();
+        const primaryProjects = Array.isArray(window.__costSummaryProjectPhaseProjects)
+          ? window.__costSummaryProjectPhaseProjects
+          : [];
+        if (!primaryProjects.length) return fallbackProjects;
+
+        const byLookupKey = new Map();
+        fallbackProjects.forEach(function (project) {
+          getProjectLookupKeys(project).forEach(function (key) {
+            if (!byLookupKey.has(key)) byLookupKey.set(key, project);
+          });
+        });
+
+        const mergedByProjectKey = new Map();
+        fallbackProjects.forEach(function (project) {
+          mergedByProjectKey.set(project.projectKey, project);
+        });
+
+        primaryProjects.forEach(function (primaryProject) {
+          const lookupKeys = getProjectLookupKeys(primaryProject);
+          const fallbackProject = lookupKeys.map(function (key) { return byLookupKey.get(key); }).find(Boolean) || {};
+          const persistedKeys = Array.from(new Set([]
+            .concat(getProjectLookupKeys(fallbackProject))
+            .concat(getProjectLookupKeys(primaryProject))
+          ));
+          const merged = Object.assign({}, fallbackProject, primaryProject, {
+            persistedKeys: persistedKeys,
+            phases: Array.isArray(primaryProject.phases) && primaryProject.phases.length
+              ? primaryProject.phases
+              : (Array.isArray(fallbackProject.phases) ? fallbackProject.phases : []),
+          });
+          mergedByProjectKey.delete(fallbackProject.projectKey);
+          mergedByProjectKey.set(merged.projectKey, merged);
+        });
+
+        return Array.from(mergedByProjectKey.values()).sort(function (left, right) {
+          return String(left.projectName).localeCompare(String(right.projectName));
+        });
+      }
+
       function writeCostCentersFallbackState(nextState) {
         const all = safeReadJson(costCentersFallbackKey, {});
         all[getFallbackStudyId()] = nextState;
@@ -918,6 +985,7 @@
           });
 
         return Array.from(byProject.values()).map(function (project) {
+          project.persistedKeys = Array.from(project.persistedKeysSet || [project.projectKey]);
           delete project.persistedKeysSet;
           return project;
         }).sort(function (left, right) {
@@ -4275,7 +4343,7 @@
       // ─── White Collar Definition ──────────────────────────────────────────
 
       function buildWhiteCollarProjects() {
-        const phaseProjects = buildFallbackProjectPhaseProjects();
+        const phaseProjects = buildCombinedProjectPhaseProjects();
         if (!phaseProjects.length) return [];
 
         const workloadProjects = buildFallbackWorkloadSynthesisProjects();
@@ -4304,8 +4372,7 @@
 
           // White collar positions: selectedPositions from Cost Centers minus blue-collar keywords
           const EXCLUDED_KW = ["technician", "supervisor", "worker"];
-          const costCenterState = readCombinedCostCentersState();
-          const ccProj = costCenterState[phaseProj.projectKey] || {};
+          const ccProj = readCombinedCostCenterProject(phaseProj.projectKey, phaseProj.persistedKeys);
           const selectedPositions = Array.isArray(ccProj.selectedPositions) ? ccProj.selectedPositions : [];
           const whiteCollarPositions = selectedPositions.filter(function (pos) {
             const lower = String(pos).toLowerCase();
