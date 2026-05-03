@@ -1108,7 +1108,9 @@
               projectName: existing.projectName || projectName,
               projectType: existing.projectType || gp.project_type || "",
               projectContext: existing.projectContext || gp.project_context || "",
-              annualWorkingHoursSource: toNumber(current.annualWorkingHours) !== null ? "Manual" : "Automatic",
+              annualWorkingHoursSource: toNumber(current.annualWorkingHours) !== null
+                ? "Manual override"
+                : (toNumber(gp.max_hours_per_year_per_person) !== null ? "General Parameters / max_hours_per_year_per_person" : "--"),
               annualWorkingHours: annualWorkingHours,
               projectCaratUnit: projectCaratUnit,
               projectCurrency: projectCurrency,

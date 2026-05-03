@@ -1315,6 +1315,9 @@ function buildCostCenterProjects() {
     const annualWorkingHours = toNumber(persisted.annualWorkingHours) !== null
       ? toNumber(persisted.annualWorkingHours)
       : (toNumber(params.max_hours_per_year_per_person) !== null ? toNumber(params.max_hours_per_year_per_person) : 0);
+    const annualWorkingHoursSource = toNumber(persisted.annualWorkingHours) !== null
+      ? "Manual override"
+      : (toNumber(params.max_hours_per_year_per_person) !== null ? "General Parameters / max_hours_per_year_per_person" : "--");
     const customCurrencies = Array.isArray(persisted.customCurrencies)
       ? persisted.customCurrencies.filter(Boolean).map((entry) => String(entry).toUpperCase())
       : [];
@@ -1389,7 +1392,7 @@ function buildCostCenterProjects() {
       projectName,
       projectType: params.project_type || "",
       projectContext: params.project_context || "",
-      annualWorkingHoursSource: params.max_hours_per_year_per_person || "--",
+      annualWorkingHoursSource,
       annualWorkingHours,
       projectCaratUnit,
       projectCurrency,
