@@ -293,6 +293,40 @@
         return null;
       }
 
+      function findProjectByStoredKey(projects, projectKey) {
+        const list = Array.isArray(projects) ? projects : [];
+        const byLookup = buildProjectLookupMap(list);
+        return findProjectByLookupKeys(byLookup, [projectKey, normalizeWorkspaceKey(projectKey)])
+          || list.find(function (project) { return project && project.projectKey === projectKey; })
+          || null;
+      }
+
+      function fillMissingImportedPhaseValues(projectData, phases) {
+        const data = Object.assign({}, projectData || {});
+        const phaseKeys = (Array.isArray(phases) ? phases : [])
+          .map(function (phase) { return phase && phase.key; })
+          .filter(Boolean);
+        const sourcePhaseKey = phaseKeys.find(function (phaseKey) {
+          const prefix = phaseKey + "|";
+          return Object.keys(data).some(function (key) { return key.indexOf(prefix) === 0; });
+        });
+        if (!sourcePhaseKey) return data;
+
+        const sourcePrefix = sourcePhaseKey + "|";
+        const sourceEntries = Object.keys(data)
+          .filter(function (key) { return key.indexOf(sourcePrefix) === 0; })
+          .map(function (key) { return { suffix: key.slice(sourcePrefix.length), value: data[key] }; });
+        phaseKeys.forEach(function (phaseKey) {
+          const targetPrefix = phaseKey + "|";
+          const hasPhaseValues = Object.keys(data).some(function (key) { return key.indexOf(targetPrefix) === 0; });
+          if (hasPhaseValues) return;
+          sourceEntries.forEach(function (entry) {
+            data[targetPrefix + entry.suffix] = entry.value;
+          });
+        });
+        return data;
+      }
+
       function buildCombinedProjectPhaseProjects() {
         const fallbackProjects = buildFallbackProjectPhaseProjects();
         const primaryProjects = Array.isArray(window.__costSummaryProjectPhaseProjects)
@@ -4681,7 +4715,10 @@
           return '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ' + cls + '">' + escapeHtml(period.label) + '</span>';
         }
 
-        const projData = readPersistedFallbackProjectState(readToolsConsumablesFallbackState(), getProjectLookupKeys(cur));
+        const projData = fillMissingImportedPhaseValues(
+          readPersistedFallbackProjectState(readToolsConsumablesFallbackState(), getProjectLookupKeys(cur)),
+          cur.phases
+        );
 
         function resolveCell(phaseKey, subsystem, periodType, colKey) {
           const k = phaseKey + "|" + subsystem + "|" + periodType + "|" + colKey;
@@ -4933,7 +4970,7 @@
             });
 
             // Build flat storage — Mob = 0 unless phase has warranty; Dem = always 0
-            const newProjData = {};
+            let newProjData = {};
             phases.forEach(function (ph) {
               const phaseHasWarranty = !!(ph.postWarrantyStartDate && ph.postWarrantyEndDate);
               const phaseAcc = accumulated[ph.key] || {};
@@ -4948,6 +4985,7 @@
                 });
               });
             });
+            newProjData = fillMissingImportedPhaseValues(newProjData, phases);
 
             if (!Object.keys(newProjData).length) {
               window.alert(
@@ -5083,7 +5121,10 @@
         if (emptyEl)   emptyEl.classList.add("hidden");
         if (contentEl) contentEl.classList.remove("hidden");
 
-        const projData = readPersistedFallbackProjectState(readVehiclesFallbackState(), getProjectLookupKeys(cur));
+        const projData = fillMissingImportedPhaseValues(
+          readPersistedFallbackProjectState(readVehiclesFallbackState(), getProjectLookupKeys(cur)),
+          cur.phases
+        );
 
         // Total quantity KPI
         const totalQty = projData["__totalQuantity__"];
@@ -5395,7 +5436,7 @@
             }
 
             // Build flat storage
-            const newProjData = {};
+            let newProjData = {};
             newProjData["__totalQuantity__"] = Math.round(totalQuantity);
 
             phases.forEach(function (ph) {
@@ -5431,6 +5472,7 @@
                 newProjData["__strategy__|" + sub] = acc.strategy || "Investment";
               });
             });
+            newProjData = fillMissingImportedPhaseValues(newProjData, phases);
 
             const allState = readVehiclesFallbackState();
             allState[projectKey] = newProjData;
@@ -5543,7 +5585,10 @@
         if (emptyEl)   emptyEl.classList.add("hidden");
         if (contentEl) contentEl.classList.remove("hidden");
 
-        const projData   = readPersistedFallbackProjectState(readOscFallbackState(), getProjectLookupKeys(cur));
+        const projData   = fillMissingImportedPhaseValues(
+          readPersistedFallbackProjectState(readOscFallbackState(), getProjectLookupKeys(cur)),
+          cur.phases
+        );
         const synthRows  = Array.isArray(projData["__synthesis_rows__"]) ? projData["__synthesis_rows__"] : [];
 
         // ── Bloc 1 : reference table (read-only Synthesis import) ──────────────
@@ -5720,13 +5765,14 @@
             }
 
             // Store reference rows + flat phase values (all phases get same values, EUR)
-            const newProjData = { "__synthesis_rows__": synthRows };
+            let newProjData = { "__synthesis_rows__": synthRows };
             phases.forEach(function (ph) {
               newProjData[ph.key + "|mob|capex"] = Math.round(totalCapex  * 100) / 100;
               newProjData[ph.key + "|mob|opex"]  = 0;
               newProjData[ph.key + "|rec|capex"] = 0;
               newProjData[ph.key + "|rec|opex"]  = Math.round(totalAnnual * 100) / 100;
             });
+            newProjData = fillMissingImportedPhaseValues(newProjData, phases);
 
             const allState = readOscFallbackState();
             allState[projectKey] = newProjData;
@@ -8191,9 +8237,9 @@
             const ws = $("toolsConsumablesWorkspace");
             const projectKey = fileInput.dataset.projectKey || ws?.dataset.currentProjectKey || "";
             const projects = buildToolsConsumablesProjects();
-            const cur = projects.find(function (p) { return p.projectKey === projectKey; }) || null;
+            const cur = findProjectByStoredKey(projects, projectKey);
             if (!cur) { window.alert("No project selected."); fileInput.value = ""; return; }
-            importToolsConsumablesFromExcel(projectKey, cur.phases, cur.subsystems, file);
+            importToolsConsumablesFromExcel(cur.projectKey, cur.phases, cur.subsystems, file);
             fileInput.value = "";
             return;
           }
@@ -8226,9 +8272,9 @@
             const ws = $("vehiclesWorkspace");
             const projectKey = ws?.dataset.currentProjectKey || "";
             const projects = buildVehiclesProjects();
-            const cur = projects.find(function (p) { return p.projectKey === projectKey; }) || null;
+            const cur = findProjectByStoredKey(projects, projectKey);
             if (!cur) { window.alert("No project selected."); fileInput.value = ""; return; }
-            importVehiclesFromExcel(projectKey, cur.phases, cur.subsystems, file);
+            importVehiclesFromExcel(cur.projectKey, cur.phases, cur.subsystems, file);
             fileInput.value = "";
             return;
           }
@@ -8260,9 +8306,9 @@
             const ws = $("oscWorkspace");
             const projectKey = ws?.dataset.currentProjectKey || "";
             const projects = buildOscProjects();
-            const cur = projects.find(function (p) { return p.projectKey === projectKey; }) || null;
+            const cur = findProjectByStoredKey(projects, projectKey);
             if (!cur) { window.alert("No project selected."); fileInput.value = ""; return; }
-            importOscFromExcel(projectKey, cur.phases, file);
+            importOscFromExcel(cur.projectKey, cur.phases, file);
             fileInput.value = "";
             return;
           }
