@@ -1639,7 +1639,7 @@ function buildGuidePlanningProjects() {
   const persistedProjects = getGuidePlanningStore();
   const materialCatalog = ["Tools", "Consumables", "PPE", "Vehicles", "Spare Parts"];
   const subcontractingCatalog = ["Training", "Technical_Support"];
-  const demobilizationMaterialCatalog = ["Preventive spares", "Corrective spares"];
+  const demobilizationMaterialCatalog = ["Preventive spares", "Corrective spares", "Vehicles"];
   const demobilizationSubcontractingCatalog = ["Preventive_Subcontract", "Corrective_Subcontract", "Technical_Support", "Training", "Obsolescence"];
   const recurrentMaterialCatalog = ["Tools", "Consumables", "PPE", "Vehicles", "Preventive spares", "Corrective spares"];
   const recurrentSubcontractingCatalog = ["Corrective_Subcontract", "Preventive_Subcontract", "Technical_Support", "Training", "Obsolescence"];
