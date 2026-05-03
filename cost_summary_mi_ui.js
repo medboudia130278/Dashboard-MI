@@ -274,6 +274,25 @@
         return Array.from(new Set(expanded.filter(Boolean)));
       }
 
+      function buildProjectLookupMap(projects) {
+        const byLookupKey = new Map();
+        (Array.isArray(projects) ? projects : []).forEach(function (project) {
+          getProjectLookupKeys(project).forEach(function (key) {
+            if (!byLookupKey.has(key)) byLookupKey.set(key, project);
+          });
+        });
+        return byLookupKey;
+      }
+
+      function findProjectByLookupKeys(projectsByLookup, keys) {
+        const lookupKeys = Array.isArray(keys) ? keys : [keys];
+        for (let index = 0; index < lookupKeys.length; index += 1) {
+          const project = projectsByLookup.get(lookupKeys[index]);
+          if (project) return project;
+        }
+        return null;
+      }
+
       function buildCombinedProjectPhaseProjects() {
         const fallbackProjects = buildFallbackProjectPhaseProjects();
         const primaryProjects = Array.isArray(window.__costSummaryProjectPhaseProjects)
@@ -1971,7 +1990,7 @@
         return rows;
       }
 
-      function buildFallbackWorkloadSynthesisProjects() {
+      function getFallbackFullWorkbooksForWorkspace() {
         // Workload needs actual sheet rows — lite mirror only has GP+summary.
         // Read full workbook first, fall back to lite for GP-only identification.
         const sourceIds = Array.isArray(window.__costSummarySharedWorkbooks) && window.__costSummarySharedWorkbooks.length
@@ -1989,6 +2008,11 @@
         } else {
           workbooks = [];
         }
+        return workbooks;
+      }
+
+      function buildFallbackWorkloadSynthesisProjects() {
+        const workbooks = getFallbackFullWorkbooksForWorkspace();
         if (!workbooks.length) return [];
 
         const byProject = new Map();
@@ -2002,9 +2026,13 @@
             projectName: group.projectName,
             projectType: group.gp.project_type || "",
             projectContext: group.gp.project_context || "",
+            persistedKeysSet: new Set(),
             synthesisRows: [],
             hoursRows: [],
           };
+          group.persistedKeys.forEach(function (key) {
+            existing.persistedKeysSet.add(key);
+          });
 
           const synthesisRows = (workbook.sheets && (workbook.sheets.synthesis || workbook.sheets.workloadSynthesis)) || [];
           if (synthesisRows.length) existing.synthesisRows = synthesisRows;
@@ -2028,6 +2056,7 @@
               projectName: project.projectName,
               projectType: project.projectType,
               projectContext: project.projectContext,
+              persistedKeys: Array.from(project.persistedKeysSet || [project.projectKey]),
               hasSynthesis: hasSynthesis,
               hasHoursReport: hasHoursReport,
               workloadRows: workloadRows,
@@ -2035,6 +2064,49 @@
             };
           })
           .sort(function (a, b) { return String(a.projectName).localeCompare(String(b.projectName)); });
+      }
+
+      function buildFallbackSubsystemSourceProjects() {
+        const workbooks = getFallbackFullWorkbooksForWorkspace();
+        if (!workbooks.length) return [];
+
+        const byProject = new Map();
+        workbooks.filter(Boolean).forEach(function (workbook) {
+          const group = buildFallbackWorkspaceProjectGroup(workbook);
+          if (!group.projectKey) return;
+
+          const existing = byProject.get(group.projectKey) || {
+            projectKey: group.projectKey,
+            projectName: group.projectName,
+            projectType: group.gp.project_type || "",
+            projectContext: group.gp.project_context || "",
+            persistedKeysSet: new Set(),
+            subsystemSet: new Set(),
+          };
+          group.persistedKeys.forEach(function (key) {
+            existing.persistedKeysSet.add(key);
+          });
+          extractSynthesisSubsystems(workbook).forEach(function (subsystem) {
+            existing.subsystemSet.add(subsystem);
+          });
+
+          byProject.set(group.projectKey, existing);
+        });
+
+        return Array.from(byProject.values())
+          .map(function (project) {
+            return {
+              projectKey: project.projectKey,
+              projectName: project.projectName,
+              projectType: project.projectType,
+              projectContext: project.projectContext,
+              persistedKeys: Array.from(project.persistedKeysSet || [project.projectKey]),
+              subsystems: Array.from(project.subsystemSet || []).sort(function (left, right) {
+                return String(left).localeCompare(String(right));
+              }),
+            };
+          })
+          .filter(function (project) { return project.subsystems.length > 0; });
       }
 
       function saveFallbackPioDefinitionProjectField(projectKey, field, value) {
@@ -4347,14 +4419,16 @@
         if (!phaseProjects.length) return [];
 
         const workloadProjects = buildFallbackWorkloadSynthesisProjects();
-        const workloadByKey = new Map();
-        workloadProjects.forEach(function (p) { workloadByKey.set(p.projectKey, p); });
+        const workloadByLookup = buildProjectLookupMap(workloadProjects);
+        const subsystemByLookup = buildProjectLookupMap(buildFallbackSubsystemSourceProjects());
 
         const workloadOverrides = readWorkloadOverridesFallbackState();
 
         return phaseProjects.map(function (phaseProj) {
-          const wProj = workloadByKey.get(phaseProj.projectKey);
-          const wOverrides = workloadOverrides[phaseProj.projectKey] || {};
+          const lookupKeys = getProjectLookupKeys(phaseProj);
+          const wProj = findProjectByLookupKeys(workloadByLookup, lookupKeys);
+          const subsystemProject = findProjectByLookupKeys(subsystemByLookup, lookupKeys);
+          const wOverrides = readPersistedFallbackProjectState(workloadOverrides, lookupKeys);
 
           // base rows: importedRows overrides computed
           const baseRows = (Array.isArray(wOverrides.importedRows) && wOverrides.importedRows.length)
@@ -4368,6 +4442,13 @@
           baseRows.concat(extraRows).forEach(function (row) {
             const sub = String(row.subsystem || "").trim();
             if (sub && !seenSubs.has(sub)) { seenSubs.add(sub); subsystems.push(sub); }
+          });
+          (Array.isArray(subsystemProject && subsystemProject.subsystems) ? subsystemProject.subsystems : []).forEach(function (sub) {
+            const subsystem = String(sub || "").trim();
+            if (subsystem && !seenSubs.has(subsystem)) {
+              seenSubs.add(subsystem);
+              subsystems.push(subsystem);
+            }
           });
 
           // White collar positions: selectedPositions from Cost Centers minus blue-collar keywords
@@ -4384,6 +4465,7 @@
             projectName:            phaseProj.projectName,
             projectType:            phaseProj.projectType,
             projectContext:         phaseProj.projectContext,
+            persistedKeys:          lookupKeys,
             phases:                 phaseProj.phases,
             mobilisationPhaseCode:  phaseProj.mobilisationPhaseCode,
             recurrentCode:          phaseProj.recurrentCode,
@@ -6223,7 +6305,7 @@
           return 0; // dem
         }
 
-        const projOverrides = readWhiteCollarFallbackState()[cur.projectKey] || {};
+        const projOverrides = readPersistedFallbackProjectState(readWhiteCollarFallbackState(), getProjectLookupKeys(cur));
 
         function resolveRateWithWarranty(phaseKey, subsystem, periodType, col, phaseHasWarranty) {
           const k = phaseKey + "|" + subsystem + "|" + periodType + "|" + col;
