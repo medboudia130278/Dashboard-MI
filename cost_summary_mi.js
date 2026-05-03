@@ -36,6 +36,7 @@ state.currentCurrencyExchangeProjectKey = "";
 state.currentGuidePlanningProjectKey = "";
 
 const WORKSPACE_LITE_INDEX_KEY = "shared-store-workbook-index-v1";
+const WORKSPACE_FULL_PREFIX = SHARED_STORE_KEYS.workbookPrefix;
 const WORKSPACE_LITE_PREFIX = "shared-store-workbook-lite-v1:";
 
 const calculationBlocks = [
@@ -160,11 +161,59 @@ function mergeWorkbooksBySourceId(...collections) {
       bySourceId.set(sourceId, item);
     }
   });
-  return Array.from(bySourceId.values());
+  return compactWorkbooksForSourceData(Array.from(bySourceId.values()));
 }
 
 function getWorkbookGeneralParams(workbook) {
   return workbook?.generalParams || workbook?.sheets?.generalParameters || {};
+}
+
+function normalizeSourceDataKey(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\\/g, "/")
+    .split("/")
+    .pop()
+    .replace(/\s+/g, " ");
+}
+
+function getWorkbookLogicalSourceKey(workbook) {
+  const projectKey = normalizeSourceDataKey(getWorkbookProjectKey(workbook));
+  const kind = normalizeSourceDataKey(workbook?.kind || "workbook");
+  const fileName = normalizeSourceDataKey(workbook?.fileName || workbook?.label || "");
+  if (!projectKey && !kind && !fileName) return String(workbook?.sourceId || "").trim();
+  return [projectKey, kind, fileName || String(workbook?.sourceId || "").trim()].join("|");
+}
+
+function compactWorkbooksForSourceData(workbooks = []) {
+  const byLogicalSource = new Map();
+  (workbooks || []).filter(Boolean).forEach((workbook) => {
+    const logicalKey = getWorkbookLogicalSourceKey(workbook);
+    if (!logicalKey) return;
+
+    const existing = byLogicalSource.get(logicalKey);
+    if (!existing) {
+      byLogicalSource.set(logicalKey, {
+        workbook,
+        sourceIds: new Set([String(workbook.sourceId || "").trim()].filter(Boolean)),
+      });
+      return;
+    }
+
+    if (workbook.sourceId) existing.sourceIds.add(String(workbook.sourceId).trim());
+    if (isPreferredProjectWorkbook(workbook, existing.workbook)) {
+      existing.workbook = workbook;
+    }
+  });
+
+  return Array.from(byLogicalSource.values()).map((entry) => {
+    const sourceIds = Array.from(entry.sourceIds);
+    return Object.assign({}, entry.workbook, {
+      mergedSourceIds: sourceIds,
+      duplicateSourceCount: Math.max(0, sourceIds.length - 1),
+    });
+  });
 }
 
 function getWorkbookProjectKey(workbook) {
@@ -268,7 +317,10 @@ function syncWorkspaceLiteCache(workbooks = []) {
   })();
   existingIndex
     .filter((id) => !ids.includes(id))
-    .forEach((id) => localStorage.removeItem(`${WORKSPACE_LITE_PREFIX}${id}`));
+    .forEach((id) => {
+      localStorage.removeItem(`${WORKSPACE_FULL_PREFIX}${id}`);
+      localStorage.removeItem(`${WORKSPACE_LITE_PREFIX}${id}`);
+    });
   const nextIndex = ids.length ? Array.from(new Set(existingIndex.concat(ids))).filter((id) => ids.includes(id)) : [];
   localStorage.setItem(WORKSPACE_LITE_INDEX_KEY, JSON.stringify(nextIndex));
   workbooks.forEach((workbook) => {
@@ -5089,12 +5141,16 @@ function renderSharedStoreSummary() {
 
   sharedWorkbookList.innerHTML = state.workbooks.map((item) => {
     const synthesisCount = getRowCount(item.sheets?.synthesis);
+    const duplicateText = item.duplicateSourceCount
+      ? `<p class="text-xs text-amber-600 mt-1">${item.duplicateSourceCount} older duplicate import(s) compacted</p>`
+      : "";
     return `
       <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p class="text-sm font-semibold">${escapeHtml(item.fileName || "Unnamed workbook")}</p>
             <p class="text-xs text-slate-500 mt-1">Project key: ${escapeHtml(item.projectKey || "N/A")}</p>
+            ${duplicateText}
           </div>
           <div class="text-right">
             <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">${escapeHtml(item.kind || "Unknown type")}</p>
@@ -5147,7 +5203,10 @@ function renderProjectDataPreview() {
     });
 
   body.innerHTML = rows.join("");
-  status.textContent = `${state.workbooks.length} workbook(s) available for project-level reuse.`;
+  const duplicateCount = state.workbooks.reduce((total, workbook) => total + Number(workbook.duplicateSourceCount || 0), 0);
+  status.textContent = duplicateCount
+    ? `${state.workbooks.length} active workbook(s); ${duplicateCount} older duplicate import(s) compacted.`
+    : `${state.workbooks.length} workbook(s) available for project-level reuse.`;
 }
 
 function renderSharedCoverageTable() {
