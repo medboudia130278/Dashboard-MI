@@ -223,6 +223,31 @@
         return all[getFallbackStudyId()] || {};
       }
 
+      function readCombinedCostCentersState() {
+        const fallback = readCostCentersFallbackState();
+        const primary = window.__costSummaryCostCentersStore && typeof window.__costSummaryCostCentersStore === "object"
+          ? window.__costSummaryCostCentersStore
+          : {};
+        const merged = Object.assign({}, fallback, primary);
+        Object.keys(fallback || {}).forEach(function (projectKey) {
+          const fallbackProject = fallback[projectKey] || {};
+          const primaryProject = primary[projectKey] || {};
+          merged[projectKey] = Object.assign({}, fallbackProject, primaryProject, {
+            customCurrencies: Array.from(new Set([]
+              .concat(Array.isArray(fallbackProject.customCurrencies) ? fallbackProject.customCurrencies : [])
+              .concat(Array.isArray(primaryProject.customCurrencies) ? primaryProject.customCurrencies : []))),
+            customPositions: Array.from(new Set([]
+              .concat(Array.isArray(fallbackProject.customPositions) ? fallbackProject.customPositions : [])
+              .concat(Array.isArray(primaryProject.customPositions) ? primaryProject.customPositions : []))),
+            selectedPositions: Array.from(new Set([]
+              .concat(Array.isArray(fallbackProject.selectedPositions) ? fallbackProject.selectedPositions : [])
+              .concat(Array.isArray(primaryProject.selectedPositions) ? primaryProject.selectedPositions : []))),
+            rowOverrides: Object.assign({}, fallbackProject.rowOverrides || {}, primaryProject.rowOverrides || {}),
+          });
+        });
+        return merged;
+      }
+
       function writeCostCentersFallbackState(nextState) {
         const all = safeReadJson(costCentersFallbackKey, {});
         all[getFallbackStudyId()] = nextState;
@@ -4279,7 +4304,7 @@
 
           // White collar positions: selectedPositions from Cost Centers minus blue-collar keywords
           const EXCLUDED_KW = ["technician", "supervisor", "worker"];
-          const costCenterState = readCostCentersFallbackState();
+          const costCenterState = readCombinedCostCentersState();
           const ccProj = costCenterState[phaseProj.projectKey] || {};
           const selectedPositions = Array.isArray(ccProj.selectedPositions) ? ccProj.selectedPositions : [];
           const whiteCollarPositions = selectedPositions.filter(function (pos) {
@@ -5564,7 +5589,7 @@
         const workloadByKey     = new Map();
         workloadProjects.forEach(function (p) { workloadByKey.set(p.projectKey, p); });
 
-        const costCenterState = readCostCentersFallbackState();
+        const costCenterState = readCombinedCostCentersState();
 
         return phaseProjects.filter(function (p) { return p.phases.length > 0; }).map(function (phaseProj) {
           const wProj      = workloadByKey.get(phaseProj.projectKey);
@@ -6270,7 +6295,6 @@
               'No white-collar positions defined. Add positions in <strong>Cost Centers Workspace</strong> ' +
               '(excluding Technician, Supervisor, Worker).' +
             '</td></tr>';
-          return;
         }
 
         // Collapsed phases for positions table (shared with optimization table)
@@ -6370,7 +6394,7 @@
 
         posTableBody.innerHTML = posRows.length
           ? posRows.join("")
-          : '<tr><td colspan="4" class="py-6 text-center text-sm text-slate-500">No data available.</td></tr>';
+          : '<tr><td colspan="4" class="py-6 text-center text-sm text-slate-500">No white-collar positions defined. Add positions in <strong>Cost Centers Workspace</strong> (excluding Technician, Supervisor, Worker).</td></tr>';
 
         // ── Headcount Summary Table ────────────────────────────────────────────
         const hcTableBody = $("headcountSummaryTableBody");
