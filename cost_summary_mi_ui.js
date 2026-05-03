@@ -2109,6 +2109,37 @@
           .filter(function (project) { return project.subsystems.length > 0; });
       }
 
+      function resolveFallbackWorkloadContext(phaseProj, workloadByLookup, subsystemByLookup, workloadOverrides) {
+        const lookupKeys = getProjectLookupKeys(phaseProj);
+        const wProj = findProjectByLookupKeys(workloadByLookup, lookupKeys);
+        const subsystemProject = findProjectByLookupKeys(subsystemByLookup, lookupKeys);
+        const wOverrides = readPersistedFallbackProjectState(workloadOverrides, lookupKeys);
+        const baseRows = (Array.isArray(wOverrides.importedRows) && wOverrides.importedRows.length)
+          ? wOverrides.importedRows
+          : (wProj ? wProj.workloadRows : []);
+        const extraRows = Array.isArray(wOverrides.extraRows) ? wOverrides.extraRows : [];
+        const seenSubs = new Set();
+        const subsystems = [];
+        baseRows.concat(extraRows).forEach(function (row) {
+          const sub = String(row.subsystem || "").trim();
+          if (sub && !seenSubs.has(sub)) { seenSubs.add(sub); subsystems.push(sub); }
+        });
+        (Array.isArray(subsystemProject && subsystemProject.subsystems) ? subsystemProject.subsystems : []).forEach(function (sub) {
+          const subsystem = String(sub || "").trim();
+          if (subsystem && !seenSubs.has(subsystem)) {
+            seenSubs.add(subsystem);
+            subsystems.push(subsystem);
+          }
+        });
+        return {
+          lookupKeys: lookupKeys,
+          baseRows: baseRows,
+          extraRows: extraRows,
+          workloadRows: baseRows.concat(extraRows),
+          subsystems: subsystems,
+        };
+      }
+
       function saveFallbackPioDefinitionProjectField(projectKey, field, value) {
         const current = readPioDefinitionFallbackState();
         const nextProject = Object.assign({}, current[projectKey] || {});
@@ -2310,7 +2341,7 @@
 
       function buildFallbackGuidePlanningProjects() {
         const persisted = readGuidePlanningFallbackState();
-        const projectPhaseProjects = buildFallbackProjectPhaseProjects();
+        const projectPhaseProjects = buildCombinedProjectPhaseProjects();
         const costCenterProjects = buildFallbackCostCenterProjects();
         const pioDefinitionProjects = buildFallbackPioDefinitionProjects();
         const materialCatalog = ["Tools", "Consumables", "PPE", "Vehicles", "Spare Parts"];
@@ -2319,18 +2350,23 @@
         const demobilizationSubcontractingCatalog = ["Preventive_Subcontract", "Corrective_Subcontract", "Technical_Support", "Training", "Obsolescence"];
         const recurrentMaterialCatalog = ["Tools", "Consumables", "PPE", "Vehicles", "Preventive spares", "Corrective spares"];
         const recurrentSubcontractingCatalog = ["Corrective_Subcontract", "Preventive_Subcontract", "Technical_Support", "Training", "Obsolescence"];
-        const projectPhaseMap = new Map(projectPhaseProjects.map(function (project) { return [project.projectKey, project]; }));
-        const costCenterMap = new Map(costCenterProjects.map(function (project) { return [project.projectKey, project]; }));
-        const pioDefinitionMap = new Map(pioDefinitionProjects.map(function (project) { return [project.projectKey, project]; }));
+        const projectPhaseMap = buildProjectLookupMap(projectPhaseProjects);
+        const costCenterMap = buildProjectLookupMap(costCenterProjects);
+        const pioDefinitionMap = buildProjectLookupMap(pioDefinitionProjects);
         const projectKeys = Array.from(new Set(projectPhaseProjects.map(function (project) { return project.projectKey; }).concat(costCenterProjects.map(function (project) { return project.projectKey; })).concat(pioDefinitionProjects.map(function (project) { return project.projectKey; }))));
 
         return projectKeys.map(function (projectKey) {
-          const phaseProject = projectPhaseMap.get(projectKey) || null;
-          const costCenterProject = costCenterMap.get(projectKey) || null;
-          const pioDefinitionProject = pioDefinitionMap.get(projectKey) || null;
+          const baseProject = projectPhaseProjects.find(function (project) { return project.projectKey === projectKey; })
+            || costCenterProjects.find(function (project) { return project.projectKey === projectKey; })
+            || pioDefinitionProjects.find(function (project) { return project.projectKey === projectKey; })
+            || { projectKey: projectKey };
+          const lookupKeys = getProjectLookupKeys(baseProject);
+          const phaseProject = findProjectByLookupKeys(projectPhaseMap, lookupKeys);
+          const costCenterProject = findProjectByLookupKeys(costCenterMap, lookupKeys);
+          const pioDefinitionProject = findProjectByLookupKeys(pioDefinitionMap, lookupKeys);
           if (!phaseProject && !costCenterProject && !pioDefinitionProject) return null;
 
-          const current = Object.assign({}, persisted[projectKey] || {});
+          const current = Object.assign({}, readPersistedFallbackProjectState(persisted, lookupKeys));
           const rowOverrides = Object.assign({}, current.rowOverrides || {});
           const positions = Array.from(new Set(((costCenterProject && costCenterProject.selectedPositions) || []).filter(Boolean)));
           const selectedMaterialTypes = Array.isArray(current.selectedMaterialTypes) ? current.selectedMaterialTypes.filter(Boolean) : [];
@@ -4482,42 +4518,30 @@
       // ─── Tools & Consumables ──────────────────────────────────────────────
 
       function buildToolsConsumablesProjects() {
-        const phaseProjects = buildFallbackProjectPhaseProjects();
+        const phaseProjects = buildCombinedProjectPhaseProjects();
         if (!phaseProjects.length) return [];
 
         const workloadOverrides = readWorkloadOverridesFallbackState();
         const workloadProjects = buildFallbackWorkloadSynthesisProjects();
-        const workloadByKey = new Map();
-        workloadProjects.forEach(function (p) { workloadByKey.set(p.projectKey, p); });
+        const workloadByLookup = buildProjectLookupMap(workloadProjects);
+        const subsystemByLookup = buildProjectLookupMap(buildFallbackSubsystemSourceProjects());
 
         return phaseProjects.map(function (phaseProj) {
-          const wProj = workloadByKey.get(phaseProj.projectKey);
-          const wOverrides = workloadOverrides[phaseProj.projectKey] || {};
-
-          const baseRows = (Array.isArray(wOverrides.importedRows) && wOverrides.importedRows.length)
-            ? wOverrides.importedRows
-            : (wProj ? wProj.workloadRows : []);
-          const extraRows = Array.isArray(wOverrides.extraRows) ? wOverrides.extraRows : [];
-
-          const seenSubs = new Set();
-          const subsystems = [];
-          baseRows.concat(extraRows).forEach(function (row) {
-            const sub = String(row.subsystem || "").trim();
-            if (sub && !seenSubs.has(sub)) { seenSubs.add(sub); subsystems.push(sub); }
-          });
+          const workloadContext = resolveFallbackWorkloadContext(phaseProj, workloadByLookup, subsystemByLookup, workloadOverrides);
 
           return {
             projectKey:            phaseProj.projectKey,
             projectName:           phaseProj.projectName,
             projectType:           phaseProj.projectType,
             projectContext:        phaseProj.projectContext,
+            persistedKeys:         workloadContext.lookupKeys,
             phases:                phaseProj.phases,
             mobilisationPhaseCode: phaseProj.mobilisationPhaseCode,
             recurrentCode:         phaseProj.recurrentCode,
             demobilisationCode:    phaseProj.demobilisationCode,
-            subsystems:            subsystems,
+            subsystems:            workloadContext.subsystems,
             hasPhases:             phaseProj.phases.length > 0,
-            hasSubsystems:         subsystems.length > 0,
+            hasSubsystems:         workloadContext.subsystems.length > 0,
           };
         }).filter(function (p) { return p.hasPhases; });
       }
@@ -4657,7 +4681,7 @@
           return '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ' + cls + '">' + escapeHtml(period.label) + '</span>';
         }
 
-        const projData = readToolsConsumablesFallbackState()[cur.projectKey] || {};
+        const projData = readPersistedFallbackProjectState(readToolsConsumablesFallbackState(), getProjectLookupKeys(cur));
 
         function resolveCell(phaseKey, subsystem, periodType, colKey) {
           const k = phaseKey + "|" + subsystem + "|" + periodType + "|" + colKey;
@@ -4950,41 +4974,30 @@
       // ─── Vehicles ────────────────────────────────────────────────────────────
 
       function buildVehiclesProjects() {
-        const phaseProjects = buildFallbackProjectPhaseProjects();
+        const phaseProjects = buildCombinedProjectPhaseProjects();
         if (!phaseProjects.length) return [];
 
         const workloadOverrides = readWorkloadOverridesFallbackState();
         const workloadProjects  = buildFallbackWorkloadSynthesisProjects();
-        const workloadByKey     = new Map();
-        workloadProjects.forEach(function (p) { workloadByKey.set(p.projectKey, p); });
+        const workloadByLookup  = buildProjectLookupMap(workloadProjects);
+        const subsystemByLookup = buildProjectLookupMap(buildFallbackSubsystemSourceProjects());
 
         return phaseProjects.map(function (phaseProj) {
-          const wProj     = workloadByKey.get(phaseProj.projectKey);
-          const wOverrides = workloadOverrides[phaseProj.projectKey] || {};
-          const baseRows  = (Array.isArray(wOverrides.importedRows) && wOverrides.importedRows.length)
-            ? wOverrides.importedRows
-            : (wProj ? wProj.workloadRows : []);
-          const extraRows = Array.isArray(wOverrides.extraRows) ? wOverrides.extraRows : [];
-
-          const seenSubs  = new Set();
-          const subsystems = [];
-          baseRows.concat(extraRows).forEach(function (row) {
-            const sub = String(row.subsystem || "").trim();
-            if (sub && !seenSubs.has(sub)) { seenSubs.add(sub); subsystems.push(sub); }
-          });
+          const workloadContext = resolveFallbackWorkloadContext(phaseProj, workloadByLookup, subsystemByLookup, workloadOverrides);
 
           return {
             projectKey:            phaseProj.projectKey,
             projectName:           phaseProj.projectName,
             projectType:           phaseProj.projectType,
             projectContext:        phaseProj.projectContext,
+            persistedKeys:         workloadContext.lookupKeys,
             phases:                phaseProj.phases,
             mobilisationPhaseCode: phaseProj.mobilisationPhaseCode,
             recurrentCode:         phaseProj.recurrentCode,
             demobilisationCode:    phaseProj.demobilisationCode,
-            subsystems:            subsystems,
+            subsystems:            workloadContext.subsystems,
             hasPhases:             phaseProj.phases.length > 0,
-            hasSubsystems:         subsystems.length > 0,
+            hasSubsystems:         workloadContext.subsystems.length > 0,
           };
         }).filter(function (p) { return p.hasPhases; });
       }
@@ -5070,7 +5083,7 @@
         if (emptyEl)   emptyEl.classList.add("hidden");
         if (contentEl) contentEl.classList.remove("hidden");
 
-        const projData = readVehiclesFallbackState()[cur.projectKey] || {};
+        const projData = readPersistedFallbackProjectState(readVehiclesFallbackState(), getProjectLookupKeys(cur));
 
         // Total quantity KPI
         const totalQty = projData["__totalQuantity__"];
@@ -5435,13 +5448,14 @@
       // ─── Other Support Costs ─────────────────────────────────────────────────
 
       function buildOscProjects() {
-        const phaseProjects = buildFallbackProjectPhaseProjects();
+        const phaseProjects = buildCombinedProjectPhaseProjects();
         return phaseProjects.filter(function (p) { return p.phases.length > 0; }).map(function (p) {
           return {
             projectKey:            p.projectKey,
             projectName:           p.projectName,
             projectType:           p.projectType,
             projectContext:        p.projectContext,
+            persistedKeys:         getProjectLookupKeys(p),
             phases:                p.phases,
             mobilisationPhaseCode: p.mobilisationPhaseCode,
             recurrentCode:         p.recurrentCode,
@@ -5529,7 +5543,7 @@
         if (emptyEl)   emptyEl.classList.add("hidden");
         if (contentEl) contentEl.classList.remove("hidden");
 
-        const projData   = readOscFallbackState()[cur.projectKey] || {};
+        const projData   = readPersistedFallbackProjectState(readOscFallbackState(), getProjectLookupKeys(cur));
         const synthRows  = Array.isArray(projData["__synthesis_rows__"]) ? projData["__synthesis_rows__"] : [];
 
         // ── Bloc 1 : reference table (read-only Synthesis import) ──────────────
@@ -5730,31 +5744,18 @@
       // ─── Mandatory Training ───────────────────────────────────────────────────
 
       function buildMandatoryTrainingProjects() {
-        const phaseProjects = buildFallbackProjectPhaseProjects();
+        const phaseProjects = buildCombinedProjectPhaseProjects();
         if (!phaseProjects.length) return [];
 
         const workloadOverrides = readWorkloadOverridesFallbackState();
         const workloadProjects  = buildFallbackWorkloadSynthesisProjects();
-        const workloadByKey     = new Map();
-        workloadProjects.forEach(function (p) { workloadByKey.set(p.projectKey, p); });
-
-        const costCenterState = readCombinedCostCentersState();
+        const workloadByLookup = buildProjectLookupMap(workloadProjects);
+        const subsystemByLookup = buildProjectLookupMap(buildFallbackSubsystemSourceProjects());
 
         return phaseProjects.filter(function (p) { return p.phases.length > 0; }).map(function (phaseProj) {
-          const wProj      = workloadByKey.get(phaseProj.projectKey);
-          const wOverrides = workloadOverrides[phaseProj.projectKey] || {};
-          const baseRows   = (Array.isArray(wOverrides.importedRows) && wOverrides.importedRows.length)
-            ? wOverrides.importedRows : (wProj ? wProj.workloadRows : []);
-          const extraRows  = Array.isArray(wOverrides.extraRows) ? wOverrides.extraRows : [];
+          const workloadContext = resolveFallbackWorkloadContext(phaseProj, workloadByLookup, subsystemByLookup, workloadOverrides);
 
-          const seenSubs   = new Set();
-          const subsystems = [];
-          baseRows.concat(extraRows).forEach(function (row) {
-            const sub = String(row.subsystem || "").trim();
-            if (sub && !seenSubs.has(sub)) { seenSubs.add(sub); subsystems.push(sub); }
-          });
-
-          const ccProj = costCenterState[phaseProj.projectKey] || {};
+          const ccProj = readCombinedCostCenterProject(phaseProj.projectKey, phaseProj.persistedKeys);
           const selectedPositions = Array.isArray(ccProj.selectedPositions) ? ccProj.selectedPositions : [];
           const EXCLUDED_KW = ["technician", "supervisor", "worker"];
           const whiteCollarPositions = selectedPositions.filter(function (pos) {
@@ -5775,11 +5776,12 @@
             projectName:           phaseProj.projectName,
             projectType:           phaseProj.projectType,
             projectContext:        phaseProj.projectContext,
+            persistedKeys:         workloadContext.lookupKeys,
             phases:                phaseProj.phases,
             mobilisationPhaseCode: phaseProj.mobilisationPhaseCode,
             recurrentCode:         phaseProj.recurrentCode,
-            subsystems:            subsystems,
-            workloadRows:          baseRows.concat(extraRows),
+            subsystems:            workloadContext.subsystems,
+            workloadRows:          workloadContext.workloadRows,
             engPositions:          engPositions,
             mgrPositions:          mgrPositions,
           };
@@ -5879,10 +5881,11 @@
 
         // Training rows for this project
         const projState    = readMandatoryTrainingFallbackState();
-        const trainingRows = Array.isArray(projState[cur.projectKey]) ? projState[cur.projectKey] : MT_DEFAULT_ROWS;
+        const persistedTrainingRows = readPersistedFallbackProjectState(projState, getProjectLookupKeys(cur));
+        const trainingRows = Array.isArray(persistedTrainingRows) ? persistedTrainingRows : MT_DEFAULT_ROWS;
 
         // White-collar overrides for headcount calculation
-        const wcOverrides = readWhiteCollarFallbackState()[cur.projectKey] || {};
+        const wcOverrides = readPersistedFallbackProjectState(readWhiteCollarFallbackState(), getProjectLookupKeys(cur));
 
         function nkMt(s) {
           return String(s || "").trim().toLowerCase()
