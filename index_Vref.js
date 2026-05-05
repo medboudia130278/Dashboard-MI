@@ -58,6 +58,7 @@
     exchangeProvider: "",
     exchangeBase: "USD",
     manualExchangeRates: {},
+    _exchangeRefreshPromise: null,
     remoteSources: {},
     localLinkedSources: {},
     activeFileIds: null,   // null = ALL, Set() = selection, empty Set = NONE
@@ -3490,10 +3491,10 @@
           `}
           <div class="mt-1 space-y-1.5 overflow-y-auto custom-scrollbar max-h-[92px]">
             ${projectItems.length ? projectItems.map((item) => `
-              <div class="flex items-center justify-between gap-3 text-[11px]">
-                <div class="flex min-w-0 items-center gap-2">
+              <div class="flex items-start justify-between gap-3 text-[11px]">
+                <div class="flex min-w-0 items-start gap-2">
                   <span class="inline-block size-2.5 rounded-full shrink-0" style="background:${projectColorMap.get(item.project) || "#94a3b8"};"></span>
-                  <span class="truncate text-slate-600 dark:text-slate-300" title="${escapeHtml(item.project)}">${escapeHtml(item.project)}</span>
+                  <span class="leading-tight text-slate-600 dark:text-slate-300 break-words" title="${escapeHtml(item.project)}">${escapeHtml(item.project)}</span>
                 </div>
                 <div class="shrink-0 text-right text-slate-500 dark:text-slate-400">
                   <span class="font-semibold text-primary">N ${formatInt(item.nightOpt)}</span>
@@ -3537,10 +3538,10 @@
         `}
         <div class="mt-1 space-y-1.5 overflow-y-auto custom-scrollbar max-h-[92px]">
           ${totalProjectItems.length ? totalProjectItems.map((item) => `
-            <div class="flex items-center justify-between gap-3 text-[11px]">
-              <div class="flex min-w-0 items-center gap-2">
+            <div class="flex items-start justify-between gap-3 text-[11px]">
+              <div class="flex min-w-0 items-start gap-2">
                 <span class="inline-block size-2.5 rounded-full shrink-0" style="background:${projectColorMap.get(item.project) || "#94a3b8"};"></span>
-                <span class="truncate text-slate-600 dark:text-slate-300" title="${escapeHtml(item.project)}">${escapeHtml(item.project)}</span>
+                <span class="leading-tight text-slate-600 dark:text-slate-300 break-words" title="${escapeHtml(item.project)}">${escapeHtml(item.project)}</span>
               </div>
               <div class="shrink-0 text-right text-slate-500 dark:text-slate-400">
                 <span class="font-semibold text-primary">N ${formatInt(item.nightOpt)}</span>
@@ -5303,7 +5304,9 @@
   }
 
   async function refreshExchangeRates({ silent = false } = {}) {
+    if (state._exchangeRefreshPromise) return state._exchangeRefreshPromise;
     if (!silent) setMaterialsStatus("Refreshing rates", "Fetching latest online exchange rates...");
+    state._exchangeRefreshPromise = (async () => {
     try {
       const res = await fetch("https://open.er-api.com/v6/latest/USD", { cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -5336,6 +5339,12 @@
       renderSubcontractingDashboard();
       renderBenchmarkDashboard();
       return false;
+    }
+    })();
+    try {
+      return await state._exchangeRefreshPromise;
+    } finally {
+      state._exchangeRefreshPromise = null;
     }
   }
 
@@ -9005,7 +9014,7 @@
 
         </div>
 
-        <div class="grid grid-cols-1 xl:grid-cols-7 gap-6">
+        <div id="benchmarkDriverKpiGrid" class="grid grid-cols-1 xl:grid-cols-7 gap-6">
           <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/70 p-4 min-h-[196px] flex flex-col">
             <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Turnout</p>
             <p class="mt-2 text-3xl font-black" id="benchmarkTurnoutKpi">0</p>
@@ -10111,10 +10120,10 @@
       if (!listEl) return;
       listEl.innerHTML = projectItems.length
         ? projectItems.map((item) => `
-            <div class="flex items-center justify-between gap-3">
-              <div class="flex items-center gap-2 min-w-0">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-start gap-2 min-w-0">
                 <span class="inline-block size-2.5 rounded-full shrink-0" style="background:${projectColorMap.get(item.projectKey) || "#94a3b8"};"></span>
-                <span class="text-xs font-bold uppercase tracking-wider text-slate-400 truncate" title="${escapeHtml(item.label)}">${escapeHtml(item.label)}</span>
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-400 leading-tight break-words" title="${escapeHtml(item.label)}">${escapeHtml(item.label)}</span>
               </div>
               <span class="text-sm font-semibold text-slate-700 dark:text-slate-100">${escapeHtml(formatInt(item[config.field] || 0))}</span>
             </div>
@@ -11498,6 +11507,21 @@
       return view;
     };
 
+    ensureView(
+      'view-overview',
+      `
+        <section class="pt-8 space-y-6">
+          <div class="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-8 shadow-sm">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-bold uppercase tracking-[0.18em]">
+              <span class="material-symbols-outlined text-[16px]">dashboard</span>
+              Overview
+            </div>
+            <h2 class="mt-4 text-3xl font-black tracking-tight">Overview</h2>
+            <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">Content to be defined.</p>
+          </div>
+        </section>
+      `
+    );
     ensureView('view-materials');
     ensureView(
       'view-overhaul',
@@ -11535,6 +11559,16 @@
     const active = document.getElementById(`view-${viewKey}`);
     if (active) active.classList.remove('hidden');
 
+    const deferVisibleRender = (renderFn) => {
+      const run = () => {
+        const current = document.getElementById(`view-${viewKey}`);
+        if (!current || current.classList.contains('hidden')) return;
+        renderFn();
+      };
+      if (typeof requestAnimationFrame === "function") requestAnimationFrame(run);
+      else setTimeout(run, 0);
+    };
+
     // 2) highlight sidebar item
     document.querySelectorAll('.nav-item').forEach(a => {
       a.classList.remove('bg-primary/10','text-primary');
@@ -11548,14 +11582,16 @@
     }
 
     // 3) render view-specific content
-    if (viewKey === 'workload') {
+    if (viewKey === 'overview') {
+      return;
+    } else if (viewKey === 'workload') {
       recomputeAndRender();
       setupLineHover();
       setupDurationHover();
       setupBarsNavigator();
     } else if (viewKey === 'materials') {
       initMaterialsView();
-      renderMaterialsDashboard();
+      deferVisibleRender(renderMaterialsDashboard);
     } else if (viewKey === 'overhaul') {
       initOverhaulView();
       renderOverhaulDashboard();
