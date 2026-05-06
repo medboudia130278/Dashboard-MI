@@ -18,6 +18,7 @@ import {
   listNormalizedWorkbooks,
   listStudies,
   loadStudyConfig as loadPersistedStudyConfig,
+  removeSource,
   saveStudyConfig as savePersistedStudyConfig,
   setLastOpenStudyId,
   updateStudy,
@@ -35,7 +36,7 @@ state.currentPioDefinitionProjectKey = "";
 state.currentCurrencyExchangeProjectKey = "";
 state.currentGuidePlanningProjectKey = "";
 
-const WORKSPACE_LITE_INDEX_KEY = "shared-store-workbook-index-v1";
+const WORKSPACE_LITE_INDEX_KEY = "cost-summary-mi-workbook-lite-index-v1";
 const WORKSPACE_FULL_PREFIX = SHARED_STORE_KEYS.workbookPrefix;
 const WORKSPACE_LITE_PREFIX = "shared-store-workbook-lite-v1:";
 
@@ -306,30 +307,143 @@ function getMergedProjectGeneralParamsMap(workbooks = state.workbooks) {
 function syncWorkspaceLiteCache(workbooks = []) {
   window.__costSummarySharedWorkbooks = workbooks.slice();
   const ids = Array.from(new Set(workbooks.map((item) => String(item.sourceId || "").trim()).filter(Boolean)));
-  const existingIndex = (() => {
-    try {
+  try {
+    const existingIndex = (() => {
       const raw = localStorage.getItem(WORKSPACE_LITE_INDEX_KEY);
       const parsed = raw ? JSON.parse(raw) : [];
       return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  })();
-  existingIndex
-    .filter((id) => !ids.includes(id))
-    .forEach((id) => {
-      localStorage.removeItem(`${WORKSPACE_FULL_PREFIX}${id}`);
-      localStorage.removeItem(`${WORKSPACE_LITE_PREFIX}${id}`);
+    })();
+    existingIndex
+      .filter((id) => !ids.includes(id))
+      .forEach((id) => {
+        localStorage.removeItem(`${WORKSPACE_LITE_PREFIX}${id}`);
+      });
+    localStorage.setItem(WORKSPACE_LITE_INDEX_KEY, JSON.stringify(ids));
+    workbooks.forEach((workbook) => {
+      if (!workbook?.sourceId) return;
+      localStorage.setItem(
+        `${WORKSPACE_LITE_PREFIX}${workbook.sourceId}`,
+        JSON.stringify(buildWorkspaceLiteMirror(workbook))
+      );
     });
-  const nextIndex = ids.length ? Array.from(new Set(existingIndex.concat(ids))).filter((id) => ids.includes(id)) : [];
-  localStorage.setItem(WORKSPACE_LITE_INDEX_KEY, JSON.stringify(nextIndex));
-  workbooks.forEach((workbook) => {
-    if (!workbook?.sourceId) return;
-    localStorage.setItem(
-      `${WORKSPACE_LITE_PREFIX}${workbook.sourceId}`,
-      JSON.stringify(buildWorkspaceLiteMirror(workbook))
-    );
+  } catch (error) {
+    console.warn("Unable to sync Cost Summary workbook lite cache.", error);
+  }
+}
+
+function readLocalJsonValue(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function listStoredSharedWorkbookIds() {
+  const ids = [];
+  try {
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index) || "";
+      if (key.startsWith(WORKSPACE_FULL_PREFIX)) {
+        ids.push(key.slice(WORKSPACE_FULL_PREFIX.length));
+      }
+    }
+  } catch {
+    return [];
+  }
+  return Array.from(new Set(ids.filter(Boolean)));
+}
+
+function readStoredSharedWorkbook(sourceId) {
+  const workbook = readLocalJsonValue(`${WORKSPACE_FULL_PREFIX}${sourceId}`, null);
+  if (!workbook || typeof workbook !== "object") return null;
+  return {
+    ...workbook,
+    sourceId: workbook.sourceId || sourceId,
+  };
+}
+
+async function cleanupSharedWorkbookStore() {
+  const indexedIds = readLocalJsonValue(SHARED_STORE_KEYS.workbookIndex, []);
+  const indexIds = Array.isArray(indexedIds) ? indexedIds.map((id) => String(id || "").trim()).filter(Boolean) : [];
+  const storedIds = listStoredSharedWorkbookIds();
+  const sourceIds = Array.from(new Set(indexIds.concat(storedIds)));
+  const workbooks = [];
+  const missingIds = [];
+  let bridgeWorkbooks = [];
+
+  sourceIds.forEach((sourceId) => {
+    const workbook = readStoredSharedWorkbook(sourceId);
+    if (workbook) workbooks.push(workbook);
+    else if (indexIds.includes(sourceId)) missingIds.push(sourceId);
   });
+
+  try {
+    bridgeWorkbooks = await loadIndexedDbBridgeWorkbooks();
+    bridgeWorkbooks.forEach((workbook) => {
+      if (workbook?.sourceId) workbooks.push(workbook);
+    });
+  } catch {
+    bridgeWorkbooks = [];
+  }
+
+  const byLogicalSource = new Map();
+  workbooks.forEach((workbook) => {
+    const logicalKey = getWorkbookLogicalSourceKey(workbook);
+    if (!logicalKey) return;
+
+    const existing = byLogicalSource.get(logicalKey);
+    if (!existing) {
+      byLogicalSource.set(logicalKey, {
+        keep: workbook,
+        ids: new Set([String(workbook.sourceId || "").trim()].filter(Boolean)),
+      });
+      return;
+    }
+
+    if (workbook.sourceId) existing.ids.add(String(workbook.sourceId).trim());
+    if (isPreferredProjectWorkbook(workbook, existing.keep)) {
+      existing.keep = workbook;
+    }
+  });
+
+  const keepWorkbooks = Array.from(byLogicalSource.values())
+    .map((entry) => entry.keep)
+    .filter(Boolean);
+  const keepIds = keepWorkbooks
+    .map((workbook) => String(workbook.sourceId || "").trim())
+    .filter(Boolean);
+  const keepIdSet = new Set(keepIds);
+  const duplicateIds = Array.from(new Set(workbooks
+    .map((workbook) => String(workbook.sourceId || "").trim())
+    .filter((sourceId) => sourceId && !keepIdSet.has(sourceId))));
+  const removeIds = Array.from(new Set(missingIds.concat(duplicateIds)));
+
+  removeIds.forEach((sourceId) => {
+    localStorage.removeItem(`${WORKSPACE_FULL_PREFIX}${sourceId}`);
+    localStorage.removeItem(`${WORKSPACE_LITE_PREFIX}${sourceId}`);
+  });
+
+  localStorage.setItem(SHARED_STORE_KEYS.workbookIndex, JSON.stringify(keepIds));
+  localStorage.setItem(WORKSPACE_LITE_INDEX_KEY, JSON.stringify(keepIds));
+
+  await Promise.all(removeIds.map(async (sourceId) => {
+    try {
+      await removeSource(sourceId);
+    } catch {
+      // IndexedDB cleanup is best-effort; local shared store cleanup is the source of truth here.
+    }
+  }));
+
+  return {
+    beforeIndexCount: indexIds.length,
+    beforeStoredCount: storedIds.length,
+    beforeBridgeCount: bridgeWorkbooks.length,
+    keptCount: keepIds.length,
+    removedMissingCount: missingIds.length,
+    removedDuplicateCount: duplicateIds.length,
+  };
 }
 
 async function loadIndexedDbBridgeWorkbooks() {
@@ -4033,6 +4147,24 @@ function refreshStatus(draft) {
   }
 }
 
+function renderActiveSharedWorkspace() {
+  if (state.activeDrawerModuleKey === "study_setup:project_phases") {
+    renderProjectPhasesWorkspace();
+  }
+  if (state.activeDrawerModuleKey === "study_setup:guide_planning_definition") {
+    renderGuidePlanningWorkspace();
+  }
+  if (state.activeDrawerModuleKey === "organization_risks:cost_centers") {
+    renderCostCentersWorkspace();
+  }
+  if (state.activeDrawerModuleKey === "data_sources:currency_exchange_rates") {
+    renderCurrencyExchangeWorkspace();
+  }
+  if (state.activeDrawerModuleKey === "study_setup:pio_definition_freight_customs") {
+    renderPioDefinitionWorkspace();
+  }
+}
+
 function setupEvents() {
   const inputs = [
     "studyNameInput",
@@ -4085,20 +4217,23 @@ function setupEvents() {
 
   $("refreshSharedStoreBtn")?.addEventListener("click", async () => {
     await refreshSharedSnapshot();
-    if (state.activeDrawerModuleKey === "study_setup:project_phases") {
-      renderProjectPhasesWorkspace();
-    }
-    if (state.activeDrawerModuleKey === "study_setup:guide_planning_definition") {
-      renderGuidePlanningWorkspace();
-    }
-    if (state.activeDrawerModuleKey === "organization_risks:cost_centers") {
-      renderCostCentersWorkspace();
-    }
-    if (state.activeDrawerModuleKey === "data_sources:currency_exchange_rates") {
-      renderCurrencyExchangeWorkspace();
-    }
-    if (state.activeDrawerModuleKey === "study_setup:pio_definition_freight_customs") {
-      renderPioDefinitionWorkspace();
+    renderActiveSharedWorkspace();
+  });
+
+  $("cleanSharedStoreBtn")?.addEventListener("click", async () => {
+    const confirmed = window.confirm("Clean old Source Data imports and keep only the latest workbook for each project/type/file?");
+    if (!confirmed) return;
+
+    try {
+      const result = await cleanupSharedWorkbookStore();
+      await refreshSharedSnapshot();
+      renderActiveSharedWorkspace();
+      const status = $("projectPreviewStatus");
+      if (status) {
+        status.textContent = `Cleaned Source Data: kept ${result.keptCount}, removed ${result.removedDuplicateCount} duplicate(s), removed ${result.removedMissingCount} orphan index item(s).`;
+      }
+    } catch (error) {
+      window.alert(`Unable to clean Source Data. ${error?.message || "Unknown error."}`);
     }
   });
 
@@ -5117,9 +5252,8 @@ function renderSharedStoreSummary() {
       .filter(Boolean)
   );
   const currencies = new Set(
-    Object.keys(state.settings?.liveRates || {})
-      .concat(Object.keys(state.settings?.manualRates || {}))
-      .concat([state.settings?.targetCurrency])
+    state.workbooks
+      .flatMap((workbook) => extractSynthesisCurrencies(workbook))
       .filter(Boolean)
   );
 
