@@ -3357,6 +3357,7 @@
   function recomputeAndRender() {
     const activeView = getCurrentActiveViewKey();
 
+    if (activeView === 'overview') { renderOverviewDashboard(); return; }
     if (activeView === 'materials') { renderMaterialsDashboard(); return; }
     if (activeView === 'overhaul') { renderOverhaulDashboard(); return; }
     if (activeView === 'subcontracting') { renderSubcontractingDashboard(); return; }
@@ -11491,6 +11492,408 @@
     });
   }
 
+  function overviewKpiCard(label, value, detail = "", accent = "#137fec") {
+    return `
+      <div class="overview-kpi-card rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" style="--accent:${accent};">
+        <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">${escapeHtml(label)}</p>
+        <p class="mt-2 text-3xl font-black text-slate-950">${escapeHtml(value)}</p>
+        ${detail ? `<p class="mt-3 text-xs leading-relaxed text-slate-500">${detail}</p>` : ""}
+      </div>
+    `;
+  }
+
+  function overviewEmpty(message) {
+    return `
+      <div class="col-span-full rounded-2xl border border-dashed border-slate-300 bg-white/70 p-4 text-sm text-slate-500">
+        ${escapeHtml(message)}
+      </div>
+    `;
+  }
+
+  function initOverviewView() {
+    const view = $('view-overview');
+    if (!view || view.dataset.ready === "1") return;
+    view.dataset.ready = "1";
+    view.innerHTML = `
+      <section class="overview-page pt-8 pb-8 space-y-6">
+        <div class="overview-hero rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-bold uppercase tracking-[0.18em]">
+            <span class="material-symbols-outlined text-[16px]">dashboard</span>
+            Overview
+          </div>
+          <h2 class="mt-4 text-3xl font-black tracking-tight">Overview</h2>
+          <p class="mt-2 max-w-3xl text-sm text-slate-500 dark:text-slate-400">
+            Executive snapshot across cost drivers, workload, materials, overhaul and subcontracting.
+          </p>
+        </div>
+
+        <section class="overview-section" data-overview-module="benchmark">
+          <div class="overview-section-head">
+            <div>
+              <p class="overview-eyebrow">Benchmark &amp; Cost drivers</p>
+              <h3>Cost driver KPI</h3>
+            </div>
+            <button class="overview-open-detail" type="button" data-overview-target="benchmark">Open details</button>
+          </div>
+          <div id="overviewBenchmarkKpis" class="overview-kpi-grid"></div>
+        </section>
+
+        <section class="overview-section" data-overview-module="workload">
+          <div class="overview-section-head">
+            <div>
+              <p class="overview-eyebrow">Workload</p>
+              <h3>Subsystem KPI</h3>
+            </div>
+            <button class="overview-open-detail" type="button" data-overview-target="workload">Open details</button>
+          </div>
+          <div id="overviewWorkloadKpis" class="overview-kpi-grid"></div>
+        </section>
+
+        <section class="overview-section" data-overview-module="materials">
+          <div class="overview-section-head">
+            <div>
+              <p class="overview-eyebrow">Materials</p>
+              <h3>Material KPI and filters</h3>
+            </div>
+            <button class="overview-open-detail" type="button" data-overview-target="materials">Open details</button>
+          </div>
+          <div class="overview-filter-grid">
+            <label><span>Currency</span><select id="overviewMaterialsCurrency"></select></label>
+            <label><span>Year</span><select id="overviewMaterialsYear"></select></label>
+            <label><span>Equipment</span><select id="overviewMaterialsEquipment"></select></label>
+            <label><span>Element</span><select id="overviewMaterialsElement"></select></label>
+          </div>
+          <div id="overviewMaterialsKpis" class="overview-kpi-grid"></div>
+        </section>
+
+        <section class="overview-section" data-overview-module="overhaul">
+          <div class="overview-section-head">
+            <div>
+              <p class="overview-eyebrow">Overhaul &amp; Renewals</p>
+              <h3>Overhaul KPI and filters</h3>
+            </div>
+            <button class="overview-open-detail" type="button" data-overview-target="overhaul">Open details</button>
+          </div>
+          <div class="overview-filter-grid">
+            <label><span>Currency</span><select id="overviewOverhaulCurrency"></select></label>
+            <label><span>Year</span><select id="overviewOverhaulYear"></select></label>
+            <label><span>Equipment</span><select id="overviewOverhaulEquipment"></select></label>
+            <label><span>Activity Type</span><select id="overviewOverhaulType"></select></label>
+            <label><span>Span Life</span><select id="overviewOverhaulSpanLife"></select></label>
+          </div>
+          <div id="overviewOverhaulKpis" class="overview-kpi-grid"></div>
+        </section>
+
+        <section class="overview-section" data-overview-module="subcontracting">
+          <div class="overview-section-head">
+            <div>
+              <p class="overview-eyebrow">Subcontracting Activities</p>
+              <h3>Subcontracting KPI and filters</h3>
+            </div>
+            <button class="overview-open-detail" type="button" data-overview-target="subcontracting">Open details</button>
+          </div>
+          <div class="overview-filter-grid">
+            <label><span>Currency</span><select id="overviewSubcontractingCurrency"></select></label>
+            <label><span>Equipment</span><select id="overviewSubcontractingEquipment"></select></label>
+            <label><span>Activity</span><select id="overviewSubcontractingActivity"></select></label>
+            <label><span>Type</span><select id="overviewSubcontractingType"></select></label>
+            <label><span>Frequency</span><select id="overviewSubcontractingFrequency"></select></label>
+            <label><span>Period Duration</span><input id="overviewSubcontractingPeriodDuration" type="number" min="0" step="0.01"></label>
+          </div>
+          <div id="overviewSubcontractingKpis" class="overview-kpi-grid"></div>
+        </section>
+      </section>
+    `;
+
+    view.querySelectorAll('[data-overview-target]').forEach((button) => {
+      button.addEventListener('click', () => setActiveView(button.getAttribute('data-overview-target')));
+    });
+
+    $('overviewMaterialsCurrency')?.addEventListener('change', (e) => {
+      state.currentMaterialCurrency = e.target.value;
+      queueSharedSettingsSync();
+      renderAllModuleDashboards();
+      renderOverviewDashboard();
+    });
+    $('overviewMaterialsYear')?.addEventListener('change', (e) => {
+      state.currentMaterialYear = e.target.value;
+      renderMaterialsDashboard();
+      renderOverviewDashboard();
+    });
+    $('overviewMaterialsEquipment')?.addEventListener('change', (e) => {
+      state.currentMaterialEquipment = e.target.value;
+      rebuildMaterialsFilters();
+      renderMaterialsDashboard();
+      renderOverviewDashboard();
+    });
+    $('overviewMaterialsElement')?.addEventListener('change', (e) => {
+      state.currentMaterialElement = e.target.value;
+      rebuildMaterialsFilters();
+      renderMaterialsDashboard();
+      renderOverviewDashboard();
+    });
+
+    $('overviewOverhaulCurrency')?.addEventListener('change', (e) => {
+      state.currentMaterialCurrency = e.target.value;
+      queueSharedSettingsSync();
+      renderAllModuleDashboards();
+      renderOverviewDashboard();
+    });
+    $('overviewOverhaulYear')?.addEventListener('change', (e) => {
+      state.currentOverhaulYear = e.target.value;
+      renderOverhaulDashboard();
+      renderOverviewDashboard();
+    });
+    $('overviewOverhaulEquipment')?.addEventListener('change', (e) => {
+      state.currentOverhaulEquipment = e.target.value;
+      rebuildOverhaulFilters();
+      renderOverhaulDashboard();
+      renderOverviewDashboard();
+    });
+    $('overviewOverhaulType')?.addEventListener('change', (e) => {
+      state.currentOverhaulType = e.target.value;
+      rebuildOverhaulFilters();
+      renderOverhaulDashboard();
+      renderOverviewDashboard();
+    });
+    $('overviewOverhaulSpanLife')?.addEventListener('change', (e) => {
+      state.currentOverhaulSpanLife = e.target.value;
+      rebuildOverhaulFilters();
+      renderOverhaulDashboard();
+      renderOverviewDashboard();
+    });
+
+    $('overviewSubcontractingCurrency')?.addEventListener('change', (e) => {
+      state.currentMaterialCurrency = e.target.value;
+      queueSharedSettingsSync();
+      renderAllModuleDashboards();
+      renderOverviewDashboard();
+    });
+    $('overviewSubcontractingEquipment')?.addEventListener('change', (e) => {
+      state.currentSubcontractingEquipment = e.target.value;
+      rebuildSubcontractingFilters();
+      renderSubcontractingDashboard();
+      renderOverviewDashboard();
+    });
+    $('overviewSubcontractingActivity')?.addEventListener('change', (e) => {
+      state.currentSubcontractingActivity = e.target.value;
+      rebuildSubcontractingFilters();
+      renderSubcontractingDashboard();
+      renderOverviewDashboard();
+    });
+    $('overviewSubcontractingType')?.addEventListener('change', (e) => {
+      state.currentSubcontractingType = e.target.value;
+      rebuildSubcontractingFilters();
+      renderSubcontractingDashboard();
+      renderOverviewDashboard();
+    });
+    $('overviewSubcontractingFrequency')?.addEventListener('change', (e) => {
+      state.currentSubcontractingFrequency = e.target.value;
+      rebuildSubcontractingFilters();
+      renderSubcontractingDashboard();
+      renderOverviewDashboard();
+    });
+    $('overviewSubcontractingPeriodDuration')?.addEventListener('input', (e) => {
+      state.currentSubcontractingPeriodDuration = Math.max(0, Number(e.target.value || 0));
+      renderSubcontractingDashboard();
+      renderOverviewDashboard();
+    });
+  }
+
+  function renderAllModuleDashboards() {
+    renderMaterialsDashboard();
+    renderOverhaulDashboard();
+    renderSubcontractingDashboard();
+    renderBenchmarkDashboard();
+  }
+
+  function syncOverviewSelect(sourceId, targetId, selectedValue = null) {
+    const source = $(sourceId);
+    const target = $(targetId);
+    if (!target) return;
+    if (source) target.innerHTML = Array.from(source.options).map((option) => (
+      `<option value="${escapeHtml(option.value)}">${escapeHtml(option.textContent)}</option>`
+    )).join("");
+    const value = selectedValue ?? source?.value ?? "__ALL__";
+    if (Array.from(target.options).some((option) => option.value === value)) target.value = value;
+  }
+
+  function syncOverviewControls() {
+    rebuildMaterialsFilters();
+    rebuildOverhaulFilters();
+    rebuildSubcontractingFilters();
+
+    syncOverviewSelect('materialsCurrencyFilter', 'overviewMaterialsCurrency', state.currentMaterialCurrency);
+    syncOverviewSelect('materialsEquipmentFilter', 'overviewMaterialsEquipment', state.currentMaterialEquipment);
+    syncOverviewSelect('materialsElementFilter', 'overviewMaterialsElement', state.currentMaterialElement);
+    const materialYear = $('overviewMaterialsYear');
+    if (materialYear) {
+      const sourceYears = $('materialsYearList');
+      const values = sourceYears
+        ? Array.from(sourceYears.querySelectorAll('[data-material-year-value]')).map((input) => input.getAttribute('data-material-year-value')).filter(Boolean)
+        : [];
+      materialYear.innerHTML = [`<option value="__ALL__">All years</option>`]
+        .concat(values.map((year) => `<option value="${escapeHtml(year)}">${escapeHtml(year)}</option>`))
+        .join("");
+      const selected = getMultiSelectValues(state.currentMaterialYear);
+      materialYear.value = selected.length === 1 ? selected[0] : "__ALL__";
+    }
+
+    syncOverviewSelect('overhaulCurrencyFilter', 'overviewOverhaulCurrency', state.currentMaterialCurrency);
+    syncOverviewSelect('overhaulEquipmentFilter', 'overviewOverhaulEquipment', state.currentOverhaulEquipment);
+    syncOverviewSelect('overhaulTypeFilter', 'overviewOverhaulType', state.currentOverhaulType);
+    syncOverviewSelect('overhaulSpanLifeFilter', 'overviewOverhaulSpanLife', state.currentOverhaulSpanLife);
+    const overhaulYear = $('overviewOverhaulYear');
+    if (overhaulYear) {
+      const sourceYears = $('overhaulYearList');
+      const values = sourceYears
+        ? Array.from(sourceYears.querySelectorAll('[data-overhaul-year-value]')).map((input) => input.getAttribute('data-overhaul-year-value')).filter(Boolean)
+        : [];
+      overhaulYear.innerHTML = [`<option value="__ALL__">All years</option>`]
+        .concat(values.map((year) => `<option value="${escapeHtml(year)}">${escapeHtml(year)}</option>`))
+        .join("");
+      const selected = getMultiSelectValues(state.currentOverhaulYear);
+      overhaulYear.value = selected.length === 1 ? selected[0] : "__ALL__";
+    }
+
+    syncOverviewSelect('subcontractingCurrencyFilter', 'overviewSubcontractingCurrency', state.currentMaterialCurrency);
+    syncOverviewSelect('subcontractingEquipmentFilter', 'overviewSubcontractingEquipment', state.currentSubcontractingEquipment);
+    syncOverviewSelect('subcontractingActivityFilter', 'overviewSubcontractingActivity', state.currentSubcontractingActivity);
+    syncOverviewSelect('subcontractingTypeFilter', 'overviewSubcontractingType', state.currentSubcontractingType);
+    syncOverviewSelect('subcontractingFrequencyFilter', 'overviewSubcontractingFrequency', state.currentSubcontractingFrequency);
+    const period = $('overviewSubcontractingPeriodDuration');
+    if (period) period.value = String(getSubcontractingPeriodDuration());
+  }
+
+  function renderOverviewBenchmarkKpis() {
+    const target = $('overviewBenchmarkKpis');
+    if (!target) return;
+    const ids = getBenchmarkBaseFileIds();
+    const seen = new Set();
+    const totals = { turnout: 0, substation: 0, apsd: 0, stations: 0 };
+    ids.forEach((fileId) => {
+      const projectKey = getProjectKeyForFileId(fileId) || `__file__${fileId}`;
+      if (seen.has(projectKey)) return;
+      seen.add(projectKey);
+      const gp = state.fileMeta?.[fileId]?.gp || {};
+      const getNum = (name) => toNumber(gp?.[name]);
+      const stations = getNum("number_of_station");
+      totals.turnout += getNum("switch") + (getNum("diamond_crossing") * 4) + (getNum("crossover") * 2);
+      totals.substation += getNum("number_of_traction_substation") + getNum("number_of_auxiliary_substation") + getNum("number_of_mv_substation");
+      totals.apsd += stations * getNum("apsd_per_wall") * getNum("walls_per_station");
+      totals.stations += stations;
+    });
+    target.innerHTML = [
+      overviewKpiCard("Total Turnout", formatInt(totals.turnout), `${seen.size || 0} project(s)`, "#137fec"),
+      overviewKpiCard("Total Substation", formatInt(totals.substation), "Traction + auxiliary + MV", "#14b8a6"),
+      overviewKpiCard("Total APSD", formatInt(totals.apsd), "Stations x APSD parameters", "#f59e0b"),
+      overviewKpiCard("Number of Station", formatInt(totals.stations), "General Parameters", "#8b5cf6"),
+    ].join("");
+  }
+
+  function renderOverviewWorkloadKpis() {
+    const target = $('overviewWorkloadKpis');
+    if (!target) return;
+    if (state.synthesisRows.length) {
+      const { subsystems: map } = buildSynthesisMap();
+      const subs = Array.from(map.keys()).sort((a, b) => a.localeCompare(b));
+      if (!subs.length) {
+        target.innerHTML = overviewEmpty("No preventive headcount rows found in Synthesis.");
+        return;
+      }
+      target.innerHTML = subs.map((sub, index) => {
+        const { dayOpt, nightOpt } = map.get(sub);
+        return overviewKpiCard(
+          sub,
+          `N ${formatInt(nightOpt || 0)} / D ${formatInt(dayOpt || 0)}`,
+          "Optimized headcount",
+          colorForSeriesIndex(index)
+        );
+      }).join("");
+      return;
+    }
+    target.innerHTML = overviewEmpty("Upload an Output Planning file to populate Workload KPI.");
+  }
+
+  function renderOverviewMaterialsKpis() {
+    const target = $('overviewMaterialsKpis');
+    if (!target) return;
+    const rows = getFilteredCorrectiveRows();
+    const cols = state.materialsColumns;
+    let totalEstimated = 0;
+    let reparableEstimated = 0;
+    rows.forEach((row) => {
+      const currency = cols.currency ? row?.[cols.currency] : "";
+      const totalRaw = cols.totalCostEstimated ? toNumber(row?.[cols.totalCostEstimated]) : 0;
+      const reparableRaw = cols.reparableCostEstimated ? toNumber(row?.[cols.reparableCostEstimated]) : 0;
+      totalEstimated += convertAmount(totalRaw, currency, state.currentMaterialCurrency) ?? 0;
+      reparableEstimated += convertAmount(reparableRaw, currency, state.currentMaterialCurrency) ?? 0;
+    });
+    target.innerHTML = [
+      overviewKpiCard("Replacement Cost Estimated", formatCurrencyValue(totalEstimated, state.currentMaterialCurrency, 0), `${rows.length} row(s)`, "#137fec"),
+      overviewKpiCard("Reparable Cost Estimated", formatCurrencyValue(reparableEstimated, state.currentMaterialCurrency, 0), "Selected target currency", "#14b8a6"),
+      overviewKpiCard("Total Estimated", formatCurrencyValue(totalEstimated + reparableEstimated, state.currentMaterialCurrency, 0), "Replacement + reparable", "#f59e0b"),
+    ].join("");
+  }
+
+  function renderOverviewOverhaulKpis() {
+    const target = $('overviewOverhaulKpis');
+    if (!target) return;
+    const rows = getFilteredOverhaulRows();
+    const cols = state.overhaulColumns;
+    let totalGlobalCost = 0;
+    const typeSet = new Set();
+    rows.forEach((row) => {
+      const currency = cols.currency ? row?.[cols.currency] : "";
+      const rawGlobal = cols.globalCost ? toNumber(row?.[cols.globalCost]) : 0;
+      totalGlobalCost += convertAmount(rawGlobal, currency, state.currentMaterialCurrency) ?? 0;
+      if (cols.type) {
+        const type = String(row?.[cols.type] ?? "").trim();
+        if (type) typeSet.add(type);
+      }
+    });
+    target.innerHTML = [
+      overviewKpiCard("Global Cost", formatCurrencyValue(totalGlobalCost, state.currentMaterialCurrency, 0), `${rows.length} row(s)`, "#8b5cf6"),
+      overviewKpiCard("Activity Types", formatInt(typeSet.size), "In selected scope", "#137fec"),
+      overviewKpiCard("Currency", state.currentMaterialCurrency, "Selected target currency", "#f59e0b"),
+    ].join("");
+  }
+
+  function renderOverviewSubcontractingKpis() {
+    const target = $('overviewSubcontractingKpis');
+    if (!target) return;
+    const rows = getFilteredSubcontractingRows();
+    const cols = state.subcontractingColumns;
+    const duration = getSubcontractingPeriodDuration();
+    let totalGlobalCost = 0;
+    const activitySet = new Set();
+    rows.forEach((row) => {
+      const currency = cols.currency ? row?.[cols.currency] : "";
+      const raw = cols.yearlyCost ? toNumber(row?.[cols.yearlyCost]) : 0;
+      totalGlobalCost += (convertAmount(raw, currency, state.currentMaterialCurrency) ?? 0) * duration;
+      if (cols.activity) {
+        const activity = String(row?.[cols.activity] ?? "").trim();
+        if (activity) activitySet.add(activity);
+      }
+    });
+    target.innerHTML = [
+      overviewKpiCard("Global Cost", formatCurrencyValue(totalGlobalCost, state.currentMaterialCurrency, 0), `${rows.length} row(s)`, "#10b981"),
+      overviewKpiCard("Activities", formatInt(activitySet.size), "In selected scope", "#137fec"),
+      overviewKpiCard("Period Duration", formatCompactNumber(duration, 2), "Applied multiplier", "#f59e0b"),
+    ].join("");
+  }
+
+  function renderOverviewDashboard() {
+    const view = $('view-overview');
+    if (!view || view.dataset.ready !== "1") return;
+    syncOverviewControls();
+    renderOverviewBenchmarkKpis();
+    renderOverviewWorkloadKpis();
+    renderOverviewMaterialsKpis();
+    renderOverviewOverhaulKpis();
+    renderOverviewSubcontractingKpis();
+  }
+
   function ensureSecondaryViewsMounted() {
     const scrollArea = $('scrollArea');
     if (!scrollArea) return;
@@ -11507,21 +11910,8 @@
       return view;
     };
 
-    ensureView(
-      'view-overview',
-      `
-        <section class="pt-8 space-y-6">
-          <div class="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-8 shadow-sm">
-            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-bold uppercase tracking-[0.18em]">
-              <span class="material-symbols-outlined text-[16px]">dashboard</span>
-              Overview
-            </div>
-            <h2 class="mt-4 text-3xl font-black tracking-tight">Overview</h2>
-            <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">Content to be defined.</p>
-          </div>
-        </section>
-      `
-    );
+    ensureView('view-overview');
+    initOverviewView();
     ensureView('view-materials');
     ensureView(
       'view-overhaul',
@@ -11583,6 +11973,11 @@
 
     // 3) render view-specific content
     if (viewKey === 'overview') {
+      initMaterialsView();
+      initOverhaulView();
+      initSubcontractingView();
+      initBenchmarkView();
+      renderOverviewDashboard();
       return;
     } else if (viewKey === 'workload') {
       recomputeAndRender();
