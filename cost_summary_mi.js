@@ -825,6 +825,10 @@ function computeModuleStatus(moduleKey) {
       const s = readFallbackStudySlice("cost-summary-mi-white-collar-fallback-v1");
       return Object.values(s).some(p => p && Object.keys(p).length > 0) ? "filled" : "empty";
     }
+    case "wbs": {
+      const s = readFallbackStudySlice("cost-summary-mi-wbs-fallback-v1");
+      return Object.values(s).some(p => p && Array.isArray(p.importedRows) && p.importedRows.length > 0) ? "filled" : "empty";
+    }
     case "tools_consumables": {
       if (hasPrimaryProjectConfig(state.studyConfig?.supportCosts?.toolsConsumables)) return "filled";
       const s = readFallbackStudySlice("cost-summary-mi-tools-consumables-fallback-v1");
@@ -911,6 +915,7 @@ const fallbackWorkspaceItems = new Set([
   "firming_rules",
   "workload_synthesis",
   "white_collar_definition",
+  "wbs",
   "tools_consumables",
   "vehicles",
   "mandatory_training",
