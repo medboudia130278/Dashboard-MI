@@ -89,6 +89,13 @@
         <button id="deleteStudyBtn" type="button" title="Delete study" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white border border-rose-200 text-rose-700 text-xs font-semibold hover:bg-rose-50 transition-all">
           <span class="material-symbols-outlined text-[16px]">delete</span>Delete
         </button>
+        <button id="exportConfigJsonBtn" type="button" title="Export configuration JSON" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-cyan-50 border border-cyan-200 text-cyan-700 text-xs font-semibold hover:bg-cyan-100 transition-all">
+          <span class="material-symbols-outlined text-[16px]">download</span>Export JSON
+        </button>
+        <button id="importConfigJsonBtn" type="button" title="Import configuration JSON" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white border border-cyan-200 text-cyan-700 text-xs font-semibold hover:bg-cyan-50 transition-all">
+          <span class="material-symbols-outlined text-[16px]">upload_file</span>Import JSON
+        </button>
+        <input id="importConfigJsonInput" type="file" accept=".json,application/json" class="hidden">
         <span id="currentStudyStatus" class="ml-auto text-xs text-slate-400 font-medium"></span>
         <!-- Hidden metadata nodes required by renderStudyWorkspace() -->
         <span id="currentStudyId" class="hidden"></span>

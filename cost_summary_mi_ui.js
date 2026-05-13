@@ -720,6 +720,139 @@
         window.updateToolbarStatusDots?.();
       }
 
+      const configExportStores = [
+        { key: projectPhaseFallbackKey, name: "projectPhases" },
+        { key: costCentersFallbackKey, name: "costCenters" },
+        { key: pioDefinitionFallbackKey, name: "pioDefinition" },
+        { key: currencyExchangeFallbackKey, name: "currencyExchange" },
+        { key: firmingRulesFallbackKey, name: "firmingRules" },
+        { key: guidePlanningFallbackKey, name: "guidePlanning" },
+        { key: workloadOverridesFallbackKey, name: "workloadSynthesis" },
+        { key: whiteCollarFallbackKey, name: "whiteCollar" },
+        { key: wbsFallbackKey, name: "wbs" },
+        { key: toolsConsumablesFallbackKey, name: "toolsConsumables" },
+        { key: vehiclesFallbackKey, name: "vehicles" },
+        { key: oscFallbackKey, name: "otherSupportCosts" },
+        { key: mandatoryTrainingFallbackKey, name: "mandatoryTraining" },
+      ];
+
+      function cloneJsonValue(value) {
+        return JSON.parse(JSON.stringify(value ?? {}));
+      }
+
+      function getCurrentStudyLabel() {
+        const selector = $("studySelector");
+        const selected = selector && selector.selectedOptions && selector.selectedOptions[0];
+        return (selected && selected.textContent ? selected.textContent.trim() : "") || getFallbackStudyId();
+      }
+
+      function safeFilePart(value) {
+        return String(value || "cost-summary-mi")
+          .trim()
+          .replace(/[^A-Za-z0-9._-]+/g, "_")
+          .replace(/^_+|_+$/g, "")
+          .slice(0, 80) || "cost-summary-mi";
+      }
+
+      function readConfigStoreSlice(storageKey, studyId) {
+        const all = safeReadJson(storageKey, {});
+        return cloneJsonValue(all && typeof all === "object" ? all[studyId] || {} : {});
+      }
+
+      function writeConfigStoreSlice(storageKey, studyId, value) {
+        const all = safeReadJson(storageKey, {});
+        all[studyId] = cloneJsonValue(value || {});
+        localStorage.setItem(storageKey, JSON.stringify(all));
+      }
+
+      function buildCostSummaryConfigExport() {
+        const studyId = getFallbackStudyId();
+        const modules = {};
+        configExportStores.forEach(function (store) {
+          modules[store.name] = readConfigStoreSlice(store.key, studyId);
+        });
+        return {
+          app: "cost-summary-mi",
+          schemaVersion: 1,
+          exportedAt: new Date().toISOString(),
+          sourceStudyId: studyId,
+          studyName: getCurrentStudyLabel(),
+          note: "Configuration only. Excel workbook data is not included.",
+          modules: modules,
+          sharedSettings: cloneJsonValue(safeReadJson(sharedSettingsKey, {})),
+        };
+      }
+
+      function exportCostSummaryConfigJson() {
+        try {
+          const payload = buildCostSummaryConfigExport();
+          const json = JSON.stringify(payload, null, 2);
+          const blob = new Blob([json], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          const datePart = new Date().toISOString().slice(0, 10);
+          link.href = url;
+          link.download = safeFilePart(payload.studyName) + "_config_" + datePart + ".json";
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          URL.revokeObjectURL(url);
+        } catch (err) {
+          console.error("Cost Summary config export error:", err);
+          window.alert("Unable to export JSON configuration: " + (err.message || err));
+        }
+      }
+
+      function refreshCostSummaryConfigViewsAfterImport() {
+        window.updateToolbarStatusDots?.();
+        if (!$("projectPhasesWorkspace")?.classList.contains("hidden")) renderFallbackProjectPhasesDrawer(moduleDefinitions.study_setup, moduleDefinitions.study_setup.items.project_phases);
+        if (!$("costCentersWorkspace")?.classList.contains("hidden")) renderFallbackCostCentersWorkspace();
+        if (!$("pioDefinitionWorkspace")?.classList.contains("hidden")) renderFallbackPioDefinitionWorkspace();
+        if (!$("currencyExchangeWorkspace")?.classList.contains("hidden")) renderFallbackCurrencyExchangeWorkspace();
+        if (!$("firmingRulesWorkspace")?.classList.contains("hidden")) renderFallbackFirmingRulesWorkspace();
+        if (!$("guidePlanningWorkspace")?.classList.contains("hidden")) renderFallbackGuidePlanningWorkspace();
+        if (!$("workloadSynthesisWorkspace")?.classList.contains("hidden")) renderFallbackWorkloadSynthesisWorkspace();
+        if (!$("whiteCollarDefinitionWorkspace")?.classList.contains("hidden")) renderFallbackWhiteCollarWorkspace();
+        if (!$("wbsWorkspace")?.classList.contains("hidden")) renderFallbackWbsWorkspace();
+        if (!$("toolsConsumablesWorkspace")?.classList.contains("hidden")) renderFallbackToolsConsumablesWorkspace();
+        if (!$("vehiclesWorkspace")?.classList.contains("hidden")) renderFallbackVehiclesWorkspace();
+        if (!$("oscWorkspace")?.classList.contains("hidden")) renderFallbackOscWorkspace();
+        if (!$("mandatoryTrainingWorkspace")?.classList.contains("hidden")) renderFallbackMandatoryTrainingWorkspace();
+      }
+
+      function importCostSummaryConfigPayload(payload) {
+        if (!payload || payload.app !== "cost-summary-mi" || Number(payload.schemaVersion) !== 1 || !payload.modules || typeof payload.modules !== "object") {
+          throw new Error("Invalid Cost Summary & MI configuration file.");
+        }
+        const studyId = getFallbackStudyId();
+        configExportStores.forEach(function (store) {
+          writeConfigStoreSlice(store.key, studyId, payload.modules[store.name] || {});
+        });
+        if (payload.sharedSettings && typeof payload.sharedSettings === "object") {
+          localStorage.setItem(sharedSettingsKey, JSON.stringify(payload.sharedSettings));
+        }
+        refreshCostSummaryConfigViewsAfterImport();
+      }
+
+      function importCostSummaryConfigJsonFile(file) {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function (evt) {
+          try {
+            const payload = JSON.parse(String(evt.target.result || ""));
+            const sourceName = payload && payload.studyName ? " from \"" + payload.studyName + "\"" : "";
+            const ok = window.confirm("Import Cost Summary & MI configuration" + sourceName + " into the current study? This will replace the current local configuration for this study. Excel workbook data is not included.");
+            if (!ok) return;
+            importCostSummaryConfigPayload(payload);
+            window.alert("Configuration imported successfully. Re-import the Excel source files separately if they are not already loaded on this PC.");
+          } catch (err) {
+            console.error("Cost Summary config import error:", err);
+            window.alert("Unable to import JSON configuration: " + (err.message || err));
+          }
+        };
+        reader.readAsText(file);
+      }
+
       function readSharedWorkbookForWorkspace(sourceId) {
         return safeReadJson(sharedStoreWorkbookLitePrefix + sourceId, null)
           || safeReadJson(sharedStoreWorkbookPrefix + sourceId, null);
@@ -7778,6 +7911,22 @@
       document.addEventListener("DOMContentLoaded", function () {
         updateToolbarStatusDots();
         document.addEventListener("click", function (event) {
+          if (event.target.closest("#exportConfigJsonBtn")) {
+            event.preventDefault();
+            exportCostSummaryConfigJson();
+            return;
+          }
+
+          if (event.target.closest("#importConfigJsonBtn")) {
+            event.preventDefault();
+            const input = $("importConfigJsonInput");
+            if (input) {
+              input.value = "";
+              input.click();
+            }
+            return;
+          }
+
           if (window.__costSummaryModuleReady && !fallbackInteractionIsActive()) return;
 
           const trigger = event.target.closest("[data-toolbar-trigger]");
@@ -8424,6 +8573,14 @@
         });
 
         document.addEventListener("change", function (event) {
+          if (event.target.id === "importConfigJsonInput") {
+            const fileInput = event.target;
+            const file = fileInput.files && fileInput.files[0];
+            importCostSummaryConfigJsonFile(file);
+            fileInput.value = "";
+            return;
+          }
+
           if (window.__costSummaryModuleReady && !fallbackInteractionIsActive()) return;
 
           const projectField = event.target.closest("[data-fallback-project-field]");
