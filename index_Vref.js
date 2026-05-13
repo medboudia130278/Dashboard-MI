@@ -1231,13 +1231,13 @@
   }
 
   function parseGeneralParameters(rows) {
-    // rows are already normalized keys (nom/valeur) by readSheet()
     if (!rows || !rows.length) return {};
 
-    // Try to locate columns
+    const nameKeys = ["nom", "name", "parameter", "parameter_name", "parametre", "key"];
+    const valueKeys = ["valeur", "value", "parameter_value", "valeur_parametre"];
     const cols = Object.keys(rows[0] || {});
-    const nameCol = cols.includes("nom") ? "nom" : (cols.includes("name") ? "name" : null);
-    const valueCol = cols.includes("valeur") ? "valeur" : (cols.includes("value") ? "value" : null);
+    const nameCol = nameKeys.find((key) => cols.includes(key)) || null;
+    const valueCol = valueKeys.find((key) => cols.includes(key)) || null;
 
     if (!nameCol || !valueCol) return {};
 
