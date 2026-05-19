@@ -5380,6 +5380,7 @@
         const titleEl = $("wbsCurrentProjectTitle");
         const metaEl = $("wbsCurrentProjectMeta");
         const importMetaEl = $("wbsImportMeta");
+        const workloadImportMetaEl = $("wbsWorkloadImportMeta");
         const missingEl = $("wbsMissingData");
         const rowCountEl = $("wbsWorkloadRowCount");
         const workloadToggleBtn = $("wbsWorkloadToggleBtn");
@@ -5392,7 +5393,7 @@
         const materialsPanel = $("wbsMaterialsPanel");
         const materialsTableBody = $("wbsMaterialsTableBody");
         const tableBody = $("wbsWorkloadTableBody");
-        if (!workspace || !list || !emptyEl || !contentEl || !statusEl || !titleEl || !metaEl || !importMetaEl || !missingEl || !rowCountEl || !tableBody || !materialsImportMetaEl || !materialsRowCountEl || !materialsTableBody) return;
+        if (!workspace || !list || !emptyEl || !contentEl || !statusEl || !titleEl || !metaEl || !importMetaEl || !workloadImportMetaEl || !missingEl || !rowCountEl || !tableBody || !materialsImportMetaEl || !materialsRowCountEl || !materialsTableBody) return;
 
         const projects = buildWbsProjects();
         const currentKey = workspace.dataset.currentProjectKey && projects.some(function (project) { return project.projectKey === workspace.dataset.currentProjectKey; })
@@ -5427,8 +5428,9 @@
         contentEl.classList.remove("hidden");
         titleEl.textContent = cur.projectName;
         metaEl.textContent = (cur.projectType || "No project type") + " | " + (cur.projectContext || "No context");
-        importMetaEl.textContent = cur.hasWbsImport ? "Workload imported: " + cur.wbsFileName + " | " + cur.wbsImportedRows.length + " row(s)" : "No Workload WBS file imported yet.";
-        materialsImportMetaEl.textContent = cur.hasWbsMaterialImport ? "Materials imported: " + cur.wbsMaterialFileName + " | " + cur.wbsMaterialImportedRows.length + " row(s)" : "No Materials WBS file imported yet.";
+        importMetaEl.textContent = "";
+        workloadImportMetaEl.textContent = cur.hasWbsImport ? "Workload imported: " + cur.wbsFileName + " | " + cur.wbsImportedRows.length + " imported row(s)" : "No Workload WBS file imported yet.";
+        materialsImportMetaEl.textContent = cur.hasWbsMaterialImport ? "Materials imported: " + cur.wbsMaterialFileName + " | " + cur.wbsMaterialImportedRows.length + " imported row(s)" : "No Materials WBS file imported yet.";
 
         const missingParts = [];
         if (!cur.hasPhases) missingParts.push('<div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">No phases found. Configure Project Phases first.</div>');
@@ -5443,7 +5445,7 @@
         missingEl.innerHTML = missingParts.join("");
 
         const generatedRows = buildGeneratedWbsWorkloadRows(cur);
-        rowCountEl.textContent = generatedRows.length + " row(s)";
+        rowCountEl.textContent = generatedRows.length + " generated row(s)";
         const workloadCollapsed = workspace.dataset.wbsWorkloadCollapsed === "true";
         if (workloadPanel) workloadPanel.classList.toggle("hidden", workloadCollapsed);
         if (workloadToggleBtn) workloadToggleBtn.setAttribute("aria-expanded", workloadCollapsed ? "false" : "true");
@@ -5466,7 +5468,7 @@
         }).join("") : '<tr><td colspan="9" class="py-8 text-center text-sm text-slate-500">No WBS workload row generated yet.</td></tr>';
 
         const generatedMaterialRows = buildGeneratedWbsMaterialRows(cur);
-        materialsRowCountEl.textContent = generatedMaterialRows.length + " row(s)";
+        materialsRowCountEl.textContent = generatedMaterialRows.length + " generated row(s)";
         const materialsCollapsed = workspace.dataset.wbsMaterialsCollapsed === "true";
         if (materialsPanel) materialsPanel.classList.toggle("hidden", materialsCollapsed);
         if (materialsToggleBtn) materialsToggleBtn.setAttribute("aria-expanded", materialsCollapsed ? "false" : "true");

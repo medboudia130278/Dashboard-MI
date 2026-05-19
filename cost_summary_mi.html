@@ -915,7 +915,7 @@
                   <div>
                     <h3 id="wbsCurrentProjectTitle" class="text-xl font-black tracking-tight">Project</h3>
                     <p id="wbsCurrentProjectMeta" class="mt-2 text-sm text-slate-500">Context</p>
-                    <p id="wbsImportMeta" class="mt-2 text-xs text-slate-500">No WBS file imported yet.</p>
+                    <p id="wbsImportMeta" class="hidden mt-2 text-xs text-slate-500"></p>
                   </div>
                   <label class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-cyan-50 border border-cyan-200 text-sm font-semibold text-cyan-700 hover:bg-cyan-100 transition-all shrink-0 cursor-pointer">
                     <span class="material-symbols-outlined text-[18px]">upload_file</span>
@@ -931,7 +931,7 @@
                 <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div>
                     <h3 class="text-base font-bold">Workload</h3>
-                    <p class="mt-1 text-sm text-slate-500">Generated from WBS Excel rows, Project Phases, Workload Table and Optimization coefficient table.</p>
+                    <p id="wbsWorkloadImportMeta" class="mt-1 text-xs text-slate-500">No Workload WBS file imported yet.</p>
                   </div>
                   <div class="flex flex-wrap items-center gap-2">
                     <label class="inline-flex items-center gap-2 rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs font-semibold text-cyan-700 hover:bg-cyan-100 transition-all cursor-pointer">
@@ -940,7 +940,7 @@
                       <input id="wbsExcelFileInput" type="file" accept=".xlsx,.xls,.xlsm" class="hidden">
                     </label>
                     <button id="wbsWorkloadToggleBtn" type="button" class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-all" aria-expanded="true">
-                      <span id="wbsWorkloadRowCount">0 row(s)</span>
+                      <span id="wbsWorkloadRowCount">0 generated row(s)</span>
                       <span id="wbsWorkloadToggleIcon" class="material-symbols-outlined text-[18px]">expand_less</span>
                     </button>
                   </div>
@@ -978,7 +978,7 @@
                       <input id="wbsMaterialsExcelFileInput" type="file" accept=".xlsx,.xls,.xlsm" class="hidden">
                     </label>
                     <button id="wbsMaterialsToggleBtn" type="button" class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-all" aria-expanded="true">
-                      <span id="wbsMaterialsRowCount">0 row(s)</span>
+                      <span id="wbsMaterialsRowCount">0 generated row(s)</span>
                       <span id="wbsMaterialsToggleIcon" class="material-symbols-outlined text-[18px]">expand_less</span>
                     </button>
                   </div>
