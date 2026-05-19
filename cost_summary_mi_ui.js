@@ -4849,6 +4849,8 @@
       function buildWbsProjects() {
         const persisted = readWbsFallbackState();
         const oscState = readOscFallbackState();
+        const tcState = readToolsConsumablesFallbackState();
+        const vehiclesState = readVehiclesFallbackState();
         const guidePlanningProjects = buildFallbackGuidePlanningProjects();
         const guidePlanningByLookup = buildProjectLookupMap(guidePlanningProjects);
         return buildWhiteCollarProjects().map(function (project) {
@@ -4866,6 +4868,17 @@
             readPersistedFallbackProjectState(oscState, lookupKeys),
             project.phases
           );
+          const toolsConsumablesProject = forceZeroMobWithoutPostWarranty(
+            fillMissingImportedPhaseValues(
+              readPersistedFallbackProjectState(tcState, lookupKeys),
+              project.phases
+            ),
+            project.phases
+          );
+          const vehiclesProject = fillMissingImportedPhaseValues(
+            readPersistedFallbackProjectState(vehiclesState, lookupKeys),
+            project.phases
+          );
           return Object.assign({}, project, {
             persistedKeys: lookupKeys,
             wbsImportedRows: importedRows,
@@ -4878,6 +4891,8 @@
             wbsMaterialRowOverrides: Object.assign({}, current.materialRowOverrides || {}),
             wbsGuidePlanningProject: guidePlanningProject,
             wbsOtherSupportCostProject: otherSupportCostProject,
+            wbsToolsConsumablesProject: toolsConsumablesProject,
+            wbsVehiclesProject: vehiclesProject,
             hasWbsImport: importedRows.length > 0,
             hasWbsMaterialImport: materialImportedRows.length > 0,
           });
@@ -4989,8 +5004,9 @@
             tasks: String(row.tasks || row.task || "").trim(),
           };
         }).filter(function (row) {
-          const isOtherSupportCost = isWbsOtherSupportCostDescription(row.description);
-          if (!row.description || (!row.subsystem && !isOtherSupportCost)) return false;
+          const description = normalizeWbsMaterialDescription(row.description);
+          const isProjectLevelMaterial = ["Other Support Costs", "Tools", "PPE", "Vehicles"].indexOf(description) !== -1;
+          if (!row.description || (!row.subsystem && !isProjectLevelMaterial)) return false;
           const uniqueKey = [
             row.description,
             row.subsystem,
@@ -5277,6 +5293,8 @@
         const selectedRecTypes = Array.isArray(guideProject.selectedRecurrentMaterialTypes) ? guideProject.selectedRecurrentMaterialTypes : [];
         const demobTypes = Object.assign({}, guideProject.demobilizationMaterialMonthsByType || {});
         const otherSupportCosts = Object.assign({}, project.wbsOtherSupportCostProject || {});
+        const toolsConsumables = Object.assign({}, project.wbsToolsConsumablesProject || {});
+        const vehicles = Object.assign({}, project.wbsVehiclesProject || {});
         const materialSubsystems = mergeWbsSubsystems(project.subsystems);
         const resolveWbsSourceSubsystems = createWbsSubsystemResolver(materialSubsystems);
 
@@ -5304,6 +5322,23 @@
           return false;
         }
 
+        function storedPositive(data, phaseKey, subsystem, periodType, colKey) {
+          const directKey = phaseKey + "|" + subsystem + "|" + periodType + "|" + colKey;
+          if ((toNumber(data[directKey]) || 0) > 0) return true;
+          const subsystemAliases = subsystem === "__shared__"
+            ? ["__shared__", "Shared / Depot Pool", "Shared Depot Pool", "Shared/Depot Pool", "Depot Pool"]
+            : subsystem === "__project_mgmt__"
+              ? ["__project_mgmt__", "Project / Management", "Project Management", "Project/Management"]
+              : [subsystem];
+          const subsystemKeys = subsystemAliases.map(function (value) { return normalizeWbsText(value).trim(); });
+          return Object.keys(data).some(function (key) {
+            const parts = String(key || "").split("|");
+            if (parts.length !== 4) return false;
+            if (parts[0] !== phaseKey || parts[2] !== periodType || parts[3] !== colKey) return false;
+            return subsystemKeys.indexOf(normalizeWbsText(parts[1]).trim()) !== -1 && (toNumber(data[key]) || 0) > 0;
+          });
+        }
+
         function otherSupportCostAllowedForPeriod(phase, periodType, phaseHasWarranty) {
           if (!phase || !phase.key) return false;
           if (periodType === "mob") {
@@ -5316,26 +5351,58 @@
           return false;
         }
 
+        function projectLevelMaterialAllowedForPeriod(description, phase, periodType, phaseHasWarranty) {
+          if (!phase || !phase.key) return false;
+          if (description === "Other Support Costs") {
+            return otherSupportCostAllowedForPeriod(phase, periodType, phaseHasWarranty);
+          }
+          if (periodType === "mob" && !phaseHasWarranty) return false;
+          if (description === "Tools") {
+            return ["ind_tools", "coll_tools", "spec_tools"].some(function (colKey) {
+              return storedPositive(toolsConsumables, phase.key, "__shared__", periodType, colKey);
+            });
+          }
+          if (description === "PPE") {
+            return storedPositive(toolsConsumables, phase.key, "__shared__", periodType, "ppe");
+          }
+          if (description === "Vehicles") {
+            if (periodType === "mob") {
+              return storedPositive(vehicles, phase.key, "__project_mgmt__", "mob", "capex");
+            }
+            if (periodType === "rec") {
+              return ["fuel", "opex"].some(function (colKey) {
+                return storedPositive(vehicles, phase.key, "__project_mgmt__", "rec", colKey);
+              });
+            }
+            if (periodType === "dem") {
+              return ["capex", "fuel", "opex"].some(function (colKey) {
+                return storedPositive(vehicles, phase.key, "__project_mgmt__", "dem", colKey);
+              });
+            }
+          }
+          return false;
+        }
+
         const rows = [];
         const seenGeneratedRows = new Set();
         (project.wbsMaterialImportedRows || []).forEach(function (sourceRow, sourceIndex) {
           const description = normalizeWbsMaterialDescription(sourceRow.description);
           if (!description) return;
-          const isOtherSupportCost = description === "Other Support Costs";
+          const isProjectLevelMaterial = ["Other Support Costs", "Tools", "PPE", "Vehicles"].indexOf(description) !== -1 && !String(sourceRow.subsystem || "").trim();
           const sourceSubsystems = resolveWbsSourceSubsystems(sourceRow.subsystem);
-          if (!isOtherSupportCost && !sourceSubsystems.length) return;
+          if (!isProjectLevelMaterial && !sourceSubsystems.length) return;
 
           project.phases.forEach(function (phase) {
             const phaseHasWarranty = !!(phase.postWarrantyStartDate && phase.postWarrantyEndDate);
             periods.forEach(function (period) {
               if (!sourceRowMatchesPeriod(sourceRow, period)) return;
-              if (isOtherSupportCost) {
-                if (!otherSupportCostAllowedForPeriod(phase, period.type, phaseHasWarranty)) return;
+              if (isProjectLevelMaterial) {
+                if (!projectLevelMaterialAllowedForPeriod(description, phase, period.type, phaseHasWarranty)) return;
               } else if (!materialAllowedForPeriod(description, period.type, phaseHasWarranty)) {
                 return;
               }
 
-              (isOtherSupportCost ? [""] : sourceSubsystems).forEach(function (subsystem) {
+              (isProjectLevelMaterial ? [""] : sourceSubsystems).forEach(function (subsystem) {
                 const rowKey = ["wbs_material", phase.key, period.type, sourceRow.id || sourceIndex, normalizeWbsText(description), normalizeWbsText(subsystem)].join("|");
                 const override = project.wbsMaterialRowOverrides[rowKey] || {};
                 const row = {
@@ -5438,8 +5505,13 @@
         if (!cur.hasWbsImport) missingParts.push('<div class="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">Import a WBS Excel file with a Workload sheet to generate workload rows.</div>');
         if (!cur.hasWbsMaterialImport) missingParts.push('<div class="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">Import a WBS Excel file with a Materials sheet to generate material rows.</div>');
         const importedMaterialRows = Array.isArray(cur.wbsMaterialImportedRows) ? cur.wbsMaterialImportedRows : [];
+        function isProjectLevelWbsMaterialRow(row) {
+          const description = normalizeWbsMaterialDescription(row && row.description);
+          return !String(row && row.subsystem || "").trim() && ["Other Support Costs", "Tools", "PPE", "Vehicles"].indexOf(description) !== -1;
+        }
         const hasOtherSupportMaterialRows = importedMaterialRows.some(function (row) { return isWbsOtherSupportCostDescription(row.description); });
-        const hasRegularMaterialRows = importedMaterialRows.some(function (row) { return !isWbsOtherSupportCostDescription(row.description); });
+        const hasProjectLevelMaterialRows = importedMaterialRows.some(isProjectLevelWbsMaterialRow);
+        const hasRegularMaterialRows = importedMaterialRows.some(function (row) { return !isProjectLevelWbsMaterialRow(row); });
         if (!cur.wbsGuidePlanningProject && hasRegularMaterialRows) missingParts.push('<div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">No Guide Planning Definition configuration found for this project. Configure Material Types before generating regular Materials rows.</div>');
         missingEl.classList.toggle("hidden", missingParts.length === 0);
         missingEl.innerHTML = missingParts.join("");
@@ -5484,7 +5556,7 @@
           const hasSubsystems = mergeWbsSubsystems(cur.subsystems).length > 0;
           if (hasRegularMaterialRows && !hasSubsystems) noMaterialMessage = "No matching subsystem source found for Materials. Check Workload Synthesis.";
           else if (hasRegularMaterialRows && !hasMob && !hasRec && !hasDem) noMaterialMessage = "No material type is enabled in Guide Planning Definition for MOB, REC or DEM.";
-          else if (hasOtherSupportMaterialRows) noMaterialMessage = "Imported Other Support Costs rows require Capex Cost > 0 for MOB or Annual Opex > 0 for REC in Other Support Costs Workspace.";
+          else if (hasOtherSupportMaterialRows || hasProjectLevelMaterialRows) noMaterialMessage = "Imported project-level Materials rows require matching positive values in Tools & Consumables, Vehicles, or Other Support Costs workspaces.";
           else noMaterialMessage = "Imported Materials rows do not match the enabled Guide Planning periods, material types, or subsystems.";
         }
         materialsTableBody.innerHTML = generatedMaterialRows.length ? generatedMaterialRows.map(function (row) {
