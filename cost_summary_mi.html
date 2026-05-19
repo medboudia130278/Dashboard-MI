@@ -1274,6 +1274,10 @@
           </div>
           <div class="flex items-center gap-3">
             <div id="tcWorkspaceStatus" class="text-xs font-semibold text-slate-500">No project selected.</div>
+            <button type="button" onclick="document.getElementById('tcHelpModal').classList.remove('hidden')" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-orange-50 border border-orange-200 text-orange-700 text-sm font-semibold hover:bg-orange-100 transition-all">
+              <span class="material-symbols-outlined text-[18px]">help</span>
+              How it works
+            </button>
             <button id="closeTcWorkspaceBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold hover:bg-slate-100 transition-all">
               <span class="material-symbols-outlined text-[18px]">close</span>
               Close
@@ -2031,6 +2035,91 @@
         <div class="rounded-xl border border-slate-200 bg-white px-4 py-3">
           <p class="font-semibold text-slate-800 mb-1">Currency display</p>
           <p class="text-slate-600">The display currency selector applies the workspace exchange rate to the calculated yearly cost. The row Currency field remains editable and is kept for source traceability.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tools & Consumables "How it works" modal -->
+  <div id="tcHelpModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm">
+    <div class="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl border border-slate-200 p-8">
+      <button type="button" onclick="document.getElementById('tcHelpModal').classList.add('hidden')" class="absolute top-5 right-5 inline-flex items-center justify-center size-9 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 transition-all">
+        <span class="material-symbols-outlined text-[18px]">close</span>
+      </button>
+
+      <div class="flex items-center gap-3 mb-6">
+        <span class="material-symbols-outlined text-[24px] text-orange-600">help</span>
+        <h2 class="text-xl font-black tracking-tight">How Tools &amp; Consumables works</h2>
+      </div>
+
+      <div class="space-y-5 text-sm text-slate-700 leading-6">
+        <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+          <p class="font-bold text-slate-800 mb-1">Excel source</p>
+          <p>The import reads the <strong>Project Cost Matrix</strong> sheet. Each row is classified by <strong>Subsystem</strong>, <strong>Cost Bucket</strong>, <strong>Allocation Level</strong>, <strong>Mobilization Total Cost</strong>, and <strong>Recurring Avg / Year</strong>. If a Phase column exists, the row is applied only to that phase; otherwise it is applied to every project phase.</p>
+        </div>
+
+        <div>
+          <p class="font-bold text-slate-800 mb-2">Column mapping</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+              <thead class="bg-slate-100 text-slate-600">
+                <tr>
+                  <th class="px-3 py-2 text-left font-bold">Excel condition</th>
+                  <th class="px-3 py-2 text-left font-bold">Table column</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <tr>
+                  <td class="px-3 py-2">Cost Bucket = Tooling, Allocation Level contains Technician</td>
+                  <td class="px-3 py-2 font-semibold">Individual tools</td>
+                </tr>
+                <tr class="bg-slate-50">
+                  <td class="px-3 py-2">Cost Bucket = Tooling, Allocation Level contains Team</td>
+                  <td class="px-3 py-2 font-semibold">Collective tools</td>
+                </tr>
+                <tr>
+                  <td class="px-3 py-2">Cost Bucket = Tooling, Allocation Level contains Depot</td>
+                  <td class="px-3 py-2 font-semibold">Special tools</td>
+                </tr>
+                <tr class="bg-slate-50">
+                  <td class="px-3 py-2">Cost Bucket = Consumables</td>
+                  <td class="px-3 py-2 font-semibold">Consumables</td>
+                </tr>
+                <tr>
+                  <td class="px-3 py-2">Cost Bucket = PPE</td>
+                  <td class="px-3 py-2 font-semibold">PPE</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div>
+          <p class="font-bold text-slate-800 mb-2">Period logic</p>
+          <ul class="space-y-3 pl-1">
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-700 text-[11px] font-bold">M</span>
+              <div><strong>MOB</strong> uses Mobilization Total Cost. It is forced to 0 when the phase has no Post Warranty Start and Post Warranty End.</div>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-bold">R</span>
+              <div><strong>REC</strong> uses Recurring Avg / Year.</div>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 text-[11px] font-bold">D</span>
+              <div><strong>DEM</strong> is always set to 0 by the Tools &amp; Consumables import.</div>
+            </li>
+          </ul>
+        </div>
+
+        <div class="rounded-xl border border-orange-100 bg-orange-50 px-4 py-4">
+          <p class="font-bold text-orange-800 mb-1">Special subsystem rows</p>
+          <p class="text-orange-700">If the Excel Subsystem contains <strong>Shared</strong> or <strong>Depot Pool</strong>, it is displayed as <strong>Shared / Depot Pool</strong>. If it contains <strong>MANAGEMENT</strong>, it is displayed as the project-level row <strong>MANAGEMENT</strong>. Other subsystem names are matched against the project subsystems from Workload Synthesis.</p>
+        </div>
+
+        <div class="rounded-xl border border-slate-200 bg-white px-4 py-3">
+          <p class="font-semibold text-slate-800 mb-1">Displayed values</p>
+          <p class="text-slate-600">Rows with the same Phase, Subsystem, Period and cost type are summed. Values are stored in EUR, displayed using the selected currency, and remain editable directly in the table.</p>
         </div>
       </div>
     </div>

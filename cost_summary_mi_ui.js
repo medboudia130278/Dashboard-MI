@@ -5781,11 +5781,13 @@
           const phaseHasWarranty = !!(phase.postWarrantyStartDate && phase.postWarrantyEndDate);
           const isCollapsed = collapsedPhases.has(phase.key);
           const hasSharedData = Object.keys(projData).some(function (k) { return k.indexOf(phase.key + "|__shared__|") === 0; });
+          const hasManagementData = Object.keys(projData).some(function (k) { return k.indexOf(phase.key + "|__management__|") === 0; });
 
           const collapsedLabel = (function () {
             const parts = [];
             if (subsystems.length) parts.push(subsystems.length + " subsystem(s)");
             if (hasSharedData) parts.push("shared");
+            if (hasManagementData) parts.push("management");
             return parts.length ? parts.join(" + ") + " hidden" : "";
           })();
 
@@ -5804,7 +5806,7 @@
               (isCollapsed && collapsedLabel ? '<span class="text-[10px] text-slate-400">' + collapsedLabel + '</span>' : '') +
             '</div>';
 
-          if (!subsystems.length && !hasSharedData) {
+          if (!subsystems.length && !hasSharedData && !hasManagementData) {
             rows.push(
               '<tr class="border-t border-slate-200 bg-slate-50/60">' +
                 '<td class="py-3 pr-3 align-top text-sm" ' + phaseCellStyle(phaseIdx) + '>' + phaseToggleBtn + '</td>' +
@@ -5823,7 +5825,7 @@
             return;
           }
 
-          const phaseRowspan = (subsystems.length + (hasSharedData ? 1 : 0)) * PERIODS.length;
+          const phaseRowspan = (subsystems.length + (hasSharedData ? 1 : 0) + (hasManagementData ? 1 : 0)) * PERIODS.length;
 
           subsystems.forEach(function (subsystem, subIdx) {
             PERIODS.forEach(function (period, periodIdx) {
@@ -5878,6 +5880,41 @@
                 const val = mobForced ? 0 : resolveCell(phase.key, "__shared__", period.type, col.key);
                 const isLast = colIdx === TC_COLS.length - 1;
                 rowHtml += '<td class="py-1.5 ' + (isLast ? "pl-3" : "px-3") + ' text-center bg-amber-50">' + tcCellInput(phase.key, "__shared__", period.type, col.key, val, mobForced) + '</td>';
+              });
+
+              rowHtml += '</tr>';
+              rows.push(rowHtml);
+            });
+          }
+
+          // MANAGEMENT pseudo-subsystem rows (violet styling)
+          if (hasManagementData) {
+            PERIODS.forEach(function (period, periodIdx) {
+              const isFirstManagement = periodIdx === 0;
+              let rowHtml = '<tr class="bg-violet-50/60">';
+
+              // Phase cell: only needed when no regular or shared rows already rendered it
+              if (subsystems.length === 0 && !hasSharedData && isFirstManagement) {
+                rowHtml += '<td rowspan="' + phaseRowspan + '" class="py-3 pr-3 align-top border-t border-slate-200 text-sm" ' + phaseCellStyle(phaseIdx) + '>' + phaseToggleBtn + '</td>';
+              }
+
+              if (isFirstManagement) {
+                rowHtml +=
+                  '<td rowspan="' + PERIODS.length + '" class="py-2 px-3 align-middle border-t border-violet-200 text-sm">' +
+                    '<div class="flex flex-col gap-1">' +
+                      '<span class="italic font-medium text-violet-700 whitespace-nowrap">MANAGEMENT</span>' +
+                      '<span class="inline-flex items-center self-start px-1.5 py-0.5 rounded text-[9px] font-bold bg-violet-100 text-violet-700 border border-violet-200">Project-level</span>' +
+                    '</div>' +
+                  '</td>';
+              }
+
+              rowHtml += '<td class="py-2 px-3 whitespace-nowrap' + (isFirstManagement ? " border-t border-violet-200" : "") + '">' + periodBadge(period) + '</td>';
+
+              TC_COLS.forEach(function (col, colIdx) {
+                const mobForced = period.type === "mob" && !phaseHasWarranty;
+                const val = mobForced ? 0 : resolveCell(phase.key, "__management__", period.type, col.key);
+                const isLast = colIdx === TC_COLS.length - 1;
+                rowHtml += '<td class="py-1.5 ' + (isLast ? "pl-3" : "px-3") + ' text-center bg-violet-50">' + tcCellInput(phase.key, "__management__", period.type, col.key, val, mobForced) + '</td>';
               });
 
               rowHtml += '</tr>';
@@ -5946,10 +5983,11 @@
               ).trim();
               if (!subsystemRaw) return;
 
-              // Normalize subsystem: detect "Shared / depot pool" → canonical __shared__
+              // Normalize subsystem: detect project-level pseudo-subsystems.
               const normSub = nk(subsystemRaw);
               const isSharedRow = normSub.indexOf("shared") !== -1 || normSub.indexOf("depot_pool") !== -1;
-              const subsystem = isSharedRow ? "__shared__" : (subByNorm.get(normSub) || subsystemRaw);
+              const isManagementRow = normSub.indexOf("management") !== -1;
+              const subsystem = isSharedRow ? "__shared__" : (isManagementRow ? "__management__" : (subByNorm.get(normSub) || subsystemRaw));
 
               const costBucket = nk(
                 rawRow["Cost Bucket"] || rawRow["cost_bucket"] || rawRow["Category"] ||
