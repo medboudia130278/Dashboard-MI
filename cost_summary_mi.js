@@ -827,7 +827,10 @@ function computeModuleStatus(moduleKey) {
     }
     case "wbs": {
       const s = readFallbackStudySlice("cost-summary-mi-wbs-fallback-v1");
-      return Object.values(s).some(p => p && Array.isArray(p.importedRows) && p.importedRows.length > 0) ? "filled" : "empty";
+      return Object.values(s).some(p => p && (
+        (Array.isArray(p.importedRows) && p.importedRows.length > 0) ||
+        (Array.isArray(p.materialImportedRows) && p.materialImportedRows.length > 0)
+      )) ? "filled" : "empty";
     }
     case "tools_consumables": {
       if (hasPrimaryProjectConfig(state.studyConfig?.supportCosts?.toolsConsumables)) return "filled";
@@ -1379,6 +1382,10 @@ function getCostCentersStore() {
 
 function publishCostCentersBridge() {
   window.__costSummaryCostCentersStore = getCostCentersStore();
+}
+
+function publishGuidePlanningBridge() {
+  window.__costSummaryGuidePlanningStore = getGuidePlanningStore();
 }
 
 function publishProjectPhasesBridge() {
@@ -2477,6 +2484,7 @@ async function saveGuidePlanningState(mutator) {
       },
     },
   });
+  publishGuidePlanningBridge();
   updateToolbarStatusDots();
 }
 
@@ -5387,6 +5395,7 @@ async function refreshSharedSnapshot() {
   await hydrateSharedState();
   publishProjectPhasesBridge();
   publishCostCentersBridge();
+  publishGuidePlanningBridge();
   renderStudyWorkspace();
   renderSharedStoreSummary();
   renderProjectDataPreview();
@@ -5406,6 +5415,7 @@ async function switchToStudy(studyId) {
   setLastOpenStudyId(studyId);
   publishProjectPhasesBridge();
   publishCostCentersBridge();
+  publishGuidePlanningBridge();
   applyDraftToForm(state.draft);
   renderStudyWorkspace();
   refreshStatus(state.draft);
@@ -5422,6 +5432,7 @@ async function initCostSummaryMIPage() {
     renderConfigurationToolbar();
     publishProjectPhasesBridge();
     publishCostCentersBridge();
+    publishGuidePlanningBridge();
     updateToolbarStatusDots();
     renderCalculationBlocks();
     renderWorkbookOutline();

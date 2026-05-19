@@ -720,6 +720,59 @@
         window.updateToolbarStatusDots?.();
       }
 
+      function readCombinedGuidePlanningState() {
+        function unionList(left, right) {
+          return Array.from(new Set([]
+            .concat(Array.isArray(left) ? left : [])
+            .concat(Array.isArray(right) ? right : [])
+            .filter(Boolean)));
+        }
+        function mergeRows(left, right) {
+          const rows = []
+            .concat(Array.isArray(left) ? left : [])
+            .concat(Array.isArray(right) ? right : []);
+          const seen = new Set();
+          return rows.filter(function (row) {
+            const key = row && (row.id || row.rowKey || JSON.stringify(row));
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+        }
+        const primary = window.__costSummaryGuidePlanningStore && typeof window.__costSummaryGuidePlanningStore === "object"
+          ? window.__costSummaryGuidePlanningStore
+          : {};
+        const fallback = readGuidePlanningFallbackState();
+        const merged = Object.assign({}, fallback, primary);
+        Array.from(new Set(Object.keys(fallback || {}).concat(Object.keys(primary || {})))).forEach(function (projectKey) {
+          const fallbackProject = fallback[projectKey] || {};
+          const primaryProject = primary[projectKey] || {};
+          merged[projectKey] = Object.assign({}, fallbackProject, primaryProject, {
+            selectedMaterialTypes: unionList(fallbackProject.selectedMaterialTypes, primaryProject.selectedMaterialTypes),
+            selectedSubcontractingTypes: unionList(fallbackProject.selectedSubcontractingTypes, primaryProject.selectedSubcontractingTypes),
+            selectedRecurrentMaterialTypes: unionList(fallbackProject.selectedRecurrentMaterialTypes, primaryProject.selectedRecurrentMaterialTypes),
+            selectedRecurrentSubcontractingTypes: unionList(fallbackProject.selectedRecurrentSubcontractingTypes, primaryProject.selectedRecurrentSubcontractingTypes),
+            mobilizationWorkloadMonthsByPosition: Object.assign({}, fallbackProject.mobilizationWorkloadMonthsByPosition || {}, primaryProject.mobilizationWorkloadMonthsByPosition || {}),
+            demobilizationWorkloadMonthsByPosition: Object.assign({}, fallbackProject.demobilizationWorkloadMonthsByPosition || {}, primaryProject.demobilizationWorkloadMonthsByPosition || {}),
+            demobilizationMaterialMonthsByType: Object.assign({}, fallbackProject.demobilizationMaterialMonthsByType || {}, primaryProject.demobilizationMaterialMonthsByType || {}),
+            demobilizationSubcontractingMonthsByType: Object.assign({}, fallbackProject.demobilizationSubcontractingMonthsByType || {}, primaryProject.demobilizationSubcontractingMonthsByType || {}),
+            rowOverrides: Object.assign({}, fallbackProject.rowOverrides || {}, primaryProject.rowOverrides || {}),
+            customWorkloadRows: mergeRows(fallbackProject.customWorkloadRows, primaryProject.customWorkloadRows),
+            customMaterialRows: mergeRows(fallbackProject.customMaterialRows, primaryProject.customMaterialRows),
+            customSubcontractingRows: mergeRows(fallbackProject.customSubcontractingRows, primaryProject.customSubcontractingRows),
+            customRecurrentWorkloadRows: mergeRows(fallbackProject.customRecurrentWorkloadRows, primaryProject.customRecurrentWorkloadRows),
+            customRecurrentMaterialRows: mergeRows(fallbackProject.customRecurrentMaterialRows, primaryProject.customRecurrentMaterialRows),
+            customRecurrentSubcontractingRows: mergeRows(fallbackProject.customRecurrentSubcontractingRows, primaryProject.customRecurrentSubcontractingRows),
+            customDemobilizationWorkloadRows: mergeRows(fallbackProject.customDemobilizationWorkloadRows, primaryProject.customDemobilizationWorkloadRows),
+            customDemobilizationMaterialRows: mergeRows(fallbackProject.customDemobilizationMaterialRows, primaryProject.customDemobilizationMaterialRows),
+            customDemobilizationSubcontractingRows: mergeRows(fallbackProject.customDemobilizationSubcontractingRows, primaryProject.customDemobilizationSubcontractingRows),
+            customOverhaulRenewalRows: mergeRows(fallbackProject.customOverhaulRenewalRows, primaryProject.customOverhaulRenewalRows),
+            riskRows: mergeRows(fallbackProject.riskRows || fallbackProject.customRiskRows, primaryProject.riskRows || primaryProject.customRiskRows),
+          });
+        });
+        return merged;
+      }
+
       const configExportStores = [
         { key: projectPhaseFallbackKey, name: "projectPhases" },
         { key: costCentersFallbackKey, name: "costCenters" },
@@ -2535,7 +2588,7 @@
       }
 
       function buildFallbackGuidePlanningProjects() {
-        const persisted = readGuidePlanningFallbackState();
+        const persisted = readCombinedGuidePlanningState();
         const projectPhaseProjects = buildCombinedProjectPhaseProjects();
         const costCenterProjects = buildFallbackCostCenterProjects();
         const pioDefinitionProjects = buildFallbackPioDefinitionProjects();
@@ -4743,6 +4796,41 @@
         ];
       }
 
+      function createWbsSubsystemResolver(subsystems) {
+        const sourceSubsystems = Array.isArray(subsystems) ? subsystems : [];
+        const subsystemLookup = new Map(sourceSubsystems.map(function (subsystem) {
+          return [normalizeWbsText(subsystem), subsystem];
+        }));
+        return function resolveWbsSourceSubsystems(sourceSubsystemValue) {
+          const normalized = normalizeWbsText(sourceSubsystemValue);
+          if (!normalized) return [];
+          const exact = subsystemLookup.get(normalized);
+          if (exact) return [exact];
+          if (normalized === "feeding system") {
+            return sourceSubsystems.filter(function (subsystem) {
+              const subKey = normalizeWbsText(subsystem);
+              return subKey === "3rd rail" || subKey === "third rail" || subKey === "cat";
+            });
+          }
+          return [];
+        };
+      }
+
+      function mergeWbsSubsystems() {
+        const seen = new Set();
+        const result = [];
+        Array.from(arguments).forEach(function (list) {
+          (Array.isArray(list) ? list : []).forEach(function (value) {
+            const subsystem = String(value || "").trim();
+            const key = normalizeWbsText(subsystem);
+            if (!subsystem || seen.has(key)) return;
+            seen.add(key);
+            result.push(subsystem);
+          });
+        });
+        return result;
+      }
+
       function getWbsRateKey(positionType) {
         return {
           Manager: "managerRate",
@@ -4755,17 +4843,32 @@
 
       function buildWbsProjects() {
         const persisted = readWbsFallbackState();
+        const guidePlanningProjects = buildFallbackGuidePlanningProjects();
+        const guidePlanningByLookup = buildProjectLookupMap(guidePlanningProjects);
         return buildWhiteCollarProjects().map(function (project) {
           const lookupKeys = getProjectLookupKeys(project);
           const current = readPersistedFallbackProjectState(persisted, lookupKeys);
           const importedRows = Array.isArray(current.importedRows) ? current.importedRows : [];
+          const materialImportedRows = Array.isArray(current.materialImportedRows) ? current.materialImportedRows : [];
+          const guidePlanningProject = findProjectByLookupKeys(guidePlanningByLookup, lookupKeys)
+            || guidePlanningProjects.find(function (candidate) {
+              return normalizeWorkspaceKey(candidate.projectKey) === normalizeWorkspaceKey(project.projectKey)
+                || normalizeWorkspaceKey(candidate.projectName) === normalizeWorkspaceKey(project.projectName);
+            })
+            || null;
           return Object.assign({}, project, {
             persistedKeys: lookupKeys,
             wbsImportedRows: importedRows,
             wbsFileName: current.fileName || "",
             wbsImportedAt: current.importedAt || "",
             wbsRowOverrides: Object.assign({}, current.rowOverrides || {}),
+            wbsMaterialImportedRows: materialImportedRows,
+            wbsMaterialFileName: current.materialFileName || "",
+            wbsMaterialImportedAt: current.materialImportedAt || "",
+            wbsMaterialRowOverrides: Object.assign({}, current.materialRowOverrides || {}),
+            wbsGuidePlanningProject: guidePlanningProject,
             hasWbsImport: importedRows.length > 0,
+            hasWbsMaterialImport: materialImportedRows.length > 0,
           });
         });
       }
@@ -4790,6 +4893,109 @@
         });
       }
 
+      function saveWbsMaterialRowField(projectKey, rowKey, field, value) {
+        if (!projectKey || !rowKey || !field) return;
+        saveWbsProject(projectKey, function (project) {
+          const rowOverrides = Object.assign({}, project.materialRowOverrides || {});
+          const row = Object.assign({}, rowOverrides[rowKey] || {});
+          row[field] = value || "";
+          rowOverrides[rowKey] = row;
+          project.materialRowOverrides = rowOverrides;
+          return project;
+        });
+      }
+
+      function findWbsSheetName(workbook, expectedKey) {
+        return workbook.SheetNames.find(function (name) {
+          const key = normalizeWbsExcelKey(name);
+          return key === expectedKey || key.indexOf(expectedKey) !== -1;
+        }) || "";
+      }
+
+      function parseWbsWorkloadRowsFromWorkbook(workbook) {
+        const sheetName = findWbsSheetName(workbook, "workload");
+        if (!sheetName) return { sheetName: "", rows: [] };
+        const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "", raw: false, blankrows: false });
+        const seenImportedRows = new Set();
+        const rows = rawRows.map(function (rawRow, index) {
+          const row = {};
+          Object.entries(rawRow).forEach(function (entry) {
+            row[normalizeWbsExcelKey(entry[0])] = entry[1];
+          });
+          const description = String(row.description || "").trim();
+          const positionType = normalizeWbsPositionType(row.position_type || row.positiontype || row.type || "");
+          return {
+            id: "wbs_" + index,
+            description: description,
+            positionType: positionType,
+            subsystem: String(row.subsystem || row.sub_system || "").trim(),
+            period: String(row.period || "").trim(),
+            costsType: String(row.costs_type || row.cost_type || "").trim(),
+            pbsIbs: String(row.pbs_ibs || row.pbs || row.ibs || "").trim(),
+            abs: String(row.abs || "").trim(),
+            associatedWp: String(row.associated_wp || row.associated_work_package || row.wp || "").trim(),
+            tasks: String(row.tasks || row.task || "").trim(),
+          };
+        }).filter(function (row) {
+          if (!row.description || !row.positionType) return false;
+          const uniqueKey = [
+            row.description,
+            row.positionType,
+            row.subsystem,
+            row.period,
+            row.costsType,
+            row.pbsIbs,
+            row.abs,
+            row.associatedWp,
+            row.tasks,
+          ].map(normalizeWbsText).join("|");
+          if (seenImportedRows.has(uniqueKey)) return false;
+          seenImportedRows.add(uniqueKey);
+          return true;
+        });
+        return { sheetName: sheetName, rows: rows };
+      }
+
+      function parseWbsMaterialRowsFromWorkbook(workbook) {
+        const sheetName = findWbsSheetName(workbook, "materials");
+        if (!sheetName) return { sheetName: "", rows: [] };
+        const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "", raw: false, blankrows: false });
+        const seenImportedRows = new Set();
+        const rows = rawRows.map(function (rawRow, index) {
+          const row = {};
+          Object.entries(rawRow).forEach(function (entry) {
+            row[normalizeWbsExcelKey(entry[0])] = entry[1];
+          });
+          return {
+            id: "wbs_material_" + index,
+            description: String(row.description || "").trim(),
+            subsystem: String(row.subsystem || row.sub_system || "").trim(),
+            period: String(row.period || "").trim(),
+            costsType: String(row.costs_type || row.cost_type || "").trim(),
+            pbsIbs: String(row.pbs_ibs || row.pbs || row.ibs || "").trim(),
+            abs: String(row.abs || "").trim(),
+            associatedWp: String(row.associated_wp || row.associated_work_package || row.wp || "").trim(),
+            tasks: String(row.tasks || row.task || "").trim(),
+          };
+        }).filter(function (row) {
+          if (!row.description || !row.subsystem) return false;
+          const uniqueKey = [
+            row.description,
+            row.subsystem,
+            row.period,
+            row.costsType,
+            row.pbsIbs,
+            row.abs,
+            row.associatedWp,
+            row.tasks,
+          ].map(normalizeWbsText).join("|");
+          if (seenImportedRows.has(uniqueKey)) return false;
+          seenImportedRows.add(uniqueKey);
+          return true;
+        });
+        return { sheetName: sheetName, rows: rows };
+      }
+
       function importWbsFromExcel(projectKey, file) {
         if (!file || !projectKey) return;
         if (typeof XLSX === "undefined") { window.alert("XLSX library is not available on this page."); return; }
@@ -4799,61 +5005,19 @@
           try {
             const data = new Uint8Array(evt.target.result);
             const wb = XLSX.read(data, { type: "array" });
-            const sheetName = wb.SheetNames.find(function (name) {
-              const key = normalizeWbsExcelKey(name);
-              return key === "workload" || key.indexOf("workload") !== -1;
-            });
-            if (!sheetName) {
+            const parsed = parseWbsWorkloadRowsFromWorkbook(wb);
+            if (!parsed.sheetName) {
               window.alert("No 'Workload' sheet found in this WBS Excel file. Available sheets: " + wb.SheetNames.join(", "));
               return;
             }
 
-            const rawRows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: "", raw: false, blankrows: false });
-            const seenImportedRows = new Set();
-            const importedRows = rawRows.map(function (rawRow, index) {
-              const row = {};
-              Object.entries(rawRow).forEach(function (entry) {
-                row[normalizeWbsExcelKey(entry[0])] = entry[1];
-              });
-              const description = String(row.description || "").trim();
-              const positionType = normalizeWbsPositionType(row.position_type || row.positiontype || row.type || "");
-              return {
-                id: "wbs_" + index,
-                description: description,
-                positionType: positionType,
-                subsystem: String(row.subsystem || row.sub_system || "").trim(),
-                period: String(row.period || "").trim(),
-                costsType: String(row.costs_type || row.cost_type || "").trim(),
-                pbsIbs: String(row.pbs_ibs || row.pbs || row.ibs || "").trim(),
-                abs: String(row.abs || "").trim(),
-                associatedWp: String(row.associated_wp || row.associated_work_package || row.wp || "").trim(),
-                tasks: String(row.tasks || row.task || "").trim(),
-              };
-            }).filter(function (row) {
-              if (!row.description || !row.positionType) return false;
-              const uniqueKey = [
-                row.description,
-                row.positionType,
-                row.subsystem,
-                row.period,
-                row.costsType,
-                row.pbsIbs,
-                row.abs,
-                row.associatedWp,
-                row.tasks,
-              ].map(normalizeWbsText).join("|");
-              if (seenImportedRows.has(uniqueKey)) return false;
-              seenImportedRows.add(uniqueKey);
-              return true;
-            });
-
-            if (!importedRows.length) {
+            if (!parsed.rows.length) {
               window.alert("No valid WBS rows found. Expected at least Description and Position type columns in the Workload sheet.");
               return;
             }
 
             saveWbsProject(projectKey, function (project) {
-              project.importedRows = importedRows;
+              project.importedRows = parsed.rows;
               project.fileName = file.name || "";
               project.importedAt = new Date().toISOString();
               project.rowOverrides = {};
@@ -4869,27 +5033,90 @@
         reader.readAsArrayBuffer(file);
       }
 
+      function importWbsMaterialsFromExcel(projectKey, file) {
+        if (!file || !projectKey) return;
+        if (typeof XLSX === "undefined") { window.alert("XLSX library is not available on this page."); return; }
+
+        const reader = new FileReader();
+        reader.onload = function (evt) {
+          try {
+            const data = new Uint8Array(evt.target.result);
+            const wb = XLSX.read(data, { type: "array" });
+            const parsed = parseWbsMaterialRowsFromWorkbook(wb);
+            if (!parsed.sheetName) {
+              window.alert("No 'Materials' sheet found in this WBS Excel file. Available sheets: " + wb.SheetNames.join(", "));
+              return;
+            }
+
+            if (!parsed.rows.length) {
+              window.alert("No valid WBS material rows found. Expected at least Description and Subsystem columns in the Materials sheet.");
+              return;
+            }
+
+            saveWbsProject(projectKey, function (project) {
+              project.materialImportedRows = parsed.rows;
+              project.materialFileName = file.name || "";
+              project.materialImportedAt = new Date().toISOString();
+              project.materialRowOverrides = {};
+              return project;
+            });
+            if (typeof window.updateToolbarStatusDots === "function") window.updateToolbarStatusDots();
+            renderFallbackWbsWorkspace();
+          } catch (err) {
+            console.error("WBS Materials Excel import error:", err);
+            window.alert("Failed to parse WBS Materials Excel file: " + (err.message || err));
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      }
+
+      function importWbsCombinedFromExcel(projectKey, file) {
+        if (!file || !projectKey) return;
+        if (typeof XLSX === "undefined") { window.alert("XLSX library is not available on this page."); return; }
+
+        const reader = new FileReader();
+        reader.onload = function (evt) {
+          try {
+            const data = new Uint8Array(evt.target.result);
+            const wb = XLSX.read(data, { type: "array" });
+            const workload = parseWbsWorkloadRowsFromWorkbook(wb);
+            const materials = parseWbsMaterialRowsFromWorkbook(wb);
+
+            if (!workload.sheetName || !materials.sheetName) {
+              window.alert("The WBS Excel file must contain both 'Workload' and 'Materials' sheets. Available sheets: " + wb.SheetNames.join(", "));
+              return;
+            }
+            if (!workload.rows.length || !materials.rows.length) {
+              window.alert("The WBS Excel file was found, but valid rows are missing. Workload expects Description + Position type; Materials expects Description + Subsystem.");
+              return;
+            }
+
+            saveWbsProject(projectKey, function (project) {
+              project.importedRows = workload.rows;
+              project.fileName = file.name || "";
+              project.importedAt = new Date().toISOString();
+              project.rowOverrides = {};
+              project.materialImportedRows = materials.rows;
+              project.materialFileName = file.name || "";
+              project.materialImportedAt = new Date().toISOString();
+              project.materialRowOverrides = {};
+              return project;
+            });
+            if (typeof window.updateToolbarStatusDots === "function") window.updateToolbarStatusDots();
+            renderFallbackWbsWorkspace();
+          } catch (err) {
+            console.error("WBS combined Excel import error:", err);
+            window.alert("Failed to parse WBS Excel file: " + (err.message || err));
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      }
+
       function buildGeneratedWbsWorkloadRows(project) {
         const periods = getWbsPeriodDefinitions(project);
         const wcOverrides = readPersistedFallbackProjectState(readWhiteCollarFallbackState(), getProjectLookupKeys(project));
         const subsystems = Array.isArray(project.subsystems) ? project.subsystems : [];
-        const subsystemLookup = new Map(subsystems.map(function (subsystem) {
-          return [normalizeWbsText(subsystem), subsystem];
-        }));
-
-        function resolveWbsSourceSubsystems(sourceSubsystemValue) {
-          const normalized = normalizeWbsText(sourceSubsystemValue);
-          if (!normalized) return [];
-          const exact = subsystemLookup.get(normalized);
-          if (exact) return [exact];
-          if (normalized === "feeding system") {
-            return subsystems.filter(function (subsystem) {
-              const subKey = normalizeWbsText(subsystem);
-              return subKey === "3rd rail" || subKey === "third rail" || subKey === "cat";
-            });
-          }
-          return [];
-        }
+        const resolveWbsSourceSubsystems = createWbsSubsystemResolver(subsystems);
 
         function defaultRate(col, periodType, phaseHasWarranty) {
           if (col === "workerRate") return 0;
@@ -5019,6 +5246,100 @@
         return rows;
       }
 
+      function normalizeWbsMaterialDescription(value) {
+        const normalized = normalizeWbsText(value);
+        if (normalized === "preventive spares" || normalized === "preventive spare") return "Preventive spares";
+        if (normalized === "corrective spares" || normalized === "corrective spare") return "Corrective spares";
+        if (normalized === "tools" || normalized === "tool") return "Tools";
+        if (normalized === "consumables" || normalized === "consumable") return "Consumables";
+        if (normalized === "ppe") return "PPE";
+        if (normalized === "vehicles" || normalized === "vehicle") return "Vehicles";
+        return "";
+      }
+
+      function buildGeneratedWbsMaterialRows(project) {
+        const periods = getWbsPeriodDefinitions(project);
+        const guideProject = project.wbsGuidePlanningProject || {};
+        const selectedMobTypes = Array.isArray(guideProject.selectedMaterialTypes) ? guideProject.selectedMaterialTypes : [];
+        const selectedRecTypes = Array.isArray(guideProject.selectedRecurrentMaterialTypes) ? guideProject.selectedRecurrentMaterialTypes : [];
+        const demobTypes = Object.assign({}, guideProject.demobilizationMaterialMonthsByType || {});
+        const materialSubsystems = mergeWbsSubsystems(project.subsystems);
+        const resolveWbsSourceSubsystems = createWbsSubsystemResolver(materialSubsystems);
+
+        function sourceRowMatchesPeriod(sourceRow, period) {
+          const sourcePeriod = normalizeWbsText(sourceRow.period);
+          if (!sourcePeriod) return true;
+          return sourcePeriod === normalizeWbsText(period.type) || sourcePeriod === normalizeWbsText(period.label);
+        }
+
+        function materialAllowedForPeriod(description, periodType, phaseHasWarranty) {
+          if (periodType === "mob") {
+            if (!phaseHasWarranty) return false;
+            if (description === "Preventive spares" || description === "Corrective spares") {
+              return selectedMobTypes.indexOf("Spare Parts") >= 0;
+            }
+            return selectedMobTypes.indexOf(description) >= 0;
+          }
+          if (periodType === "rec") {
+            return selectedRecTypes.indexOf(description) >= 0;
+          }
+          if (periodType === "dem") {
+            if (["Preventive spares", "Corrective spares", "Vehicles"].indexOf(description) === -1) return false;
+            return (toNumber(demobTypes[description]) || 0) > 0;
+          }
+          return false;
+        }
+
+        const rows = [];
+        const seenGeneratedRows = new Set();
+        (project.wbsMaterialImportedRows || []).forEach(function (sourceRow, sourceIndex) {
+          const description = normalizeWbsMaterialDescription(sourceRow.description);
+          if (!description) return;
+          const sourceSubsystems = resolveWbsSourceSubsystems(sourceRow.subsystem);
+          if (!sourceSubsystems.length) return;
+
+          project.phases.forEach(function (phase) {
+            const phaseHasWarranty = !!(phase.postWarrantyStartDate && phase.postWarrantyEndDate);
+            periods.forEach(function (period) {
+              if (!sourceRowMatchesPeriod(sourceRow, period)) return;
+              if (!materialAllowedForPeriod(description, period.type, phaseHasWarranty)) return;
+
+              sourceSubsystems.forEach(function (subsystem) {
+                const rowKey = ["wbs_material", phase.key, period.type, sourceRow.id || sourceIndex, normalizeWbsText(description), normalizeWbsText(subsystem)].join("|");
+                const override = project.wbsMaterialRowOverrides[rowKey] || {};
+                const row = {
+                  rowKey: rowKey,
+                  phase: phase.label || phase.key,
+                  description: description,
+                  subsystem: subsystem,
+                  period: period.label,
+                  costsType: override.costsType !== undefined ? override.costsType : sourceRow.costsType,
+                  pbsIbs: override.pbsIbs !== undefined ? override.pbsIbs : sourceRow.pbsIbs,
+                  abs: override.abs !== undefined ? override.abs : sourceRow.abs,
+                  associatedWp: override.associatedWp !== undefined ? override.associatedWp : sourceRow.associatedWp,
+                  tasks: override.tasks !== undefined ? override.tasks : sourceRow.tasks,
+                };
+                const uniqueKey = [
+                  row.phase,
+                  row.description,
+                  row.subsystem,
+                  row.period,
+                  row.costsType,
+                  row.pbsIbs,
+                  row.abs,
+                  row.associatedWp,
+                  row.tasks,
+                ].map(normalizeWbsText).join("|");
+                if (seenGeneratedRows.has(uniqueKey)) return;
+                seenGeneratedRows.add(uniqueKey);
+                rows.push(row);
+              });
+            });
+          });
+        });
+        return rows;
+      }
+
       function renderFallbackWbsWorkspace() {
         const workspace = $("wbsWorkspace");
         const list = $("wbsProjectList");
@@ -5033,8 +5354,14 @@
         const workloadToggleBtn = $("wbsWorkloadToggleBtn");
         const workloadToggleIcon = $("wbsWorkloadToggleIcon");
         const workloadPanel = $("wbsWorkloadPanel");
+        const materialsImportMetaEl = $("wbsMaterialsImportMeta");
+        const materialsRowCountEl = $("wbsMaterialsRowCount");
+        const materialsToggleBtn = $("wbsMaterialsToggleBtn");
+        const materialsToggleIcon = $("wbsMaterialsToggleIcon");
+        const materialsPanel = $("wbsMaterialsPanel");
+        const materialsTableBody = $("wbsMaterialsTableBody");
         const tableBody = $("wbsWorkloadTableBody");
-        if (!workspace || !list || !emptyEl || !contentEl || !statusEl || !titleEl || !metaEl || !importMetaEl || !missingEl || !rowCountEl || !tableBody) return;
+        if (!workspace || !list || !emptyEl || !contentEl || !statusEl || !titleEl || !metaEl || !importMetaEl || !missingEl || !rowCountEl || !tableBody || !materialsImportMetaEl || !materialsRowCountEl || !materialsTableBody) return;
 
         const projects = buildWbsProjects();
         const currentKey = workspace.dataset.currentProjectKey && projects.some(function (project) { return project.projectKey === workspace.dataset.currentProjectKey; })
@@ -5052,7 +5379,8 @@
               '<div class="mt-1 flex items-center gap-1.5">' +
                 '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ' + (project.hasPhases ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-slate-100 text-slate-400 border border-slate-200") + '">PH</span>' +
                 '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ' + (project.hasSubsystems ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-slate-100 text-slate-400 border border-slate-200") + '">SYS</span>' +
-                '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ' + (project.hasWbsImport ? "bg-cyan-50 text-cyan-700 border border-cyan-200" : "bg-slate-100 text-slate-400 border border-slate-200") + '">WBS</span>' +
+                '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ' + (project.hasWbsImport ? "bg-cyan-50 text-cyan-700 border border-cyan-200" : "bg-slate-100 text-slate-400 border border-slate-200") + '">WL</span>' +
+                '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ' + (project.hasWbsMaterialImport ? "bg-cyan-50 text-cyan-700 border border-cyan-200" : "bg-slate-100 text-slate-400 border border-slate-200") + '">MAT</span>' +
               '</div>' +
             '</button>';
         }).join("");
@@ -5068,12 +5396,15 @@
         contentEl.classList.remove("hidden");
         titleEl.textContent = cur.projectName;
         metaEl.textContent = (cur.projectType || "No project type") + " | " + (cur.projectContext || "No context");
-        importMetaEl.textContent = cur.hasWbsImport ? "Imported: " + cur.wbsFileName + " | " + cur.wbsImportedRows.length + " row(s)" : "No WBS file imported yet.";
+        importMetaEl.textContent = cur.hasWbsImport ? "Workload imported: " + cur.wbsFileName + " | " + cur.wbsImportedRows.length + " row(s)" : "No Workload WBS file imported yet.";
+        materialsImportMetaEl.textContent = cur.hasWbsMaterialImport ? "Materials imported: " + cur.wbsMaterialFileName + " | " + cur.wbsMaterialImportedRows.length + " row(s)" : "No Materials WBS file imported yet.";
 
         const missingParts = [];
         if (!cur.hasPhases) missingParts.push('<div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">No phases found. Configure Project Phases first.</div>');
         if (!cur.hasSubsystems) missingParts.push('<div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">No subsystems found. Fill Workload Synthesis first.</div>');
-        if (!cur.hasWbsImport) missingParts.push('<div class="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">Import a WBS Excel file with a Workload sheet to generate rows.</div>');
+        if (!cur.hasWbsImport) missingParts.push('<div class="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">Import a WBS Excel file with a Workload sheet to generate workload rows.</div>');
+        if (!cur.hasWbsMaterialImport) missingParts.push('<div class="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">Import a WBS Excel file with a Materials sheet to generate material rows.</div>');
+        if (!cur.wbsGuidePlanningProject) missingParts.push('<div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">No Guide Planning Definition configuration found for this project. Configure Material Types before generating Materials rows.</div>');
         missingEl.classList.toggle("hidden", missingParts.length === 0);
         missingEl.innerHTML = missingParts.join("");
 
@@ -5099,6 +5430,42 @@
             '<td class="py-2.5 pl-4">' + textInput("tasks", row.tasks, "min-w-[220px]") + '</td>' +
           '</tr>';
         }).join("") : '<tr><td colspan="9" class="py-8 text-center text-sm text-slate-500">No WBS workload row generated yet.</td></tr>';
+
+        const generatedMaterialRows = buildGeneratedWbsMaterialRows(cur);
+        materialsRowCountEl.textContent = generatedMaterialRows.length + " row(s)";
+        const materialsCollapsed = workspace.dataset.wbsMaterialsCollapsed === "true";
+        if (materialsPanel) materialsPanel.classList.toggle("hidden", materialsCollapsed);
+        if (materialsToggleBtn) materialsToggleBtn.setAttribute("aria-expanded", materialsCollapsed ? "false" : "true");
+        if (materialsToggleIcon) materialsToggleIcon.textContent = materialsCollapsed ? "expand_more" : "expand_less";
+        let noMaterialMessage = "No WBS material row generated yet.";
+        if (cur.hasWbsMaterialImport && !cur.wbsGuidePlanningProject) {
+          noMaterialMessage = "No Guide Planning Definition configuration found for this project.";
+        } else if (cur.hasWbsMaterialImport) {
+          const gp = cur.wbsGuidePlanningProject || {};
+          const hasMob = Array.isArray(gp.selectedMaterialTypes) && gp.selectedMaterialTypes.length > 0;
+          const hasRec = Array.isArray(gp.selectedRecurrentMaterialTypes) && gp.selectedRecurrentMaterialTypes.length > 0;
+          const hasDem = Object.values(gp.demobilizationMaterialMonthsByType || {}).some(function (value) { return (toNumber(value) || 0) > 0; });
+          const hasSubsystems = mergeWbsSubsystems(cur.subsystems).length > 0;
+          if (!hasSubsystems) noMaterialMessage = "No matching subsystem source found for Materials. Check Workload Synthesis.";
+          else if (!hasMob && !hasRec && !hasDem) noMaterialMessage = "No material type is enabled in Guide Planning Definition for MOB, REC or DEM.";
+          else noMaterialMessage = "Imported Materials rows do not match the enabled Guide Planning periods, material types, or subsystems.";
+        }
+        materialsTableBody.innerHTML = generatedMaterialRows.length ? generatedMaterialRows.map(function (row) {
+          function textInput(field, value, minWidth) {
+            return '<input data-wbs-material-row-field="' + field + '" data-project-key="' + escapeHtml(cur.projectKey) + '" data-row-key="' + escapeHtml(row.rowKey) + '" type="text" class="w-full ' + (minWidth || "min-w-[120px]") + ' rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm" value="' + escapeHtml(value || "") + '">';
+          }
+          return '<tr>' +
+            '<td class="py-2.5 pr-4 font-semibold whitespace-nowrap">' + escapeHtml(row.phase) + '</td>' +
+            '<td class="py-2.5 px-4 font-medium">' + escapeHtml(row.description) + '</td>' +
+            '<td class="py-2.5 px-4 text-slate-600">' + escapeHtml(row.subsystem) + '</td>' +
+            '<td class="py-2.5 px-4"><span class="inline-flex px-2 py-0.5 rounded-full border border-cyan-200 bg-cyan-50 text-[10px] font-bold text-cyan-700">' + escapeHtml(row.period) + '</span></td>' +
+            '<td class="py-2.5 px-4">' + textInput("costsType", row.costsType, "min-w-[140px]") + '</td>' +
+            '<td class="py-2.5 px-4">' + textInput("pbsIbs", row.pbsIbs) + '</td>' +
+            '<td class="py-2.5 px-4">' + textInput("abs", row.abs) + '</td>' +
+            '<td class="py-2.5 px-4">' + textInput("associatedWp", row.associatedWp, "min-w-[160px]") + '</td>' +
+            '<td class="py-2.5 pl-4">' + textInput("tasks", row.tasks, "min-w-[220px]") + '</td>' +
+          '</tr>';
+        }).join("") : '<tr><td colspan="9" class="py-8 text-center text-sm text-slate-500">' + escapeHtml(noMaterialMessage) + '</td></tr>';
       }
 
       function buildToolsConsumablesProjects() {
@@ -8332,6 +8699,14 @@
             return;
           }
 
+          if (event.target.closest("#wbsMaterialsToggleBtn")) {
+            event.preventDefault();
+            const ws = $("wbsWorkspace");
+            if (ws) ws.dataset.wbsMaterialsCollapsed = ws.dataset.wbsMaterialsCollapsed === "true" ? "false" : "true";
+            renderFallbackWbsWorkspace();
+            return;
+          }
+
           const wbsProjectBtn = event.target.closest("[data-wbs-project-select]");
           if (wbsProjectBtn) {
             event.preventDefault();
@@ -8841,6 +9216,17 @@
             return;
           }
 
+          const wbsMaterialRowField = event.target.closest("[data-wbs-material-row-field]");
+          if (wbsMaterialRowField) {
+            saveWbsMaterialRowField(
+              wbsMaterialRowField.getAttribute("data-project-key") || "",
+              wbsMaterialRowField.getAttribute("data-row-key") || "",
+              wbsMaterialRowField.getAttribute("data-wbs-material-row-field") || "",
+              wbsMaterialRowField.value || ""
+            );
+            return;
+          }
+
           const tcCellInput = event.target.closest("[data-tc-cell]");
           if (tcCellInput) {
             saveTcCellOverride(
@@ -8872,6 +9258,34 @@
             const cur = findProjectByStoredKey(projects, projectKey);
             if (!cur) { window.alert("No project selected."); fileInput.value = ""; return; }
             importWbsFromExcel(cur.projectKey, file);
+            fileInput.value = "";
+            return;
+          }
+
+          if (event.target.id === "wbsCombinedExcelFileInput") {
+            const fileInput = event.target;
+            const file = fileInput.files && fileInput.files[0];
+            if (!file) return;
+            const ws = $("wbsWorkspace");
+            const projectKey = fileInput.dataset.projectKey || ws?.dataset.currentProjectKey || "";
+            const projects = buildWbsProjects();
+            const cur = findProjectByStoredKey(projects, projectKey);
+            if (!cur) { window.alert("No project selected."); fileInput.value = ""; return; }
+            importWbsCombinedFromExcel(cur.projectKey, file);
+            fileInput.value = "";
+            return;
+          }
+
+          if (event.target.id === "wbsMaterialsExcelFileInput") {
+            const fileInput = event.target;
+            const file = fileInput.files && fileInput.files[0];
+            if (!file) return;
+            const ws = $("wbsWorkspace");
+            const projectKey = fileInput.dataset.projectKey || ws?.dataset.currentProjectKey || "";
+            const projects = buildWbsProjects();
+            const cur = findProjectByStoredKey(projects, projectKey);
+            if (!cur) { window.alert("No project selected."); fileInput.value = ""; return; }
+            importWbsMaterialsFromExcel(cur.projectKey, file);
             fileInput.value = "";
             return;
           }
