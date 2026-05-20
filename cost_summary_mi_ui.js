@@ -5373,7 +5373,7 @@
             });
           }
           if (description === "PPE") {
-            return storedPositive(toolsConsumables, phase.key, "__shared__", periodType, "ppe");
+            return storedPositive(toolsConsumables, phase.key, "__management__", periodType, "ppe");
           }
           if (description === "Vehicles") {
             if (periodType === "mob") {
