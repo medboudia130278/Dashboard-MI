@@ -6031,7 +6031,7 @@
 
               let colKey = null;
               if (costBucket === "tooling" || costBucket.indexOf("tooling") !== -1) {
-                if (allocLevel.indexOf("technician") !== -1)  colKey = "ind_tools";
+                if (allocLevel.indexOf("technician") !== -1 || allocLevel.indexOf("manager") !== -1)  colKey = "ind_tools";
                 else if (allocLevel.indexOf("team") !== -1)   colKey = "coll_tools";
                 else if (allocLevel.indexOf("depot") !== -1)  colKey = "spec_tools";
               } else if (costBucket === "consumables" || costBucket.indexOf("consumable") !== -1) {
