@@ -1101,6 +1101,16 @@
         return {};
       }
 
+      function readMergedPersistedFallbackProjectState(persisted, keys) {
+        const candidates = Array.isArray(keys) ? keys : [keys];
+        return candidates.reduce(function (merged, key) {
+          if (key && persisted && typeof persisted[key] === "object" && persisted[key] !== null) {
+            return Object.assign(merged, persisted[key]);
+          }
+          return merged;
+        }, {});
+      }
+
       function buildFallbackProjectPhaseProjects() {
         const persisted = readProjectPhaseFallbackState();
         const workbooks = getSharedWorkbooksForWorkspace();
@@ -4870,7 +4880,7 @@
           );
           const toolsConsumablesProject = forceZeroMobWithoutPostWarranty(
             fillMissingImportedPhaseValues(
-              readPersistedFallbackProjectState(tcState, lookupKeys),
+              readMergedPersistedFallbackProjectState(tcState, lookupKeys),
               project.phases
             ),
             project.phases
@@ -5743,7 +5753,7 @@
 
         const projData = forceZeroMobWithoutPostWarranty(
           fillMissingImportedPhaseValues(
-            readPersistedFallbackProjectState(readToolsConsumablesFallbackState(), getProjectLookupKeys(cur)),
+            readMergedPersistedFallbackProjectState(readToolsConsumablesFallbackState(), getProjectLookupKeys(cur)),
             cur.phases
           ),
           cur.phases
