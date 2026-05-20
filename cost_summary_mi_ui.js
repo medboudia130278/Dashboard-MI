@@ -5761,23 +5761,25 @@
         }
 
         function hasStoredPseudoSubsystemData(phaseKey, pseudoSubsystem) {
+          const targetPhaseKey = normalizeWbsText(phaseKey);
           return Object.keys(projData).some(function (key) {
             const parts = String(key || "").split("|");
-            return parts.length === 4 && parts[0] === phaseKey && isStoredPseudoSubsystem(parts[1], pseudoSubsystem);
+            return parts.length === 4 && normalizeWbsText(parts[0]) === targetPhaseKey && isStoredPseudoSubsystem(parts[1], pseudoSubsystem);
           });
         }
 
         function resolveCell(phaseKey, subsystem, periodType, colKey) {
           const k = phaseKey + "|" + subsystem + "|" + periodType + "|" + colKey;
           let eurVal = Object.prototype.hasOwnProperty.call(projData, k) ? projData[k] : undefined;
-          if (eurVal === undefined && (subsystem === "__shared__" || subsystem === "__management__")) {
+          if (eurVal === undefined) {
+            const targetPhaseKey = normalizeWbsText(phaseKey);
+            const targetSubsystemKey = normalizeWbsText(subsystem);
             const matchKey = Object.keys(projData).find(function (key) {
               const parts = String(key || "").split("|");
-              return parts.length === 4
-                && parts[0] === phaseKey
-                && parts[2] === periodType
-                && parts[3] === colKey
-                && isStoredPseudoSubsystem(parts[1], subsystem);
+              if (parts.length !== 4) return false;
+              if (normalizeWbsText(parts[0]) !== targetPhaseKey || parts[2] !== periodType || parts[3] !== colKey) return false;
+              if (subsystem === "__shared__" || subsystem === "__management__") return isStoredPseudoSubsystem(parts[1], subsystem);
+              return normalizeWbsText(parts[1]) === targetSubsystemKey;
             });
             eurVal = matchKey ? projData[matchKey] : 0;
           }
