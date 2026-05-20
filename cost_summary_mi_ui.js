@@ -5749,9 +5749,38 @@
           cur.phases
         );
 
+        function isStoredPseudoSubsystem(value, pseudoSubsystem) {
+          const key = normalizeWbsText(value);
+          if (pseudoSubsystem === "__shared__") {
+            return key === "__shared__" || key.indexOf("shared") !== -1 || key.indexOf("depot pool") !== -1;
+          }
+          if (pseudoSubsystem === "__management__") {
+            return key === "__management__" || key.indexOf("management") !== -1;
+          }
+          return key === normalizeWbsText(pseudoSubsystem);
+        }
+
+        function hasStoredPseudoSubsystemData(phaseKey, pseudoSubsystem) {
+          return Object.keys(projData).some(function (key) {
+            const parts = String(key || "").split("|");
+            return parts.length === 4 && parts[0] === phaseKey && isStoredPseudoSubsystem(parts[1], pseudoSubsystem);
+          });
+        }
+
         function resolveCell(phaseKey, subsystem, periodType, colKey) {
           const k = phaseKey + "|" + subsystem + "|" + periodType + "|" + colKey;
-          const eurVal = Object.prototype.hasOwnProperty.call(projData, k) ? projData[k] : 0;
+          let eurVal = Object.prototype.hasOwnProperty.call(projData, k) ? projData[k] : undefined;
+          if (eurVal === undefined && (subsystem === "__shared__" || subsystem === "__management__")) {
+            const matchKey = Object.keys(projData).find(function (key) {
+              const parts = String(key || "").split("|");
+              return parts.length === 4
+                && parts[0] === phaseKey
+                && parts[2] === periodType
+                && parts[3] === colKey
+                && isStoredPseudoSubsystem(parts[1], subsystem);
+            });
+            eurVal = matchKey ? projData[matchKey] : 0;
+          }
           return Math.round(eurVal * displayRate * 100) / 100;
         }
 
@@ -5780,8 +5809,8 @@
           const subsystems = cur.subsystems.length ? cur.subsystems : [];
           const phaseHasWarranty = !!(phase.postWarrantyStartDate && phase.postWarrantyEndDate);
           const isCollapsed = collapsedPhases.has(phase.key);
-          const hasSharedData = Object.keys(projData).some(function (k) { return k.indexOf(phase.key + "|__shared__|") === 0; });
-          const hasManagementData = Object.keys(projData).some(function (k) { return k.indexOf(phase.key + "|__management__|") === 0; });
+          const hasSharedData = hasStoredPseudoSubsystemData(phase.key, "__shared__");
+          const hasManagementData = hasStoredPseudoSubsystemData(phase.key, "__management__");
 
           const collapsedLabel = (function () {
             const parts = [];
