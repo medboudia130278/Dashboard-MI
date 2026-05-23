@@ -996,6 +996,7 @@ window.__costSummaryOpenGuidePlanningWorkspace = function __costSummaryOpenGuide
   closeModuleDrawer();
   state.activeDrawerModuleKey = "study_setup:guide_planning_definition";
   window.__costSummaryUseFallbackGuidePlanning = false;
+  window.__costSummaryFallback?.closeDetailWorkspacesFromMain?.();
   closeProjectPhasesWorkspace();
   closeCostCentersWorkspace();
   closeCurrencyExchangeWorkspace();

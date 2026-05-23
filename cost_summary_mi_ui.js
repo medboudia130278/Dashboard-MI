@@ -4868,6 +4868,7 @@
           const current = readPersistedFallbackProjectState(persisted, lookupKeys);
           const importedRows = Array.isArray(current.importedRows) ? current.importedRows : [];
           const materialImportedRows = Array.isArray(current.materialImportedRows) ? current.materialImportedRows : [];
+          const subcontractingImportedRows = Array.isArray(current.subcontractingImportedRows) ? current.subcontractingImportedRows : [];
           const guidePlanningProject = findProjectByLookupKeys(guidePlanningByLookup, lookupKeys)
             || guidePlanningProjects.find(function (candidate) {
               return normalizeWorkspaceKey(candidate.projectKey) === normalizeWorkspaceKey(project.projectKey)
@@ -4899,12 +4900,17 @@
             wbsMaterialFileName: current.materialFileName || "",
             wbsMaterialImportedAt: current.materialImportedAt || "",
             wbsMaterialRowOverrides: Object.assign({}, current.materialRowOverrides || {}),
+            wbsSubcontractingImportedRows: subcontractingImportedRows,
+            wbsSubcontractingFileName: current.subcontractingFileName || "",
+            wbsSubcontractingImportedAt: current.subcontractingImportedAt || "",
+            wbsSubcontractingRowOverrides: Object.assign({}, current.subcontractingRowOverrides || {}),
             wbsGuidePlanningProject: guidePlanningProject,
             wbsOtherSupportCostProject: otherSupportCostProject,
             wbsToolsConsumablesProject: toolsConsumablesProject,
             wbsVehiclesProject: vehiclesProject,
             hasWbsImport: importedRows.length > 0,
             hasWbsMaterialImport: materialImportedRows.length > 0,
+            hasWbsSubcontractingImport: subcontractingImportedRows.length > 0,
           });
         });
       }
@@ -4937,6 +4943,18 @@
           row[field] = value || "";
           rowOverrides[rowKey] = row;
           project.materialRowOverrides = rowOverrides;
+          return project;
+        });
+      }
+
+      function saveWbsSubcontractingRowField(projectKey, rowKey, field, value) {
+        if (!projectKey || !rowKey || !field) return;
+        saveWbsProject(projectKey, function (project) {
+          const rowOverrides = Object.assign({}, project.subcontractingRowOverrides || {});
+          const row = Object.assign({}, rowOverrides[rowKey] || {});
+          row[field] = value || "";
+          rowOverrides[rowKey] = row;
+          project.subcontractingRowOverrides = rowOverrides;
           return project;
         });
       }
@@ -5034,6 +5052,48 @@
         return { sheetName: sheetName, rows: rows };
       }
 
+      function parseWbsSubcontractingRowsFromWorkbook(workbook) {
+        const sheetName = findWbsSheetName(workbook, "subcontracting") || findWbsSheetName(workbook, "subcontract");
+        if (!sheetName) return { sheetName: "", rows: [] };
+        const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "", raw: false, blankrows: false });
+        const seenImportedRows = new Set();
+        const rows = rawRows.map(function (rawRow, index) {
+          const row = {};
+          Object.entries(rawRow).forEach(function (entry) {
+            row[normalizeWbsExcelKey(entry[0])] = entry[1];
+          });
+          return {
+            id: "wbs_subcontracting_" + index,
+            description: String(row.description || "").trim(),
+            subsystem: String(row.subsystem || row.sub_system || "").trim(),
+            period: String(row.period || "").trim(),
+            costsType: String(row.costs_type || row.cost_type || "").trim(),
+            pbsIbs: String(row.pbs_ibs || row.pbs || row.ibs || "").trim(),
+            abs: String(row.abs || "").trim(),
+            associatedWp: String(row.associated_wp || row.associated_work_package || row.wp || "").trim(),
+            tasks: String(row.tasks || row.task || "").trim(),
+          };
+        }).filter(function (row) {
+          const description = normalizeWbsSubcontractingDescription(row.description);
+          const isProjectLevelSubcontracting = description === "Legal_Training";
+          if (!row.description || (!row.subsystem && !isProjectLevelSubcontracting)) return false;
+          const uniqueKey = [
+            row.description,
+            row.subsystem,
+            row.period,
+            row.costsType,
+            row.pbsIbs,
+            row.abs,
+            row.associatedWp,
+            row.tasks,
+          ].map(normalizeWbsText).join("|");
+          if (seenImportedRows.has(uniqueKey)) return false;
+          seenImportedRows.add(uniqueKey);
+          return true;
+        });
+        return { sheetName: sheetName, rows: rows };
+      }
+
       function importWbsFromExcel(projectKey, file) {
         if (!file || !projectKey) return;
         if (typeof XLSX === "undefined") { window.alert("XLSX library is not available on this page."); return; }
@@ -5108,6 +5168,43 @@
         reader.readAsArrayBuffer(file);
       }
 
+      function importWbsSubcontractingFromExcel(projectKey, file) {
+        if (!file || !projectKey) return;
+        if (typeof XLSX === "undefined") { window.alert("XLSX library is not available on this page."); return; }
+
+        const reader = new FileReader();
+        reader.onload = function (evt) {
+          try {
+            const data = new Uint8Array(evt.target.result);
+            const wb = XLSX.read(data, { type: "array" });
+            const parsed = parseWbsSubcontractingRowsFromWorkbook(wb);
+            if (!parsed.sheetName) {
+              window.alert("No 'Subcontracting' sheet found in this WBS Excel file. Available sheets: " + wb.SheetNames.join(", "));
+              return;
+            }
+
+            if (!parsed.rows.length) {
+              window.alert("No valid WBS subcontracting rows found. Expected Description + Subsystem columns in the Subcontracting sheet, except 'Legal_Training' rows where Subsystem can be empty.");
+              return;
+            }
+
+            saveWbsProject(projectKey, function (project) {
+              project.subcontractingImportedRows = parsed.rows;
+              project.subcontractingFileName = file.name || "";
+              project.subcontractingImportedAt = new Date().toISOString();
+              project.subcontractingRowOverrides = {};
+              return project;
+            });
+            if (typeof window.updateToolbarStatusDots === "function") window.updateToolbarStatusDots();
+            renderFallbackWbsWorkspace();
+          } catch (err) {
+            console.error("WBS Subcontracting Excel import error:", err);
+            window.alert("Failed to parse WBS Subcontracting Excel file: " + (err.message || err));
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      }
+
       function importWbsCombinedFromExcel(projectKey, file) {
         if (!file || !projectKey) return;
         if (typeof XLSX === "undefined") { window.alert("XLSX library is not available on this page."); return; }
@@ -5119,13 +5216,14 @@
             const wb = XLSX.read(data, { type: "array" });
             const workload = parseWbsWorkloadRowsFromWorkbook(wb);
             const materials = parseWbsMaterialRowsFromWorkbook(wb);
+            const subcontracting = parseWbsSubcontractingRowsFromWorkbook(wb);
 
-            if (!workload.sheetName || !materials.sheetName) {
-              window.alert("The WBS Excel file must contain both 'Workload' and 'Materials' sheets. Available sheets: " + wb.SheetNames.join(", "));
+            if (!workload.sheetName || !materials.sheetName || !subcontracting.sheetName) {
+              window.alert("The WBS Excel file must contain 'Workload', 'Materials', and 'Subcontracting' sheets. Available sheets: " + wb.SheetNames.join(", "));
               return;
             }
-            if (!workload.rows.length || !materials.rows.length) {
-              window.alert("The WBS Excel file was found, but valid rows are missing. Workload expects Description + Position type; Materials expects Description + Subsystem, except 'Other Support Costs' rows where Subsystem can be empty.");
+            if (!workload.rows.length || !materials.rows.length || !subcontracting.rows.length) {
+              window.alert("The WBS Excel file was found, but valid rows are missing. Workload expects Description + Position type; Materials/Subcontracting expect Description + Subsystem, except project-level rows where Subsystem can be empty.");
               return;
             }
 
@@ -5138,6 +5236,10 @@
               project.materialFileName = file.name || "";
               project.materialImportedAt = new Date().toISOString();
               project.materialRowOverrides = {};
+              project.subcontractingImportedRows = subcontracting.rows;
+              project.subcontractingFileName = file.name || "";
+              project.subcontractingImportedAt = new Date().toISOString();
+              project.subcontractingRowOverrides = {};
               return project;
             });
             if (typeof window.updateToolbarStatusDots === "function") window.updateToolbarStatusDots();
@@ -5296,6 +5398,138 @@
         return "";
       }
 
+      function normalizeWbsSubcontractingDescription(value) {
+        const normalized = normalizeWbsText(value);
+        if (normalized === "preventive subcontract" || normalized === "preventive subcontracts") return "Preventive_Subcontract";
+        if (normalized === "corrective subcontract" || normalized === "corrective subcontracts") return "Corrective_Subcontract";
+        if (normalized === "technical training" || normalized === "technical trainings") return "Technical_Training";
+        if (normalized === "legal training" || normalized === "legal trainings") return "Legal_Training";
+        if (normalized === "technical support" || normalized === "technical supports") return "Technical_Support";
+        if (normalized === "obsolescence monitoring") return "Obsolescence_Monitoring";
+        if (normalized === "obsolescence treatment" || normalized === "obsolescence treatments") return "Obsolescence_Treatment";
+        return "";
+      }
+
+      function getWbsSubcontractingGuideType(description) {
+        if (description === "Technical_Training") return "Training";
+        if (description === "Obsolescence_Monitoring" || description === "Obsolescence_Treatment") return "Obsolescence";
+        if (description === "Preventive_Subcontract" || description === "Corrective_Subcontract" || description === "Technical_Support") return description;
+        return "";
+      }
+
+      function guideSelectionIncludes(list, type) {
+        const target = normalizeWbsText(type);
+        return (Array.isArray(list) ? list : []).some(function (value) {
+          const normalized = normalizeWbsText(value);
+          return normalized === target || (target === "training" && normalized === "trining");
+        });
+      }
+
+      function getMandatoryTrainingYearlyTotalsByPhase(project) {
+        const mandatoryProjects = buildMandatoryTrainingProjects();
+        const mandatoryByLookup = buildProjectLookupMap(mandatoryProjects);
+        const mandatoryProject = findProjectByLookupKeys(mandatoryByLookup, getProjectLookupKeys(project)) || null;
+        if (!mandatoryProject) return {};
+
+        const projState = readMandatoryTrainingFallbackState();
+        const persistedTrainingRows = readPersistedFallbackProjectState(projState, getProjectLookupKeys(mandatoryProject));
+        const trainingRows = Array.isArray(persistedTrainingRows) ? persistedTrainingRows : MT_DEFAULT_ROWS;
+        const wcOverrides = readPersistedFallbackProjectState(readWhiteCollarFallbackState(), getProjectLookupKeys(mandatoryProject));
+
+        function nkMt(s) {
+          return String(s || "").trim().toLowerCase()
+            .replace(/[\s/_\-]+/g, "").replace(/[^\w]/g, "");
+        }
+
+        const wlBySub = {};
+        (mandatoryProject.workloadRows || []).forEach(function (row) {
+          const sub = String(row.subsystem || "").trim();
+          if (!sub) return;
+          if (!wlBySub[sub]) wlBySub[sub] = { totalTechs: 0, totalSupervisors: 0 };
+          wlBySub[sub].totalTechs += (toNumber(row.preventiveTechs) || 0) + (toNumber(row.correctiveTechs) || 0);
+          wlBySub[sub].totalSupervisors += (toNumber(row.preventiveSupervisors) || 0) + (toNumber(row.correctiveSupervisors) || 0);
+        });
+
+        function resolveRate(phaseKey, subsystem, colKey) {
+          const k = phaseKey + "|" + subsystem + "|rec|" + colKey;
+          if (Object.prototype.hasOwnProperty.call(wcOverrides, k)) return wcOverrides[k];
+          if (colKey === "workerRate") return 0;
+          if (colKey === "technicianRate" || colKey === "supervisorRate") return 100;
+          return 0;
+        }
+
+        function resolveQtyMt(phaseKey, pos) {
+          const k = "wct|" + phaseKey + "|rec|" + pos;
+          return Object.prototype.hasOwnProperty.call(wcOverrides, k) ? wcOverrides[k] : 1;
+        }
+
+        function headcountForSubsystem(sub, phaseKey) {
+          const wl = wlBySub[sub] || { totalTechs: 0, totalSupervisors: 0 };
+          const techRate = resolveRate(phaseKey, sub, "technicianRate") / 100;
+          const wkrRate = resolveRate(phaseKey, sub, "workerRate") / 100;
+          const supRate = resolveRate(phaseKey, sub, "supervisorRate") / 100;
+          return wl.totalTechs * (techRate + wkrRate) + wl.totalSupervisors * supRate;
+        }
+
+        function computeWorkload(personnelConcerned, phaseKey) {
+          const entries = String(personnelConcerned || "").split(/[;,]/).map(function (s) { return s.trim(); }).filter(Boolean);
+          if (!entries.length) return 0;
+          if (entries.some(function (e) { return e.toLowerCase() === "all"; })) {
+            let total = 0;
+            mandatoryProject.subsystems.forEach(function (sub) { total += headcountForSubsystem(sub, phaseKey); });
+            mandatoryProject.engPositions.forEach(function (pos) { total += resolveQtyMt(phaseKey, pos); });
+            mandatoryProject.mgrPositions.forEach(function (pos) { total += resolveQtyMt(phaseKey, pos); });
+            return Math.round(total * 10) / 10;
+          }
+
+          let total = 0;
+          const addedSubs = new Set();
+          entries.forEach(function (entry) {
+            const normEntry = nkMt(entry);
+            const lowerEntry = entry.toLowerCase();
+            if (lowerEntry.indexOf("engineer") !== -1) {
+              mandatoryProject.engPositions.forEach(function (pos) { total += resolveQtyMt(phaseKey, pos); });
+              return;
+            }
+            if (lowerEntry.indexOf("management") !== -1 || lowerEntry.indexOf("manager") !== -1) {
+              mandatoryProject.mgrPositions.forEach(function (pos) { total += resolveQtyMt(phaseKey, pos); });
+              return;
+            }
+            mandatoryProject.subsystems.forEach(function (sub) {
+              if (addedSubs.has(sub)) return;
+              if (nkMt(sub) === normEntry || nkMt(sub).indexOf(normEntry) !== -1 || normEntry.indexOf(nkMt(sub)) !== -1) {
+                total += headcountForSubsystem(sub, phaseKey);
+                addedSubs.add(sub);
+              }
+            });
+          });
+          return Math.round(total * 10) / 10;
+        }
+
+        function computeYearlyCost(row, workload) {
+          const periodicity = toNumber(row.periodicity) || 0;
+          const costPerPerson = toNumber(row.costPerPerson) || 0;
+          const costPerGroup = toNumber(row.costPerGroup) || 0;
+          const maxPersPerGroup = toNumber(row.maxPersPerGroup) || 0;
+          if (!periodicity) return 0;
+          if (costPerGroup > 0 && maxPersPerGroup > 0) {
+            const fullGroups = Math.floor(workload / maxPersPerGroup);
+            const remaining = workload - fullGroups * maxPersPerGroup;
+            const costCycle = fullGroups * costPerGroup + (remaining > 0 ? Math.min(remaining * costPerPerson, costPerGroup) : 0);
+            return Math.round(costCycle / periodicity * 100) / 100;
+          }
+          return Math.round(workload * costPerPerson / periodicity * 100) / 100;
+        }
+
+        return (mandatoryProject.phases || []).reduce(function (totals, phase) {
+          if (!phase || !phase.key) return totals;
+          totals[phase.key] = trainingRows.reduce(function (sum, row) {
+            return sum + computeYearlyCost(row, computeWorkload(row.personnelConcerned, phase.key));
+          }, 0);
+          return totals;
+        }, {});
+      }
+
       function buildGeneratedWbsMaterialRows(project) {
         const periods = getWbsPeriodDefinitions(project);
         const guideProject = project.wbsGuidePlanningProject || {};
@@ -5448,6 +5682,95 @@
         return rows;
       }
 
+      function buildGeneratedWbsSubcontractingRows(project) {
+        const periods = getWbsPeriodDefinitions(project);
+        const guideProject = project.wbsGuidePlanningProject || {};
+        const selectedMobTypes = Array.isArray(guideProject.selectedSubcontractingTypes) ? guideProject.selectedSubcontractingTypes : [];
+        const selectedRecTypes = Array.isArray(guideProject.selectedRecurrentSubcontractingTypes) ? guideProject.selectedRecurrentSubcontractingTypes : [];
+        const demobTypes = Object.assign({}, guideProject.demobilizationSubcontractingMonthsByType || {});
+        const subcontractingSubsystems = mergeWbsSubsystems(project.subsystems);
+        const resolveWbsSourceSubsystems = createWbsSubsystemResolver(subcontractingSubsystems);
+        const mandatoryTotalsByPhase = getMandatoryTrainingYearlyTotalsByPhase(project);
+
+        function sourceRowMatchesPeriod(sourceRow, period) {
+          const sourcePeriod = normalizeWbsText(sourceRow.period);
+          if (!sourcePeriod) return true;
+          return sourcePeriod === normalizeWbsText(period.type) || sourcePeriod === normalizeWbsText(period.label);
+        }
+
+        function legalTrainingAllowedForPeriod(phase, periodType) {
+          return !!phase && periodType === "rec" && (toNumber(mandatoryTotalsByPhase[phase.key]) || 0) > 0;
+        }
+
+        function subcontractingAllowedForPeriod(description, phase, periodType, phaseHasWarranty) {
+          if (description === "Legal_Training") return legalTrainingAllowedForPeriod(phase, periodType);
+          const guideType = getWbsSubcontractingGuideType(description);
+          if (!guideType) return false;
+          if (periodType === "mob") {
+            if (!phaseHasWarranty) return false;
+            return guideSelectionIncludes(selectedMobTypes, guideType);
+          }
+          if (periodType === "rec") {
+            return guideSelectionIncludes(selectedRecTypes, guideType);
+          }
+          if (periodType === "dem") {
+            return (toNumber(demobTypes[guideType]) || 0) > 0;
+          }
+          return false;
+        }
+
+        const rows = [];
+        const seenGeneratedRows = new Set();
+        (project.wbsSubcontractingImportedRows || []).forEach(function (sourceRow, sourceIndex) {
+          const description = normalizeWbsSubcontractingDescription(sourceRow.description);
+          if (!description) return;
+          const isProjectLevelSubcontracting = description === "Legal_Training" && !String(sourceRow.subsystem || "").trim();
+          if (description === "Legal_Training" && !isProjectLevelSubcontracting) return;
+          const sourceSubsystems = resolveWbsSourceSubsystems(sourceRow.subsystem);
+          if (!isProjectLevelSubcontracting && !sourceSubsystems.length) return;
+
+          project.phases.forEach(function (phase) {
+            const phaseHasWarranty = !!(phase.postWarrantyStartDate && phase.postWarrantyEndDate);
+            periods.forEach(function (period) {
+              if (!sourceRowMatchesPeriod(sourceRow, period)) return;
+              if (!subcontractingAllowedForPeriod(description, phase, period.type, phaseHasWarranty)) return;
+
+              (isProjectLevelSubcontracting ? [""] : sourceSubsystems).forEach(function (subsystem) {
+                const rowKey = ["wbs_subcontracting", phase.key, period.type, sourceRow.id || sourceIndex, normalizeWbsText(description), normalizeWbsText(subsystem)].join("|");
+                const override = project.wbsSubcontractingRowOverrides[rowKey] || {};
+                const row = {
+                  rowKey: rowKey,
+                  phase: phase.label || phase.key,
+                  description: description,
+                  subsystem: subsystem,
+                  period: period.label,
+                  costsType: override.costsType !== undefined ? override.costsType : sourceRow.costsType,
+                  pbsIbs: override.pbsIbs !== undefined ? override.pbsIbs : sourceRow.pbsIbs,
+                  abs: override.abs !== undefined ? override.abs : sourceRow.abs,
+                  associatedWp: override.associatedWp !== undefined ? override.associatedWp : sourceRow.associatedWp,
+                  tasks: override.tasks !== undefined ? override.tasks : sourceRow.tasks,
+                };
+                const uniqueKey = [
+                  row.phase,
+                  row.description,
+                  row.subsystem,
+                  row.period,
+                  row.costsType,
+                  row.pbsIbs,
+                  row.abs,
+                  row.associatedWp,
+                  row.tasks,
+                ].map(normalizeWbsText).join("|");
+                if (seenGeneratedRows.has(uniqueKey)) return;
+                seenGeneratedRows.add(uniqueKey);
+                rows.push(row);
+              });
+            });
+          });
+        });
+        return rows;
+      }
+
       function renderFallbackWbsWorkspace() {
         const workspace = $("wbsWorkspace");
         const list = $("wbsProjectList");
@@ -5469,8 +5792,14 @@
         const materialsToggleIcon = $("wbsMaterialsToggleIcon");
         const materialsPanel = $("wbsMaterialsPanel");
         const materialsTableBody = $("wbsMaterialsTableBody");
+        const subcontractingImportMetaEl = $("wbsSubcontractingImportMeta");
+        const subcontractingRowCountEl = $("wbsSubcontractingRowCount");
+        const subcontractingToggleBtn = $("wbsSubcontractingToggleBtn");
+        const subcontractingToggleIcon = $("wbsSubcontractingToggleIcon");
+        const subcontractingPanel = $("wbsSubcontractingPanel");
+        const subcontractingTableBody = $("wbsSubcontractingTableBody");
         const tableBody = $("wbsWorkloadTableBody");
-        if (!workspace || !list || !emptyEl || !contentEl || !statusEl || !titleEl || !metaEl || !importMetaEl || !workloadImportMetaEl || !missingEl || !rowCountEl || !tableBody || !materialsImportMetaEl || !materialsRowCountEl || !materialsTableBody) return;
+        if (!workspace || !list || !emptyEl || !contentEl || !statusEl || !titleEl || !metaEl || !importMetaEl || !workloadImportMetaEl || !missingEl || !rowCountEl || !tableBody || !materialsImportMetaEl || !materialsRowCountEl || !materialsTableBody || !subcontractingImportMetaEl || !subcontractingRowCountEl || !subcontractingTableBody) return;
 
         const projects = buildWbsProjects();
         const currentKey = workspace.dataset.currentProjectKey && projects.some(function (project) { return project.projectKey === workspace.dataset.currentProjectKey; })
@@ -5490,6 +5819,7 @@
                 '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ' + (project.hasSubsystems ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-slate-100 text-slate-400 border border-slate-200") + '">SYS</span>' +
                 '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ' + (project.hasWbsImport ? "bg-cyan-50 text-cyan-700 border border-cyan-200" : "bg-slate-100 text-slate-400 border border-slate-200") + '">WL</span>' +
                 '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ' + (project.hasWbsMaterialImport ? "bg-cyan-50 text-cyan-700 border border-cyan-200" : "bg-slate-100 text-slate-400 border border-slate-200") + '">MAT</span>' +
+                '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ' + (project.hasWbsSubcontractingImport ? "bg-cyan-50 text-cyan-700 border border-cyan-200" : "bg-slate-100 text-slate-400 border border-slate-200") + '">SUB</span>' +
               '</div>' +
             '</button>';
         }).join("");
@@ -5508,21 +5838,28 @@
         importMetaEl.textContent = "";
         workloadImportMetaEl.textContent = cur.hasWbsImport ? "Workload imported: " + cur.wbsFileName + " | " + cur.wbsImportedRows.length + " imported row(s)" : "No Workload WBS file imported yet.";
         materialsImportMetaEl.textContent = cur.hasWbsMaterialImport ? "Materials imported: " + cur.wbsMaterialFileName + " | " + cur.wbsMaterialImportedRows.length + " imported row(s)" : "No Materials WBS file imported yet.";
+        subcontractingImportMetaEl.textContent = cur.hasWbsSubcontractingImport ? "Subcontracting imported: " + cur.wbsSubcontractingFileName + " | " + cur.wbsSubcontractingImportedRows.length + " imported row(s)" : "No Subcontracting WBS file imported yet.";
 
         const missingParts = [];
         if (!cur.hasPhases) missingParts.push('<div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">No phases found. Configure Project Phases first.</div>');
         if (!cur.hasSubsystems) missingParts.push('<div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">No subsystems found. Fill Workload Synthesis first.</div>');
         if (!cur.hasWbsImport) missingParts.push('<div class="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">Import a WBS Excel file with a Workload sheet to generate workload rows.</div>');
         if (!cur.hasWbsMaterialImport) missingParts.push('<div class="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">Import a WBS Excel file with a Materials sheet to generate material rows.</div>');
+        if (!cur.hasWbsSubcontractingImport) missingParts.push('<div class="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">Import a WBS Excel file with a Subcontracting sheet to generate subcontracting rows.</div>');
         const importedMaterialRows = Array.isArray(cur.wbsMaterialImportedRows) ? cur.wbsMaterialImportedRows : [];
+        const importedSubcontractingRows = Array.isArray(cur.wbsSubcontractingImportedRows) ? cur.wbsSubcontractingImportedRows : [];
         function isProjectLevelWbsMaterialRow(row) {
           const description = normalizeWbsMaterialDescription(row && row.description);
           return !String(row && row.subsystem || "").trim() && ["Other Support Costs", "Tools", "PPE", "Vehicles"].indexOf(description) !== -1;
         }
+        function isProjectLevelWbsSubcontractingRow(row) {
+          return normalizeWbsSubcontractingDescription(row && row.description) === "Legal_Training" && !String(row && row.subsystem || "").trim();
+        }
         const hasOtherSupportMaterialRows = importedMaterialRows.some(function (row) { return isWbsOtherSupportCostDescription(row.description); });
         const hasProjectLevelMaterialRows = importedMaterialRows.some(isProjectLevelWbsMaterialRow);
         const hasRegularMaterialRows = importedMaterialRows.some(function (row) { return !isProjectLevelWbsMaterialRow(row); });
-        if (!cur.wbsGuidePlanningProject && hasRegularMaterialRows) missingParts.push('<div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">No Guide Planning Definition configuration found for this project. Configure Material Types before generating regular Materials rows.</div>');
+        const hasRegularSubcontractingRows = importedSubcontractingRows.some(function (row) { return !isProjectLevelWbsSubcontractingRow(row); });
+        if (!cur.wbsGuidePlanningProject && (hasRegularMaterialRows || hasRegularSubcontractingRows)) missingParts.push('<div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">No Guide Planning Definition configuration found for this project. Configure applicable types before generating regular WBS rows.</div>');
         missingEl.classList.toggle("hidden", missingParts.length === 0);
         missingEl.innerHTML = missingParts.join("");
 
@@ -5585,6 +5922,41 @@
             '<td class="py-2.5 pl-4">' + textInput("tasks", row.tasks, "min-w-[220px]") + '</td>' +
           '</tr>';
         }).join("") : '<tr><td colspan="9" class="py-8 text-center text-sm text-slate-500">' + escapeHtml(noMaterialMessage) + '</td></tr>';
+
+        const generatedSubcontractingRows = buildGeneratedWbsSubcontractingRows(cur);
+        subcontractingRowCountEl.textContent = generatedSubcontractingRows.length + " generated row(s)";
+        const subcontractingCollapsed = workspace.dataset.wbsSubcontractingCollapsed === "true";
+        if (subcontractingPanel) subcontractingPanel.classList.toggle("hidden", subcontractingCollapsed);
+        if (subcontractingToggleBtn) subcontractingToggleBtn.setAttribute("aria-expanded", subcontractingCollapsed ? "false" : "true");
+        if (subcontractingToggleIcon) subcontractingToggleIcon.textContent = subcontractingCollapsed ? "expand_more" : "expand_less";
+        let noSubcontractingMessage = "No WBS subcontracting row generated yet.";
+        if (cur.hasWbsSubcontractingImport) {
+          const gp = cur.wbsGuidePlanningProject || {};
+          const hasMob = Array.isArray(gp.selectedSubcontractingTypes) && gp.selectedSubcontractingTypes.length > 0;
+          const hasRec = Array.isArray(gp.selectedRecurrentSubcontractingTypes) && gp.selectedRecurrentSubcontractingTypes.length > 0;
+          const hasDem = Object.values(gp.demobilizationSubcontractingMonthsByType || {}).some(function (value) { return (toNumber(value) || 0) > 0; });
+          const hasSubsystems = mergeWbsSubsystems(cur.subsystems).length > 0;
+          if (hasRegularSubcontractingRows && !cur.wbsGuidePlanningProject) noSubcontractingMessage = "No Guide Planning Definition configuration found for this project.";
+          else if (hasRegularSubcontractingRows && !hasSubsystems) noSubcontractingMessage = "No matching subsystem source found for Subcontracting. Check Workload Synthesis.";
+          else if (hasRegularSubcontractingRows && !hasMob && !hasRec && !hasDem) noSubcontractingMessage = "No subcontracting type is enabled in Guide Planning Definition for MOB, REC or DEM.";
+          else noSubcontractingMessage = "Imported Subcontracting rows do not match the enabled Guide Planning periods, subcontracting types, Mandatory Training totals, or subsystems.";
+        }
+        subcontractingTableBody.innerHTML = generatedSubcontractingRows.length ? generatedSubcontractingRows.map(function (row) {
+          function textInput(field, value, minWidth) {
+            return '<input data-wbs-subcontracting-row-field="' + field + '" data-project-key="' + escapeHtml(cur.projectKey) + '" data-row-key="' + escapeHtml(row.rowKey) + '" type="text" class="w-full ' + (minWidth || "min-w-[120px]") + ' rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm" value="' + escapeHtml(value || "") + '">';
+          }
+          return '<tr>' +
+            '<td class="py-2.5 pr-4 font-semibold whitespace-nowrap">' + escapeHtml(row.phase) + '</td>' +
+            '<td class="py-2.5 px-4 font-medium">' + escapeHtml(row.description) + '</td>' +
+            '<td class="py-2.5 px-4 text-slate-600">' + (row.subsystem ? escapeHtml(row.subsystem) : '<span class="text-slate-300">--</span>') + '</td>' +
+            '<td class="py-2.5 px-4"><span class="inline-flex px-2 py-0.5 rounded-full border border-cyan-200 bg-cyan-50 text-[10px] font-bold text-cyan-700">' + escapeHtml(row.period) + '</span></td>' +
+            '<td class="py-2.5 px-4">' + textInput("costsType", row.costsType, "min-w-[140px]") + '</td>' +
+            '<td class="py-2.5 px-4">' + textInput("pbsIbs", row.pbsIbs) + '</td>' +
+            '<td class="py-2.5 px-4">' + textInput("abs", row.abs) + '</td>' +
+            '<td class="py-2.5 px-4">' + textInput("associatedWp", row.associatedWp, "min-w-[160px]") + '</td>' +
+            '<td class="py-2.5 pl-4">' + textInput("tasks", row.tasks, "min-w-[220px]") + '</td>' +
+          '</tr>';
+        }).join("") : '<tr><td colspan="9" class="py-8 text-center text-sm text-slate-500">' + escapeHtml(noSubcontractingMessage) + '</td></tr>';
       }
 
       function buildToolsConsumablesProjects() {
@@ -7882,6 +8254,7 @@
           closePioDefinitionWorkspace();
           closeWorkloadSynthesisWorkspace();
           closeWhiteCollarDefinitionWorkspace();
+          closeWbsWorkspace();
           closeToolsConsumablesWorkspace();
           closeVehiclesWorkspace();
           closeOscWorkspace();
@@ -7903,6 +8276,7 @@
           closePioDefinitionWorkspace();
           closeWorkloadSynthesisWorkspace();
           closeWhiteCollarDefinitionWorkspace();
+          closeWbsWorkspace();
           closeToolsConsumablesWorkspace();
           closeVehiclesWorkspace();
           closeOscWorkspace();
@@ -8178,9 +8552,11 @@
 
       window.__costSummaryFallback = {
         closeDetailWorkspacesFromMain: function () {
+          closeGuidePlanningWorkspace();
           closeFirmingRulesWorkspace();
           closeWorkloadSynthesisWorkspace();
           closeWhiteCollarDefinitionWorkspace();
+          closeWbsWorkspace();
           closeToolsConsumablesWorkspace();
           closeVehiclesWorkspace();
           closeOscWorkspace();
@@ -8263,6 +8639,7 @@
           closeCurrencyExchangeWorkspace();
           closeFirmingRulesWorkspace();
           closePioDefinitionWorkspace();
+          closeWbsWorkspace();
           closeDrawer();
           renderFallbackGuidePlanningWorkspace();
         },
@@ -8895,6 +9272,14 @@
             return;
           }
 
+          if (event.target.closest("#wbsSubcontractingToggleBtn")) {
+            event.preventDefault();
+            const ws = $("wbsWorkspace");
+            if (ws) ws.dataset.wbsSubcontractingCollapsed = ws.dataset.wbsSubcontractingCollapsed === "true" ? "false" : "true";
+            renderFallbackWbsWorkspace();
+            return;
+          }
+
           const wbsProjectBtn = event.target.closest("[data-wbs-project-select]");
           if (wbsProjectBtn) {
             event.preventDefault();
@@ -9415,6 +9800,17 @@
             return;
           }
 
+          const wbsSubcontractingRowField = event.target.closest("[data-wbs-subcontracting-row-field]");
+          if (wbsSubcontractingRowField) {
+            saveWbsSubcontractingRowField(
+              wbsSubcontractingRowField.getAttribute("data-project-key") || "",
+              wbsSubcontractingRowField.getAttribute("data-row-key") || "",
+              wbsSubcontractingRowField.getAttribute("data-wbs-subcontracting-row-field") || "",
+              wbsSubcontractingRowField.value || ""
+            );
+            return;
+          }
+
           const tcCellInput = event.target.closest("[data-tc-cell]");
           if (tcCellInput) {
             saveTcCellOverride(
@@ -9474,6 +9870,20 @@
             const cur = findProjectByStoredKey(projects, projectKey);
             if (!cur) { window.alert("No project selected."); fileInput.value = ""; return; }
             importWbsMaterialsFromExcel(cur.projectKey, file);
+            fileInput.value = "";
+            return;
+          }
+
+          if (event.target.id === "wbsSubcontractingExcelFileInput") {
+            const fileInput = event.target;
+            const file = fileInput.files && fileInput.files[0];
+            if (!file) return;
+            const ws = $("wbsWorkspace");
+            const projectKey = fileInput.dataset.projectKey || ws?.dataset.currentProjectKey || "";
+            const projects = buildWbsProjects();
+            const cur = findProjectByStoredKey(projects, projectKey);
+            if (!cur) { window.alert("No project selected."); fileInput.value = ""; return; }
+            importWbsSubcontractingFromExcel(cur.projectKey, file);
             fileInput.value = "";
             return;
           }

@@ -883,6 +883,10 @@
           </div>
           <div class="flex items-center gap-3">
             <div id="wbsWorkspaceStatus" class="text-xs font-semibold text-slate-500">No project selected.</div>
+            <button type="button" onclick="document.getElementById('wbsHelpModal').classList.remove('hidden')" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-cyan-50 border border-cyan-200 text-cyan-700 text-sm font-semibold hover:bg-cyan-100 transition-all">
+              <span class="material-symbols-outlined text-[18px]">help</span>
+              How it works
+            </button>
             <button id="closeWbsWorkspaceBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold hover:bg-slate-100 transition-all">
               <span class="material-symbols-outlined text-[18px]">close</span>
               Close
@@ -1003,11 +1007,45 @@
                 </div>
               </section>
 
-              <section class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
-                  <h3 class="text-sm font-bold text-slate-700">Subcontracting</h3>
-                  <p class="mt-2">Reserved for the next WBS mapping step.</p>
+              <section id="wbsSubcontractingCard" class="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <h3 class="text-base font-bold">Subcontracting</h3>
+                    <p id="wbsSubcontractingImportMeta" class="mt-1 text-sm text-slate-500">Import a WBS Excel file with a Subcontracting sheet, then generate rows from Guide Planning Definition.</p>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <label class="inline-flex items-center gap-2 rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs font-semibold text-cyan-700 hover:bg-cyan-100 transition-all cursor-pointer">
+                      <span class="material-symbols-outlined text-[16px]">upload_file</span>
+                      Import Subcontracting Excel
+                      <input id="wbsSubcontractingExcelFileInput" type="file" accept=".xlsx,.xls,.xlsm" class="hidden">
+                    </label>
+                    <button id="wbsSubcontractingToggleBtn" type="button" class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-all" aria-expanded="true">
+                      <span id="wbsSubcontractingRowCount">0 generated row(s)</span>
+                      <span id="wbsSubcontractingToggleIcon" class="material-symbols-outlined text-[18px]">expand_less</span>
+                    </button>
+                  </div>
                 </div>
+                <div id="wbsSubcontractingPanel" class="mt-4 overflow-x-auto custom-scrollbar">
+                  <table class="min-w-full text-sm">
+                    <thead class="text-[10px] uppercase tracking-wider text-slate-400">
+                      <tr class="border-b border-slate-200">
+                        <th class="text-left py-3 pr-4">Phase</th>
+                        <th class="text-left py-3 px-4 min-w-[220px]">Description</th>
+                        <th class="text-left py-3 px-4">Subsystem</th>
+                        <th class="text-left py-3 px-4">Period</th>
+                        <th class="text-left py-3 px-4 min-w-[140px]">Costs Type</th>
+                        <th class="text-left py-3 px-4 min-w-[120px]">PBS/IBS</th>
+                        <th class="text-left py-3 px-4 min-w-[120px]">ABS</th>
+                        <th class="text-left py-3 px-4 min-w-[160px]">Associated WP</th>
+                        <th class="text-left py-3 pl-4 min-w-[220px]">Tasks</th>
+                      </tr>
+                    </thead>
+                    <tbody id="wbsSubcontractingTableBody" class="divide-y divide-slate-200"></tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
                   <h3 class="text-sm font-bold text-slate-700">Overhaul &amp; Renewals</h3>
                   <p class="mt-2">Reserved for the next WBS mapping step.</p>
@@ -1958,6 +1996,107 @@
     </main>
   </div>
 
+  <!-- WBS "How it works" modal -->
+  <div id="wbsHelpModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm">
+    <div class="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl border border-slate-200 p-8">
+      <button type="button" onclick="document.getElementById('wbsHelpModal').classList.add('hidden')" class="absolute top-5 right-5 inline-flex items-center justify-center size-9 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 transition-all">
+        <span class="material-symbols-outlined text-[18px]">close</span>
+      </button>
+
+      <div class="flex items-center gap-3 mb-6">
+        <span class="material-symbols-outlined text-[24px] text-cyan-600">help</span>
+        <h2 class="text-xl font-black tracking-tight">How WBS Workspace works</h2>
+      </div>
+
+      <div class="space-y-5 text-sm text-slate-700 leading-6">
+        <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+          <p class="font-bold text-slate-800 mb-1">Overall logic</p>
+          <p>WBS generates editable mapping rows per project from the imported Excel sheets and the current project configuration. The main import reads <strong>Workload</strong>, <strong>Materials</strong>, and <strong>Subcontracting</strong>; each card also has its own separate import button. Generated rows keep the Excel values for <strong>Costs Type</strong>, <strong>PBS/IBS</strong>, <strong>ABS</strong>, <strong>Associated WP</strong>, and <strong>Tasks</strong>.</p>
+        </div>
+
+        <div>
+          <p class="font-bold text-slate-800 mb-2">Shared rules</p>
+          <ul class="space-y-3 pl-1">
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-cyan-100 text-cyan-700 text-[11px] font-bold">P</span>
+              <div>Rows are generated for each project phase and for the applicable periods <strong>MOB</strong>, <strong>REC</strong>, and <strong>DEM</strong>. If the Excel row has a Period value, only the matching period is tested.</div>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-700 text-[11px] font-bold">M</span>
+              <div><strong>MOB</strong> is generated only when the phase has both <strong>Post Warranty Start</strong> and <strong>Post Warranty End</strong>.</div>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-bold">S</span>
+              <div>Subsystem names are matched against the project subsystems. <strong>FEEDING SYSTEM</strong> is expanded to <strong>3rd_Rail</strong> and <strong>CAT</strong>. If no subsystem matches, the row is ignored unless it is an allowed project-level row.</div>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 text-[11px] font-bold">D</span>
+              <div>Duplicates are removed using Phase + Description/Position + Subsystem + Period + Costs Type + PBS/IBS + ABS + Associated WP + Tasks.</div>
+            </li>
+          </ul>
+        </div>
+
+        <div class="grid gap-4 lg:grid-cols-3">
+          <div class="rounded-xl border border-cyan-100 bg-cyan-50 px-4 py-4">
+            <p class="font-bold text-cyan-900 mb-2">Workload table</p>
+            <p class="text-cyan-800">Reads the Excel <strong>Workload</strong> sheet. White-collar rows use the Description text and the positions selected in Cost Centers. Technician and Supervisor rows use Workload Table quantities and Optimization coefficient rates. Worker rows use the Worker rate. Rows are generated only when the corresponding rate is greater than 0.</p>
+          </div>
+
+          <div class="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-4">
+            <p class="font-bold text-emerald-900 mb-2">Materials table</p>
+            <p class="text-emerald-800">Reads the Excel <strong>Materials</strong> sheet. Regular material rows depend on Guide Planning Material selections for MOB/REC/DEM. Project-level rows are allowed for Other Support Costs, Tools, PPE, and Vehicles. Tools uses Shared / Depot Pool, PPE uses MANAGEMENT, Vehicles uses Project / Management, and Other Support Costs uses the Other Support Costs table.</p>
+          </div>
+
+          <div class="rounded-xl border border-violet-100 bg-violet-50 px-4 py-4">
+            <p class="font-bold text-violet-900 mb-2">Subcontracting table</p>
+            <p class="text-violet-800">Reads the Excel <strong>Subcontracting</strong> sheet. Regular rows depend only on Guide Planning Applicable Subcontracting Types. Technical_Training maps to Training, Obsolescence_Monitoring and Obsolescence_Treatment map to Obsolescence. Legal_Training is project-level only, REC only, and is generated when the current phase has Mandatory Training Yearly Total greater than 0.</p>
+          </div>
+        </div>
+
+        <div>
+          <p class="font-bold text-slate-800 mb-2">Project-level rows</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+              <thead class="bg-slate-100 text-slate-600">
+                <tr>
+                  <th class="px-3 py-2 text-left font-bold">Description</th>
+                  <th class="px-3 py-2 text-left font-bold">Rule</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <tr>
+                  <td class="px-3 py-2 font-semibold">Other Support Costs</td>
+                  <td class="px-3 py-2">MOB if Capex Cost &gt; 0, REC if Annual Opex &gt; 0, DEM not used.</td>
+                </tr>
+                <tr class="bg-slate-50">
+                  <td class="px-3 py-2 font-semibold">Tools</td>
+                  <td class="px-3 py-2">Generated when Shared / Depot Pool has Individual, Collective, or Special tools &gt; 0 for the same phase and period.</td>
+                </tr>
+                <tr>
+                  <td class="px-3 py-2 font-semibold">PPE</td>
+                  <td class="px-3 py-2">Generated when MANAGEMENT has PPE &gt; 0 for the same phase and period.</td>
+                </tr>
+                <tr class="bg-slate-50">
+                  <td class="px-3 py-2 font-semibold">Vehicles</td>
+                  <td class="px-3 py-2">MOB uses Capex, REC uses Fuel or Operating annual cost, DEM uses Capex, Fuel, or Operating cost from Project / Management.</td>
+                </tr>
+                <tr>
+                  <td class="px-3 py-2 font-semibold">Legal_Training</td>
+                  <td class="px-3 py-2">REC only. Generated when Mandatory Training Yearly Total is &gt; 0 for the current phase.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-cyan-100 bg-cyan-50 px-4 py-3">
+          <p class="font-semibold text-cyan-900 mb-1">Editable output</p>
+          <p class="text-cyan-800">The WBS rows are generated from source rules, but the WBS classification fields remain editable in the table. Edits are stored per generated row key and reused when the workspace is rendered again.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Mandatory Training "How it works" modal -->
   <div id="mtHelpModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm">
     <div class="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl border border-slate-200 p-8">
@@ -2276,7 +2415,7 @@
     </div>
   </aside>
 
-  <script src="cost_summary_mi_ui.js?v=20260520-wbs-ppe-management"></script>
-  <script type="module" src="cost_summary_mi.js?v=20260520-wbs-ppe-management"></script>
+  <script src="cost_summary_mi_ui.js?v=20260523-wbs-guide-switch"></script>
+  <script type="module" src="cost_summary_mi.js?v=20260523-wbs-guide-switch"></script>
 </body>
 </html>
