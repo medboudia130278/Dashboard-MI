@@ -2317,6 +2317,7 @@
               persistedKeys: Array.from(project.persistedKeysSet || [project.projectKey]),
               hasSynthesis: hasSynthesis,
               hasHoursReport: hasHoursReport,
+              synthesisRows: project.synthesisRows,
               workloadRows: workloadRows,
               gapAlerts: workloadRows.filter(function (r) { return r.gapHours < 0; }),
             };
@@ -4863,18 +4864,22 @@
         const vehiclesState = readVehiclesFallbackState();
         const guidePlanningProjects = buildFallbackGuidePlanningProjects();
         const guidePlanningByLookup = buildProjectLookupMap(guidePlanningProjects);
+        const workloadProjects = buildFallbackWorkloadSynthesisProjects();
+        const workloadByLookup = buildProjectLookupMap(workloadProjects);
         return buildWhiteCollarProjects().map(function (project) {
           const lookupKeys = getProjectLookupKeys(project);
           const current = readPersistedFallbackProjectState(persisted, lookupKeys);
           const importedRows = Array.isArray(current.importedRows) ? current.importedRows : [];
           const materialImportedRows = Array.isArray(current.materialImportedRows) ? current.materialImportedRows : [];
           const subcontractingImportedRows = Array.isArray(current.subcontractingImportedRows) ? current.subcontractingImportedRows : [];
+          const overhaulRenewalImportedRows = Array.isArray(current.overhaulRenewalImportedRows) ? current.overhaulRenewalImportedRows : [];
           const guidePlanningProject = findProjectByLookupKeys(guidePlanningByLookup, lookupKeys)
             || guidePlanningProjects.find(function (candidate) {
               return normalizeWorkspaceKey(candidate.projectKey) === normalizeWorkspaceKey(project.projectKey)
                 || normalizeWorkspaceKey(candidate.projectName) === normalizeWorkspaceKey(project.projectName);
             })
             || null;
+          const workloadProject = findProjectByLookupKeys(workloadByLookup, lookupKeys) || null;
           const otherSupportCostProject = fillMissingImportedPhaseValues(
             readPersistedFallbackProjectState(oscState, lookupKeys),
             project.phases
@@ -4904,6 +4909,11 @@
             wbsSubcontractingFileName: current.subcontractingFileName || "",
             wbsSubcontractingImportedAt: current.subcontractingImportedAt || "",
             wbsSubcontractingRowOverrides: Object.assign({}, current.subcontractingRowOverrides || {}),
+            wbsOverhaulRenewalImportedRows: overhaulRenewalImportedRows,
+            wbsOverhaulRenewalFileName: current.overhaulRenewalFileName || "",
+            wbsOverhaulRenewalImportedAt: current.overhaulRenewalImportedAt || "",
+            wbsOverhaulRenewalRowOverrides: Object.assign({}, current.overhaulRenewalRowOverrides || {}),
+            wbsSynthesisRows: Array.isArray(workloadProject && workloadProject.synthesisRows) ? workloadProject.synthesisRows : [],
             wbsGuidePlanningProject: guidePlanningProject,
             wbsOtherSupportCostProject: otherSupportCostProject,
             wbsToolsConsumablesProject: toolsConsumablesProject,
@@ -4911,6 +4921,7 @@
             hasWbsImport: importedRows.length > 0,
             hasWbsMaterialImport: materialImportedRows.length > 0,
             hasWbsSubcontractingImport: subcontractingImportedRows.length > 0,
+            hasWbsOverhaulRenewalImport: overhaulRenewalImportedRows.length > 0,
           });
         });
       }
@@ -4955,6 +4966,18 @@
           row[field] = value || "";
           rowOverrides[rowKey] = row;
           project.subcontractingRowOverrides = rowOverrides;
+          return project;
+        });
+      }
+
+      function saveWbsOverhaulRenewalRowField(projectKey, rowKey, field, value) {
+        if (!projectKey || !rowKey || !field) return;
+        saveWbsProject(projectKey, function (project) {
+          const rowOverrides = Object.assign({}, project.overhaulRenewalRowOverrides || {});
+          const row = Object.assign({}, rowOverrides[rowKey] || {});
+          row[field] = value || "";
+          rowOverrides[rowKey] = row;
+          project.overhaulRenewalRowOverrides = rowOverrides;
           return project;
         });
       }
@@ -5094,6 +5117,59 @@
         return { sheetName: sheetName, rows: rows };
       }
 
+      function findWbsOverhaulRenewalSheetName(workbook) {
+        const candidates = ["ovh_renew", "ovh", "renew", "overhaul_renew", "overhaul_renewal", "overhaul_renewals"];
+        return workbook.SheetNames.find(function (name) {
+          const key = normalizeWbsExcelKey(name);
+          return candidates.some(function (candidate) {
+            return key === candidate || key.indexOf(candidate) !== -1;
+          });
+        }) || "";
+      }
+
+      function parseWbsOverhaulRenewalRowsFromWorkbook(workbook) {
+        const sheetName = findWbsOverhaulRenewalSheetName(workbook);
+        if (!sheetName) return { sheetName: "", rows: [] };
+        const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "", raw: false, blankrows: false });
+        const seenImportedRows = new Set();
+        const rows = rawRows.map(function (rawRow, index) {
+          const row = {};
+          Object.entries(rawRow).forEach(function (entry) {
+            row[normalizeWbsExcelKey(entry[0])] = entry[1];
+          });
+          return {
+            id: "wbs_overhaul_renewal_" + index,
+            description: String(row.description || "").trim(),
+            type: String(row.type || "").trim(),
+            subsystem: String(row.subsystem || row.sub_system || "").trim(),
+            period: String(row.period || "").trim(),
+            costsType: String(row.costs_type || row.cost_type || "").trim(),
+            pbsIbs: String(row.pbs_ibs || row.pbs || row.ibs || "").trim(),
+            abs: String(row.abs || "").trim(),
+            associatedWp: String(row.associated_wp || row.associated_work_package || row.wp || "").trim(),
+            tasks: String(row.tasks || row.task || "").trim(),
+          };
+        }).filter(function (row) {
+          const description = normalizeWbsOverhaulRenewalDescription(row.description);
+          if (!description || !row.subsystem) return false;
+          const uniqueKey = [
+            row.description,
+            row.type,
+            row.subsystem,
+            row.period,
+            row.costsType,
+            row.pbsIbs,
+            row.abs,
+            row.associatedWp,
+            row.tasks,
+          ].map(normalizeWbsText).join("|");
+          if (seenImportedRows.has(uniqueKey)) return false;
+          seenImportedRows.add(uniqueKey);
+          return true;
+        });
+        return { sheetName: sheetName, rows: rows };
+      }
+
       function importWbsFromExcel(projectKey, file) {
         if (!file || !projectKey) return;
         if (typeof XLSX === "undefined") { window.alert("XLSX library is not available on this page."); return; }
@@ -5205,6 +5281,43 @@
         reader.readAsArrayBuffer(file);
       }
 
+      function importWbsOverhaulRenewalFromExcel(projectKey, file) {
+        if (!file || !projectKey) return;
+        if (typeof XLSX === "undefined") { window.alert("XLSX library is not available on this page."); return; }
+
+        const reader = new FileReader();
+        reader.onload = function (evt) {
+          try {
+            const data = new Uint8Array(evt.target.result);
+            const wb = XLSX.read(data, { type: "array" });
+            const parsed = parseWbsOverhaulRenewalRowsFromWorkbook(wb);
+            if (!parsed.sheetName) {
+              window.alert("No 'Ovh & Renew' sheet found in this WBS Excel file. Available sheets: " + wb.SheetNames.join(", "));
+              return;
+            }
+
+            if (!parsed.rows.length) {
+              window.alert("No valid WBS Overhaul & Renewals rows found. Expected Description + Subsystem columns in the Ovh & Renew sheet.");
+              return;
+            }
+
+            saveWbsProject(projectKey, function (project) {
+              project.overhaulRenewalImportedRows = parsed.rows;
+              project.overhaulRenewalFileName = file.name || "";
+              project.overhaulRenewalImportedAt = new Date().toISOString();
+              project.overhaulRenewalRowOverrides = {};
+              return project;
+            });
+            if (typeof window.updateToolbarStatusDots === "function") window.updateToolbarStatusDots();
+            renderFallbackWbsWorkspace();
+          } catch (err) {
+            console.error("WBS Overhaul & Renewals Excel import error:", err);
+            window.alert("Failed to parse WBS Overhaul & Renewals Excel file: " + (err.message || err));
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      }
+
       function importWbsCombinedFromExcel(projectKey, file) {
         if (!file || !projectKey) return;
         if (typeof XLSX === "undefined") { window.alert("XLSX library is not available on this page."); return; }
@@ -5217,13 +5330,14 @@
             const workload = parseWbsWorkloadRowsFromWorkbook(wb);
             const materials = parseWbsMaterialRowsFromWorkbook(wb);
             const subcontracting = parseWbsSubcontractingRowsFromWorkbook(wb);
+            const overhaulRenewal = parseWbsOverhaulRenewalRowsFromWorkbook(wb);
 
-            if (!workload.sheetName || !materials.sheetName || !subcontracting.sheetName) {
-              window.alert("The WBS Excel file must contain 'Workload', 'Materials', and 'Subcontracting' sheets. Available sheets: " + wb.SheetNames.join(", "));
+            if (!workload.sheetName || !materials.sheetName || !subcontracting.sheetName || !overhaulRenewal.sheetName) {
+              window.alert("The WBS Excel file must contain 'Workload', 'Materials', 'Subcontracting', and 'Ovh & Renew' sheets. Available sheets: " + wb.SheetNames.join(", "));
               return;
             }
-            if (!workload.rows.length || !materials.rows.length || !subcontracting.rows.length) {
-              window.alert("The WBS Excel file was found, but valid rows are missing. Workload expects Description + Position type; Materials/Subcontracting expect Description + Subsystem, except project-level rows where Subsystem can be empty.");
+            if (!workload.rows.length || !materials.rows.length || !subcontracting.rows.length || !overhaulRenewal.rows.length) {
+              window.alert("The WBS Excel file was found, but valid rows are missing. Workload expects Description + Position type; Materials/Subcontracting expect Description + Subsystem, except project-level rows where Subsystem can be empty. Ovh & Renew expects Description + Subsystem.");
               return;
             }
 
@@ -5240,6 +5354,10 @@
               project.subcontractingFileName = file.name || "";
               project.subcontractingImportedAt = new Date().toISOString();
               project.subcontractingRowOverrides = {};
+              project.overhaulRenewalImportedRows = overhaulRenewal.rows;
+              project.overhaulRenewalFileName = file.name || "";
+              project.overhaulRenewalImportedAt = new Date().toISOString();
+              project.overhaulRenewalRowOverrides = {};
               return project;
             });
             if (typeof window.updateToolbarStatusDots === "function") window.updateToolbarStatusDots();
@@ -5407,6 +5525,32 @@
         if (normalized === "technical support" || normalized === "technical supports") return "Technical_Support";
         if (normalized === "obsolescence monitoring") return "Obsolescence_Monitoring";
         if (normalized === "obsolescence treatment" || normalized === "obsolescence treatments") return "Obsolescence_Treatment";
+        return "";
+      }
+
+      function normalizeWbsOverhaulRenewalDescription(value) {
+        const normalized = normalizeWbsText(value);
+        if (normalized === "repair" || normalized === "repairs") return "Repair";
+        if (normalized === "overhaul" || normalized === "overhauls") return "Overhaul";
+        if (normalized === "renewal" || normalized === "renewals") return "Renewal";
+        return "";
+      }
+
+      function getWbsRowValueByCandidates(row, candidates) {
+        if (!row) return "";
+        const directKeys = Array.isArray(candidates) ? candidates : [];
+        for (let index = 0; index < directKeys.length; index += 1) {
+          const key = directKeys[index];
+          if (Object.prototype.hasOwnProperty.call(row, key)) return row[key];
+        }
+        const normalizedLookup = {};
+        Object.keys(row).forEach(function (key) {
+          normalizedLookup[normalizeWbsExcelKey(key)] = row[key];
+        });
+        for (let index = 0; index < directKeys.length; index += 1) {
+          const normalizedKey = normalizeWbsExcelKey(directKeys[index]);
+          if (Object.prototype.hasOwnProperty.call(normalizedLookup, normalizedKey)) return normalizedLookup[normalizedKey];
+        }
         return "";
       }
 
@@ -5771,6 +5915,115 @@
         return rows;
       }
 
+      function buildGeneratedWbsOverhaulRenewalRows(project) {
+        const periods = getWbsPeriodDefinitions(project);
+        const recPeriod = periods.find(function (period) { return period.type === "rec"; }) || { type: "rec", label: "REC" };
+        const overhaulSubsystems = mergeWbsSubsystems(project.subsystems);
+        const resolveWbsSourceSubsystems = createWbsSubsystemResolver(overhaulSubsystems);
+        const synthesisRows = Array.isArray(project.wbsSynthesisRows) ? project.wbsSynthesisRows : [];
+
+        function sourceRowMatchesRec(sourceRow) {
+          const sourcePeriod = normalizeWbsText(sourceRow.period);
+          if (!sourcePeriod) return true;
+          return sourcePeriod === "rec" || sourcePeriod === normalizeWbsText(recPeriod.label);
+        }
+
+        function synthesisSubsystem(row) {
+          return String(getWbsRowValueByCandidates(row, ["Subsystem", "subsystem", "sub_system", "system"]) || "").trim();
+        }
+
+        function synthesisType(row) {
+          return normalizeWbsText(getWbsRowValueByCandidates(row, ["Type", "type", "activity_type", "renewal_type"]));
+        }
+
+        function synthesisYearlyReparableCost(row) {
+          return toNumber(getWbsRowValueByCandidates(row, [
+            "Yearly Reparable Cost",
+            "yearly_reparable_cost",
+            "reparable_cost",
+            "repairable_cost",
+            "reparable_total_cost",
+          ])) || 0;
+        }
+
+        function synthesisTotalGlobalCost(row) {
+          return toNumber(getWbsRowValueByCandidates(row, [
+            "Total Global Cost",
+            "total_global_cost",
+            "global_cost",
+            "total_cost",
+            "overall_cost",
+          ])) || 0;
+        }
+
+        function hasSynthesisCondition(description, subsystem) {
+          const subsystemKey = normalizeWbsText(subsystem);
+          return synthesisRows.some(function (row) {
+            if (normalizeWbsText(synthesisSubsystem(row)) !== subsystemKey) return false;
+            const rowType = synthesisType(row);
+            if (description === "Repair") {
+              return rowType.indexOf("corrective") !== -1 && synthesisYearlyReparableCost(row) > 0;
+            }
+            if (description === "Overhaul") {
+              return rowType.indexOf("overhaul") !== -1 && synthesisTotalGlobalCost(row) > 0;
+            }
+            if (description === "Renewal") {
+              return rowType.indexOf("renewal") !== -1 && synthesisTotalGlobalCost(row) > 0;
+            }
+            return false;
+          });
+        }
+
+        const rows = [];
+        const seenGeneratedRows = new Set();
+        (project.wbsOverhaulRenewalImportedRows || []).forEach(function (sourceRow, sourceIndex) {
+          const description = normalizeWbsOverhaulRenewalDescription(sourceRow.description);
+          if (!description) return;
+          if (description === "Repair" && !sourceRowMatchesRec(sourceRow)) return;
+          const sourceSubsystems = resolveWbsSourceSubsystems(sourceRow.subsystem);
+          if (!sourceSubsystems.length) return;
+
+          project.phases.forEach(function (phase) {
+            sourceSubsystems.forEach(function (subsystem) {
+              if (!hasSynthesisCondition(description, subsystem)) return;
+              const periodLabel = description === "Repair" ? recPeriod.label : "";
+              const periodKey = description === "Repair" ? recPeriod.type : "none";
+              const rowKey = ["wbs_overhaul_renewal", phase.key, periodKey, sourceRow.id || sourceIndex, normalizeWbsText(description), normalizeWbsText(sourceRow.type), normalizeWbsText(subsystem)].join("|");
+              const override = project.wbsOverhaulRenewalRowOverrides[rowKey] || {};
+              const row = {
+                rowKey: rowKey,
+                phase: phase.label || phase.key,
+                description: description,
+                type: override.type !== undefined ? override.type : sourceRow.type,
+                subsystem: subsystem,
+                period: periodLabel,
+                costsType: override.costsType !== undefined ? override.costsType : sourceRow.costsType,
+                pbsIbs: override.pbsIbs !== undefined ? override.pbsIbs : sourceRow.pbsIbs,
+                abs: override.abs !== undefined ? override.abs : sourceRow.abs,
+                associatedWp: override.associatedWp !== undefined ? override.associatedWp : sourceRow.associatedWp,
+                tasks: override.tasks !== undefined ? override.tasks : sourceRow.tasks,
+              };
+              const uniqueKey = [
+                row.phase,
+                row.description,
+                row.subsystem,
+                row.type,
+                row.period,
+                row.costsType,
+                row.pbsIbs,
+                row.abs,
+                row.associatedWp,
+                row.tasks,
+              ].map(normalizeWbsText).join("|");
+              if (seenGeneratedRows.has(uniqueKey)) return;
+              seenGeneratedRows.add(uniqueKey);
+              rows.push(row);
+            });
+          });
+        });
+        return rows;
+      }
+
       function renderFallbackWbsWorkspace() {
         const workspace = $("wbsWorkspace");
         const list = $("wbsProjectList");
@@ -5798,8 +6051,14 @@
         const subcontractingToggleIcon = $("wbsSubcontractingToggleIcon");
         const subcontractingPanel = $("wbsSubcontractingPanel");
         const subcontractingTableBody = $("wbsSubcontractingTableBody");
+        const overhaulRenewalImportMetaEl = $("wbsOverhaulRenewalsImportMeta");
+        const overhaulRenewalRowCountEl = $("wbsOverhaulRenewalsRowCount");
+        const overhaulRenewalToggleBtn = $("wbsOverhaulRenewalsToggleBtn");
+        const overhaulRenewalToggleIcon = $("wbsOverhaulRenewalsToggleIcon");
+        const overhaulRenewalPanel = $("wbsOverhaulRenewalsPanel");
+        const overhaulRenewalTableBody = $("wbsOverhaulRenewalsTableBody");
         const tableBody = $("wbsWorkloadTableBody");
-        if (!workspace || !list || !emptyEl || !contentEl || !statusEl || !titleEl || !metaEl || !importMetaEl || !workloadImportMetaEl || !missingEl || !rowCountEl || !tableBody || !materialsImportMetaEl || !materialsRowCountEl || !materialsTableBody || !subcontractingImportMetaEl || !subcontractingRowCountEl || !subcontractingTableBody) return;
+        if (!workspace || !list || !emptyEl || !contentEl || !statusEl || !titleEl || !metaEl || !importMetaEl || !workloadImportMetaEl || !missingEl || !rowCountEl || !tableBody || !materialsImportMetaEl || !materialsRowCountEl || !materialsTableBody || !subcontractingImportMetaEl || !subcontractingRowCountEl || !subcontractingTableBody || !overhaulRenewalImportMetaEl || !overhaulRenewalRowCountEl || !overhaulRenewalTableBody) return;
 
         const projects = buildWbsProjects();
         const currentKey = workspace.dataset.currentProjectKey && projects.some(function (project) { return project.projectKey === workspace.dataset.currentProjectKey; })
@@ -5820,6 +6079,7 @@
                 '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ' + (project.hasWbsImport ? "bg-cyan-50 text-cyan-700 border border-cyan-200" : "bg-slate-100 text-slate-400 border border-slate-200") + '">WL</span>' +
                 '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ' + (project.hasWbsMaterialImport ? "bg-cyan-50 text-cyan-700 border border-cyan-200" : "bg-slate-100 text-slate-400 border border-slate-200") + '">MAT</span>' +
                 '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ' + (project.hasWbsSubcontractingImport ? "bg-cyan-50 text-cyan-700 border border-cyan-200" : "bg-slate-100 text-slate-400 border border-slate-200") + '">SUB</span>' +
+                '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ' + (project.hasWbsOverhaulRenewalImport ? "bg-cyan-50 text-cyan-700 border border-cyan-200" : "bg-slate-100 text-slate-400 border border-slate-200") + '">OVH</span>' +
               '</div>' +
             '</button>';
         }).join("");
@@ -5839,6 +6099,7 @@
         workloadImportMetaEl.textContent = cur.hasWbsImport ? "Workload imported: " + cur.wbsFileName + " | " + cur.wbsImportedRows.length + " imported row(s)" : "No Workload WBS file imported yet.";
         materialsImportMetaEl.textContent = cur.hasWbsMaterialImport ? "Materials imported: " + cur.wbsMaterialFileName + " | " + cur.wbsMaterialImportedRows.length + " imported row(s)" : "No Materials WBS file imported yet.";
         subcontractingImportMetaEl.textContent = cur.hasWbsSubcontractingImport ? "Subcontracting imported: " + cur.wbsSubcontractingFileName + " | " + cur.wbsSubcontractingImportedRows.length + " imported row(s)" : "No Subcontracting WBS file imported yet.";
+        overhaulRenewalImportMetaEl.textContent = cur.hasWbsOverhaulRenewalImport ? "Overhaul & Renewals imported: " + cur.wbsOverhaulRenewalFileName + " | " + cur.wbsOverhaulRenewalImportedRows.length + " imported row(s)" : "No Overhaul & Renewals WBS file imported yet.";
 
         const missingParts = [];
         if (!cur.hasPhases) missingParts.push('<div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">No phases found. Configure Project Phases first.</div>');
@@ -5846,6 +6107,7 @@
         if (!cur.hasWbsImport) missingParts.push('<div class="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">Import a WBS Excel file with a Workload sheet to generate workload rows.</div>');
         if (!cur.hasWbsMaterialImport) missingParts.push('<div class="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">Import a WBS Excel file with a Materials sheet to generate material rows.</div>');
         if (!cur.hasWbsSubcontractingImport) missingParts.push('<div class="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">Import a WBS Excel file with a Subcontracting sheet to generate subcontracting rows.</div>');
+        if (!cur.hasWbsOverhaulRenewalImport) missingParts.push('<div class="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">Import a WBS Excel file with an Ovh & Renew sheet to generate overhaul and renewal rows.</div>');
         const importedMaterialRows = Array.isArray(cur.wbsMaterialImportedRows) ? cur.wbsMaterialImportedRows : [];
         const importedSubcontractingRows = Array.isArray(cur.wbsSubcontractingImportedRows) ? cur.wbsSubcontractingImportedRows : [];
         function isProjectLevelWbsMaterialRow(row) {
@@ -5957,6 +6219,37 @@
             '<td class="py-2.5 pl-4">' + textInput("tasks", row.tasks, "min-w-[220px]") + '</td>' +
           '</tr>';
         }).join("") : '<tr><td colspan="9" class="py-8 text-center text-sm text-slate-500">' + escapeHtml(noSubcontractingMessage) + '</td></tr>';
+
+        const generatedOverhaulRenewalRows = buildGeneratedWbsOverhaulRenewalRows(cur);
+        overhaulRenewalRowCountEl.textContent = generatedOverhaulRenewalRows.length + " generated row(s)";
+        const overhaulRenewalCollapsed = workspace.dataset.wbsOverhaulRenewalsCollapsed === "true";
+        if (overhaulRenewalPanel) overhaulRenewalPanel.classList.toggle("hidden", overhaulRenewalCollapsed);
+        if (overhaulRenewalToggleBtn) overhaulRenewalToggleBtn.setAttribute("aria-expanded", overhaulRenewalCollapsed ? "false" : "true");
+        if (overhaulRenewalToggleIcon) overhaulRenewalToggleIcon.textContent = overhaulRenewalCollapsed ? "expand_more" : "expand_less";
+        let noOverhaulRenewalMessage = "No WBS overhaul or renewal row generated yet.";
+        if (cur.hasWbsOverhaulRenewalImport) {
+          const hasSubsystems = mergeWbsSubsystems(cur.subsystems).length > 0;
+          if (!hasSubsystems) noOverhaulRenewalMessage = "No matching subsystem source found for Overhaul & Renewals. Check Workload Synthesis.";
+          else if (!Array.isArray(cur.wbsSynthesisRows) || !cur.wbsSynthesisRows.length) noOverhaulRenewalMessage = "No Synthesis sheet data found for this project.";
+          else noOverhaulRenewalMessage = "Imported Overhaul & Renewals rows do not match positive Synthesis conditions for Repair, Overhaul, or Renewal.";
+        }
+        overhaulRenewalTableBody.innerHTML = generatedOverhaulRenewalRows.length ? generatedOverhaulRenewalRows.map(function (row) {
+          function textInput(field, value, minWidth) {
+            return '<input data-wbs-overhaul-renewal-row-field="' + field + '" data-project-key="' + escapeHtml(cur.projectKey) + '" data-row-key="' + escapeHtml(row.rowKey) + '" type="text" class="w-full ' + (minWidth || "min-w-[120px]") + ' rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm" value="' + escapeHtml(value || "") + '">';
+          }
+          return '<tr>' +
+            '<td class="py-2.5 pr-4 font-semibold whitespace-nowrap">' + escapeHtml(row.phase) + '</td>' +
+            '<td class="py-2.5 px-4 font-medium">' + escapeHtml(row.description) + '</td>' +
+            '<td class="py-2.5 px-4">' + textInput("type", row.type, "min-w-[120px]") + '</td>' +
+            '<td class="py-2.5 px-4 text-slate-600">' + escapeHtml(row.subsystem) + '</td>' +
+            '<td class="py-2.5 px-4">' + (row.period ? '<span class="inline-flex px-2 py-0.5 rounded-full border border-cyan-200 bg-cyan-50 text-[10px] font-bold text-cyan-700">' + escapeHtml(row.period) + '</span>' : '<span class="text-slate-300">--</span>') + '</td>' +
+            '<td class="py-2.5 px-4">' + textInput("costsType", row.costsType, "min-w-[140px]") + '</td>' +
+            '<td class="py-2.5 px-4">' + textInput("pbsIbs", row.pbsIbs) + '</td>' +
+            '<td class="py-2.5 px-4">' + textInput("abs", row.abs) + '</td>' +
+            '<td class="py-2.5 px-4">' + textInput("associatedWp", row.associatedWp, "min-w-[160px]") + '</td>' +
+            '<td class="py-2.5 pl-4">' + textInput("tasks", row.tasks, "min-w-[220px]") + '</td>' +
+          '</tr>';
+        }).join("") : '<tr><td colspan="10" class="py-8 text-center text-sm text-slate-500">' + escapeHtml(noOverhaulRenewalMessage) + '</td></tr>';
       }
 
       function buildToolsConsumablesProjects() {
@@ -9280,6 +9573,14 @@
             return;
           }
 
+          if (event.target.closest("#wbsOverhaulRenewalsToggleBtn")) {
+            event.preventDefault();
+            const ws = $("wbsWorkspace");
+            if (ws) ws.dataset.wbsOverhaulRenewalsCollapsed = ws.dataset.wbsOverhaulRenewalsCollapsed === "true" ? "false" : "true";
+            renderFallbackWbsWorkspace();
+            return;
+          }
+
           const wbsProjectBtn = event.target.closest("[data-wbs-project-select]");
           if (wbsProjectBtn) {
             event.preventDefault();
@@ -9811,6 +10112,17 @@
             return;
           }
 
+          const wbsOverhaulRenewalRowField = event.target.closest("[data-wbs-overhaul-renewal-row-field]");
+          if (wbsOverhaulRenewalRowField) {
+            saveWbsOverhaulRenewalRowField(
+              wbsOverhaulRenewalRowField.getAttribute("data-project-key") || "",
+              wbsOverhaulRenewalRowField.getAttribute("data-row-key") || "",
+              wbsOverhaulRenewalRowField.getAttribute("data-wbs-overhaul-renewal-row-field") || "",
+              wbsOverhaulRenewalRowField.value || ""
+            );
+            return;
+          }
+
           const tcCellInput = event.target.closest("[data-tc-cell]");
           if (tcCellInput) {
             saveTcCellOverride(
@@ -9884,6 +10196,20 @@
             const cur = findProjectByStoredKey(projects, projectKey);
             if (!cur) { window.alert("No project selected."); fileInput.value = ""; return; }
             importWbsSubcontractingFromExcel(cur.projectKey, file);
+            fileInput.value = "";
+            return;
+          }
+
+          if (event.target.id === "wbsOverhaulRenewalsExcelFileInput") {
+            const fileInput = event.target;
+            const file = fileInput.files && fileInput.files[0];
+            if (!file) return;
+            const ws = $("wbsWorkspace");
+            const projectKey = fileInput.dataset.projectKey || ws?.dataset.currentProjectKey || "";
+            const projects = buildWbsProjects();
+            const cur = findProjectByStoredKey(projects, projectKey);
+            if (!cur) { window.alert("No project selected."); fileInput.value = ""; return; }
+            importWbsOverhaulRenewalFromExcel(cur.projectKey, file);
             fileInput.value = "";
             return;
           }

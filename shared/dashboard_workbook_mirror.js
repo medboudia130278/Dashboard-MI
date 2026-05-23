@@ -27,6 +27,8 @@
         night_technicians_optimized: row.night_technicians_optimized || 0,
         paliative_hours_corrective: row.paliative_hours_corrective || 0,
         yearly_total_hours_corrective: row.yearly_total_hours_corrective || 0,
+        yearly_reparable_cost: row.yearly_reparable_cost || 0,
+        total_global_cost: row.total_global_cost || 0,
       };
     });
     const workloadHoursRows = hoursReportRows.map(function (row) {
