@@ -824,6 +824,29 @@
         configExportStores.forEach(function (store) {
           modules[store.name] = readConfigStoreSlice(store.key, studyId);
         });
+        const groups = {
+          studySetup: {
+            projectPhases: cloneJsonValue(modules.projectPhases),
+            costCenters: cloneJsonValue(modules.costCenters),
+            pioDefinition: cloneJsonValue(modules.pioDefinition),
+            guidePlanning: cloneJsonValue(modules.guidePlanning),
+          },
+          dataSources: {
+            currencyExchange: cloneJsonValue(modules.currencyExchange),
+            firmingRules: cloneJsonValue(modules.firmingRules),
+          },
+          organizationRisks: {
+            workloadSynthesis: cloneJsonValue(modules.workloadSynthesis),
+            whiteCollar: cloneJsonValue(modules.whiteCollar),
+            wbs: cloneJsonValue(modules.wbs),
+          },
+          supportCosts: {
+            toolsConsumables: cloneJsonValue(modules.toolsConsumables),
+            vehicles: cloneJsonValue(modules.vehicles),
+            otherSupportCosts: cloneJsonValue(modules.otherSupportCosts),
+            mandatoryTraining: cloneJsonValue(modules.mandatoryTraining),
+          },
+        };
         return {
           app: "cost-summary-mi",
           schemaVersion: 1,
@@ -832,6 +855,7 @@
           studyName: getCurrentStudyLabel(),
           note: "Configuration only. Excel workbook data is not included.",
           modules: modules,
+          groups: groups,
           sharedSettings: cloneJsonValue(safeReadJson(sharedSettingsKey, {})),
         };
       }
@@ -871,6 +895,7 @@
         if (!$("vehiclesWorkspace")?.classList.contains("hidden")) renderFallbackVehiclesWorkspace();
         if (!$("oscWorkspace")?.classList.contains("hidden")) renderFallbackOscWorkspace();
         if (!$("mandatoryTrainingWorkspace")?.classList.contains("hidden")) renderFallbackMandatoryTrainingWorkspace();
+        if (!$("subsystemSummaryWorkspace")?.classList.contains("hidden")) renderSubsystemSummaryWorkspace();
       }
 
       function importCostSummaryConfigPayload(payload) {
@@ -1368,7 +1393,7 @@
       }
 
       function buildFallbackCostCenterProjects() {
-        const persisted = readCostCentersFallbackState();
+        const persisted = readCombinedCostCentersState();
         const pioProjects = buildFallbackPioDefinitionProjects();
         const workbooks = getSharedWorkbooksForWorkspace();
         if (!workbooks.length) {
@@ -1497,6 +1522,7 @@
           });
 
         return Array.from(byProject.values()).map(function (project) {
+          project.persistedKeys = Array.from(project.persistedKeysSet || [project.projectKey]);
           delete project.persistedKeysSet;
           return project;
         }).sort(function (left, right) {
@@ -6073,7 +6099,7 @@
           return '<button type="button" data-wbs-project-select="' + escapeHtml(project.projectKey) + '" class="w-full rounded-xl border px-3 py-3 text-left transition-all ' +
             (active ? "border-cyan-300 bg-cyan-50 shadow-sm ring-1 ring-cyan-200" : "border-slate-200 bg-white hover:bg-slate-100") + '">' +
               '<div class="text-sm font-semibold text-slate-900">' + escapeHtml(project.projectName) + '</div>' +
-              '<div class="mt-1 flex items-center gap-1.5">' +
+              '<div class="mt-1 flex flex-wrap items-center gap-1.5">' +
                 '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ' + (project.hasPhases ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-slate-100 text-slate-400 border border-slate-200") + '">PH</span>' +
                 '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ' + (project.hasSubsystems ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-slate-100 text-slate-400 border border-slate-200") + '">SYS</span>' +
                 '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ' + (project.hasWbsImport ? "bg-cyan-50 text-cyan-700 border border-cyan-200" : "bg-slate-100 text-slate-400 border border-slate-200") + '">WL</span>' +
@@ -6250,6 +6276,482 @@
             '<td class="py-2.5 pl-4">' + textInput("tasks", row.tasks, "min-w-[220px]") + '</td>' +
           '</tr>';
         }).join("") : '<tr><td colspan="10" class="py-8 text-center text-sm text-slate-500">' + escapeHtml(noOverhaulRenewalMessage) + '</td></tr>';
+      }
+
+      const SUBSYSTEM_SUMMARY_HEADERS = [
+        "Phase",
+        "Period",
+        "Type",
+        "Description",
+        "Long_Description",
+        "Quantity",
+        "Unit",
+        "Shift",
+        "Cat 1 (Hours or Months)",
+        "Cost Centre",
+        "Currency",
+        "Planning Guide",
+        "Nb Tot. of Occurency",
+        "Costs Type",
+        "Carat Unit",
+        "Unit Role",
+        "On/Off Shore",
+        "PBS/IBS",
+        "ABS",
+        "Associated WP",
+        "Tasks",
+        "Delegated person",
+        "Firming rule",
+        "Freight per Unit",
+        "Insurances-Rates & Taxes",
+        "Price List Code 1",
+        "Price List Code 2",
+        "Price List Code 3",
+      ];
+
+      function closeSubsystemSummaryWorkspace() {
+        setFallbackDetailWorkspaceActive(false);
+        $("subsystemSummaryWorkspace")?.classList.add("hidden");
+      }
+
+      function normalizeSubsystemSummarySheetKey(subsystem) {
+        const normalized = normalizeWbsText(subsystem);
+        if (normalized === "3rd rail" || normalized === "third rail" || normalized === "cat") return "Feeding_System";
+        return String(subsystem || "").trim() || "Subsystem";
+      }
+
+      function sanitizeExcelSheetName(name, usedNames) {
+        const used = usedNames || new Set();
+        const base = String(name || "Sheet")
+          .replace(/[\\/?*[\]:]/g, "_")
+          .replace(/\s+/g, "_")
+          .replace(/^'+|'+$/g, "")
+          .slice(0, 31) || "Sheet";
+        let candidate = base;
+        let index = 1;
+        while (used.has(candidate.toLowerCase())) {
+          const suffix = "_" + index;
+          candidate = base.slice(0, Math.max(1, 31 - suffix.length)) + suffix;
+          index += 1;
+        }
+        used.add(candidate.toLowerCase());
+        return candidate;
+      }
+
+      function sanitizeExportFileName(value) {
+        return String(value || "Subsystem_Summary")
+          .replace(/[\\/:*?"<>|]+/g, "_")
+          .replace(/\s+/g, "_")
+          .replace(/_+/g, "_")
+          .replace(/^_+|_+$/g, "");
+      }
+
+      function countInclusiveMonths(startDate, endDate) {
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return 0;
+        return ((end.getFullYear() - start.getFullYear()) * 12) + (end.getMonth() - start.getMonth()) + 1;
+      }
+
+      function getSubsystemSummaryPositionRole(description) {
+        const normalized = normalizeWbsText(description);
+        if (normalized.indexOf("supervisor") !== -1) return "Supervisor";
+        if (normalized.indexOf("technician") !== -1 || normalized.indexOf("tech") !== -1) return "Technician";
+        if (normalized.indexOf("worker") !== -1) return "Worker";
+        return "";
+      }
+
+      function getSubsystemSummaryCostCenterRole(position) {
+        const normalized = normalizeWbsText(position);
+        if (normalized === "supervisor" || normalized.indexOf("supervisor") !== -1) return "Supervisor";
+        if (normalized === "technician" || normalized.indexOf("technician") !== -1) return "Technician";
+        if (normalized === "worker" || normalized.indexOf("worker") !== -1) return "Worker";
+        return "";
+      }
+
+      function isSubsystemSummaryPreventive(description) {
+        return normalizeWbsText(description).indexOf("preventive") !== -1;
+      }
+
+      function isSubsystemSummaryCorrective(description) {
+        return normalizeWbsText(description).indexOf("corrective") !== -1;
+      }
+
+      function resolveSubsystemSummaryPeriod(project, periodLabel) {
+        const periodKey = normalizeWbsText(periodLabel);
+        return getWbsPeriodDefinitions(project).find(function (period) {
+          return periodKey === normalizeWbsText(period.type) || periodKey === normalizeWbsText(period.label);
+        }) || null;
+      }
+
+      function findSubsystemSummaryPhase(project, phaseLabel) {
+        const phaseKey = normalizeWbsText(phaseLabel);
+        return (project.phases || []).find(function (phase) {
+          return phaseKey === normalizeWbsText(phase.key) || phaseKey === normalizeWbsText(phase.label);
+        }) || null;
+      }
+
+      function resolveSubsystemSummaryRate(project, phase, subsystem, periodType, positionRole) {
+        const rateKey = {
+          Supervisor: "supervisorRate",
+          Technician: "technicianRate",
+          Worker: "workerRate",
+        }[positionRole] || "";
+        if (!rateKey || !phase) return 0;
+        const overrides = readPersistedFallbackProjectState(readWhiteCollarFallbackState(), getProjectLookupKeys(project));
+        const key = phase.key + "|" + subsystem + "|" + periodType + "|" + rateKey;
+        if (Object.prototype.hasOwnProperty.call(overrides, key)) return toNumber(overrides[key]) || 0;
+        if (rateKey === "workerRate") return 0;
+        if (periodType === "mob") return phase.postWarrantyStartDate && phase.postWarrantyEndDate ? 100 : 0;
+        if (periodType === "rec") return 100;
+        return 0;
+      }
+
+      function resolveSubsystemSummaryBaseQuantity(project, subsystem, shift, description, positionRole) {
+        const overrides = readPersistedFallbackProjectState(readWorkloadOverridesFallbackState(), getProjectLookupKeys(project));
+        const row = (project.workloadRows || []).find(function (candidate) {
+          return normalizeWbsText(candidate.subsystem) === normalizeWbsText(subsystem)
+            && normalizeWbsText(candidate.shift) === normalizeWbsText(shift);
+        });
+        if (!row) return 0;
+        function rowValue(field) {
+          const key = row.subsystem + "|" + row.shift + "|" + field;
+          return Object.prototype.hasOwnProperty.call(overrides, key) ? overrides[key] : row[field];
+        }
+        if (positionRole === "Supervisor") {
+          return toNumber(rowValue(isSubsystemSummaryCorrective(description) ? "correctiveSupervisors" : "preventiveSupervisors")) || 0;
+        }
+        if (positionRole === "Technician" || positionRole === "Worker") {
+          return toNumber(rowValue(isSubsystemSummaryCorrective(description) ? "correctiveTechs" : "preventiveTechs")) || 0;
+        }
+        return 0;
+      }
+
+      function buildSubsystemSummaryProjects() {
+        const wbsProjects = buildWbsProjects();
+        const costCenterByLookup = buildProjectLookupMap(buildFallbackCostCenterProjects());
+        const guideByLookup = buildProjectLookupMap(buildFallbackGuidePlanningProjects());
+        const pioByLookup = buildProjectLookupMap(buildFallbackPioDefinitionProjects());
+        const firmingByLookup = buildProjectLookupMap(buildFallbackFirmingRulesProjects());
+        return wbsProjects.map(function (project) {
+          const lookupKeys = getProjectLookupKeys(project);
+          return Object.assign({}, project, {
+            subsystemSummaryCostCenters: findProjectByLookupKeys(costCenterByLookup, lookupKeys) || null,
+            subsystemSummaryGuidePlanning: findProjectByLookupKeys(guideByLookup, lookupKeys) || null,
+            subsystemSummaryPio: findProjectByLookupKeys(pioByLookup, lookupKeys) || null,
+            subsystemSummaryFirming: findProjectByLookupKeys(firmingByLookup, lookupKeys) || null,
+          });
+        });
+      }
+
+      function getSubsystemSummarySheetDefinitions(project) {
+        const usedNames = new Set();
+        const byKey = new Map();
+        mergeWbsSubsystems(project.subsystems).forEach(function (subsystem) {
+          const logicalKey = normalizeSubsystemSummarySheetKey(subsystem);
+          const existing = byKey.get(logicalKey) || {
+            key: logicalKey,
+            label: logicalKey,
+            sheetName: sanitizeExcelSheetName(logicalKey + "_Synthesis", usedNames),
+            sourceSubsystems: [],
+            rows: [],
+          };
+          existing.sourceSubsystems.push(subsystem);
+          byKey.set(logicalKey, existing);
+        });
+        return Array.from(byKey.values()).sort(function (left, right) {
+          return String(left.sheetName).localeCompare(String(right.sheetName));
+        });
+      }
+
+      function resolveSubsystemSummaryPlanning(project, phase, periodType, positionRole) {
+        const guide = project.subsystemSummaryGuidePlanning || {};
+        if (!phase || !periodType || !positionRole) return { planningGuide: "", occurrence: 0, allowed: false };
+        if (periodType === "mob") {
+          const months = toNumber((guide.workloadMonthsByPosition || {})[positionRole]) || 0;
+          const row = (guide.generatedRows || []).find(function (candidate) {
+            return normalizeWbsText(candidate.phaseLabel) === normalizeWbsText(phase.label || phase.key)
+              && normalizeWbsText(candidate.position) === normalizeWbsText(positionRole);
+          });
+          return { planningGuide: row ? row.guidePlanningCode : "", occurrence: months, allowed: months > 0 };
+        }
+        if (periodType === "rec") {
+          const row = (guide.recurrentWorkloadRows || []).find(function (candidate) {
+            return normalizeWbsText(candidate.phaseLabel) === normalizeWbsText(phase.label || phase.key);
+          });
+          return {
+            planningGuide: row ? row.guidePlanningCode : "",
+            occurrence: countInclusiveMonths(phase.startDate, phase.endDate),
+            allowed: true,
+          };
+        }
+        if (periodType === "dem") {
+          const months = toNumber((guide.demobilizationWorkloadMonthsByPosition || {})[positionRole]) || 0;
+          const row = (guide.generatedDemobilizationRows || []).find(function (candidate) {
+            return normalizeWbsText(candidate.phaseLabel) === normalizeWbsText(phase.label || phase.key)
+              && normalizeWbsText(candidate.position) === normalizeWbsText(positionRole);
+          });
+          return { planningGuide: row ? row.guidePlanningCode : "", occurrence: months, allowed: months > 0 };
+        }
+        return { planningGuide: "", occurrence: 0, allowed: false };
+      }
+
+      function resolveSubsystemSummaryUnitRole(project, caratUnit) {
+        const pioRows = Array.isArray(project.subsystemSummaryPio && project.subsystemSummaryPio.rows) ? project.subsystemSummaryPio.rows : [];
+        const match = pioRows.find(function (row) {
+          return normalizeWbsText(row.caratUnit) === normalizeWbsText(caratUnit);
+        });
+        return match ? (match.unitRole || "") : "";
+      }
+
+      function buildSubsystemSummaryWorkloadRows(project) {
+        const costCenterProject = project.subsystemSummaryCostCenters || {};
+        const firmingProject = project.subsystemSummaryFirming || {};
+        const projectCurrency = String(costCenterProject.projectCurrency || "").trim().toUpperCase();
+        const costCenterRows = (Array.isArray(costCenterProject.rows) ? costCenterProject.rows : []).filter(function (row) {
+          return !!getSubsystemSummaryCostCenterRole(row.position);
+        });
+        const wbsRows = buildGeneratedWbsWorkloadRows(project);
+        const rowsBySheetKey = {};
+        const seen = new Set();
+
+        wbsRows.forEach(function (wbsRow) {
+          const positionRole = getSubsystemSummaryPositionRole(wbsRow.position);
+          if (!positionRole || (!isSubsystemSummaryPreventive(wbsRow.position) && !isSubsystemSummaryCorrective(wbsRow.position))) return;
+          const period = resolveSubsystemSummaryPeriod(project, wbsRow.period);
+          const phase = findSubsystemSummaryPhase(project, wbsRow.phase);
+          if (!period || !phase) return;
+          const planning = resolveSubsystemSummaryPlanning(project, phase, period.type, positionRole);
+          if (!planning.allowed) return;
+
+          costCenterRows.filter(function (ccRow) { return getSubsystemSummaryCostCenterRole(ccRow.position) === positionRole; }).forEach(function (ccRow) {
+            const baseQuantity = resolveSubsystemSummaryBaseQuantity(project, wbsRow.subsystem, ccRow.timePeriod, wbsRow.position, positionRole);
+            const rate = resolveSubsystemSummaryRate(project, phase, wbsRow.subsystem, period.type, positionRole);
+            const quantity = Math.round((baseQuantity * rate / 100) * 100) / 100;
+            if (!(quantity > 0)) return;
+
+            const currency = String(ccRow.currency || "").trim().toUpperCase();
+            const sheetKey = normalizeSubsystemSummarySheetKey(wbsRow.subsystem);
+            const outputRow = {
+              "Phase": wbsRow.phase,
+              "Period": wbsRow.period,
+              "Type": "Workload",
+              "Description": wbsRow.position,
+              "Long_Description": [wbsRow.subsystem, wbsRow.position, ccRow.timePeriod, wbsRow.period].join("_"),
+              "Quantity": quantity,
+              "Unit": "FTE",
+              "Shift": ccRow.timePeriod,
+              "Cat 1 (Hours or Months)": ccRow.monthlyWorkingHours === "" ? "" : Math.round((toNumber(ccRow.monthlyWorkingHours) || 0) * 100) / 100,
+              "Cost Centre": ccRow.costCenter || "",
+              "Currency": currency,
+              "Planning Guide": planning.planningGuide || "",
+              "Nb Tot. of Occurency": planning.occurrence || "",
+              "Costs Type": wbsRow.costsType || "",
+              "Carat Unit": ccRow.caratUnit || "",
+              "Unit Role": resolveSubsystemSummaryUnitRole(project, ccRow.caratUnit),
+              "On/Off Shore": projectCurrency && currency === projectCurrency ? "Onshore" : "Offshore",
+              "PBS/IBS": wbsRow.pbsIbs || "",
+              "ABS": wbsRow.abs || "",
+              "Associated WP": wbsRow.associatedWp || "",
+              "Tasks": wbsRow.tasks || "",
+              "Delegated person": "INFRA",
+              "Firming rule": (firmingProject.firmingTexts || {})[currency] || "",
+              "Freight per Unit": "",
+              "Insurances-Rates & Taxes": "",
+              "Price List Code 1": wbsRow.period,
+              "Price List Code 2": "Labour",
+              "Price List Code 3": wbsRow.subsystem,
+            };
+            const uniqueKey = SUBSYSTEM_SUMMARY_HEADERS.map(function (header) {
+              return normalizeWbsText(outputRow[header]);
+            }).join("|");
+            if (seen.has(uniqueKey)) return;
+            seen.add(uniqueKey);
+            if (!rowsBySheetKey[sheetKey]) rowsBySheetKey[sheetKey] = [];
+            rowsBySheetKey[sheetKey].push(outputRow);
+          });
+        });
+        return rowsBySheetKey;
+      }
+
+      function buildSubsystemSummaryVirtualFiles(project) {
+        const sheetDefs = getSubsystemSummarySheetDefinitions(project);
+        const workloadRowsBySheet = buildSubsystemSummaryWorkloadRows(project);
+        const allSheets = sheetDefs.map(function (sheet) {
+          return Object.assign({}, sheet, { rows: workloadRowsBySheet[sheet.key] || [] });
+        });
+        const phases = Array.isArray(project.phases) ? project.phases : [];
+        const files = [{
+          key: "global",
+          mode: "global",
+          name: sanitizeExportFileName(project.projectName) + "_All_Phases.xlsx",
+          label: "Project global file",
+          sheets: allSheets,
+        }];
+        phases.forEach(function (phase) {
+          const phaseLabel = phase.label || phase.key;
+          files.push({
+            key: "phase|" + phase.key,
+            mode: "phase",
+            phaseKey: phase.key,
+            name: sanitizeExportFileName(project.projectName + "_" + phaseLabel) + ".xlsx",
+            label: phaseLabel,
+            sheets: allSheets.map(function (sheet) {
+              return Object.assign({}, sheet, {
+                rows: sheet.rows.filter(function (row) {
+                  return normalizeWbsText(row.Phase) === normalizeWbsText(phaseLabel) || normalizeWbsText(row.Phase) === normalizeWbsText(phase.key);
+                }),
+              });
+            }),
+          });
+        });
+        return files;
+      }
+
+      function renderSubsystemSummaryPreview(project, file) {
+        const sheetSelect = $("subsystemSummarySheetSelect");
+        const previewTitle = $("subsystemSummaryPreviewTitle");
+        const previewMeta = $("subsystemSummaryPreviewMeta");
+        const previewHead = $("subsystemSummaryPreviewHead");
+        const previewBody = $("subsystemSummaryPreviewBody");
+        if (!sheetSelect || !previewTitle || !previewMeta || !previewHead || !previewBody || !file) return;
+
+        const currentSheetName = sheetSelect.value && file.sheets.some(function (sheet) { return sheet.sheetName === sheetSelect.value; })
+          ? sheetSelect.value
+          : (file.sheets[0] ? file.sheets[0].sheetName : "");
+        sheetSelect.innerHTML = file.sheets.map(function (sheet) {
+          return '<option value="' + escapeHtml(sheet.sheetName) + '"' + (sheet.sheetName === currentSheetName ? " selected" : "") + '>' + escapeHtml(sheet.sheetName) + ' (' + sheet.rows.length + ')</option>';
+        }).join("");
+        const sheet = file.sheets.find(function (entry) { return entry.sheetName === currentSheetName; }) || file.sheets[0] || null;
+        previewTitle.textContent = file.name;
+        previewMeta.textContent = sheet ? (sheet.sheetName + " | " + sheet.rows.length + " workload row(s)") : "No sheet available.";
+        previewHead.innerHTML = '<tr class="border-b border-slate-200">' + SUBSYSTEM_SUMMARY_HEADERS.map(function (header) {
+          return '<th class="text-left py-3 px-3 whitespace-nowrap">' + escapeHtml(header) + '</th>';
+        }).join("") + '</tr>';
+        previewBody.innerHTML = sheet && sheet.rows.length
+          ? sheet.rows.slice(0, 100).map(function (row) {
+              return '<tr>' + SUBSYSTEM_SUMMARY_HEADERS.map(function (header) {
+                return '<td class="py-2 px-3 whitespace-nowrap">' + escapeHtml(row[header] ?? "") + '</td>';
+              }).join("") + '</tr>';
+            }).join("")
+          : '<tr><td colspan="' + SUBSYSTEM_SUMMARY_HEADERS.length + '" class="py-8 text-center text-sm text-slate-500">No Workload rows yet for this sheet. Headers will still be exported.</td></tr>';
+      }
+
+      function exportSubsystemSummaryFile(file) {
+        if (!file) return;
+        if (typeof XLSX === "undefined") {
+          window.alert("XLSX library is not available on this page.");
+          return;
+        }
+        const workbook = XLSX.utils.book_new();
+        file.sheets.forEach(function (sheet) {
+          const aoa = [SUBSYSTEM_SUMMARY_HEADERS].concat(sheet.rows.map(function (row) {
+            return SUBSYSTEM_SUMMARY_HEADERS.map(function (header) { return row[header] ?? ""; });
+          }));
+          const worksheet = XLSX.utils.aoa_to_sheet(aoa);
+          worksheet["!cols"] = SUBSYSTEM_SUMMARY_HEADERS.map(function (header) {
+            return { wch: Math.min(Math.max(String(header).length + 2, 12), 28) };
+          });
+          XLSX.utils.book_append_sheet(workbook, worksheet, sheet.sheetName);
+        });
+        XLSX.writeFile(workbook, file.name);
+      }
+
+      function renderSubsystemSummaryWorkspace() {
+        const workspace = $("subsystemSummaryWorkspace");
+        const list = $("subsystemSummaryProjectList");
+        const empty = $("subsystemSummaryWorkspaceEmpty");
+        const content = $("subsystemSummaryWorkspaceContent");
+        const status = $("subsystemSummaryWorkspaceStatus");
+        const title = $("subsystemSummaryCurrentProjectTitle");
+        const meta = $("subsystemSummaryCurrentProjectMeta");
+        const missing = $("subsystemSummaryMissingData");
+        const fileTree = $("subsystemSummaryFileTree");
+        const exportBtn = $("subsystemSummaryExportBtn");
+        if (!workspace || !list || !empty || !content || !status || !title || !meta || !missing || !fileTree || !exportBtn) return;
+
+        const projects = buildSubsystemSummaryProjects();
+        const currentKey = workspace.dataset.currentProjectKey && projects.some(function (project) { return project.projectKey === workspace.dataset.currentProjectKey; })
+          ? workspace.dataset.currentProjectKey
+          : (projects[0] ? projects[0].projectKey : "");
+        const currentProject = projects.find(function (project) { return project.projectKey === currentKey; }) || null;
+
+        setFallbackDetailWorkspaceActive(true);
+        workspace.classList.remove("hidden");
+        status.textContent = projects.length ? projects.length + " project(s) available" : "No project available.";
+        list.innerHTML = projects.map(function (project) {
+          const active = currentProject && project.projectKey === currentProject.projectKey;
+          const costCenterRows = project.subsystemSummaryCostCenters && Array.isArray(project.subsystemSummaryCostCenters.rows)
+            ? project.subsystemSummaryCostCenters.rows.filter(function (row) { return !!getSubsystemSummaryCostCenterRole(row.position); })
+            : [];
+          return '<button type="button" data-subsystem-summary-project-select="' + escapeHtml(project.projectKey) + '" class="w-full rounded-xl border px-3 py-3 text-left transition-all ' +
+            (active ? "border-cyan-300 bg-cyan-50 shadow-sm ring-1 ring-cyan-200" : "border-slate-200 bg-white hover:bg-slate-100") + '">' +
+              '<div class="text-sm font-semibold text-slate-900">' + escapeHtml(project.projectName) + '</div>' +
+              '<div class="mt-1 flex items-center gap-1.5">' +
+                '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ' + (project.hasPhases ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-slate-100 text-slate-400 border border-slate-200") + '">PH</span>' +
+                '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ' + (project.hasWbsImport ? "bg-cyan-50 text-cyan-700 border border-cyan-200" : "bg-slate-100 text-slate-400 border border-slate-200") + '">WBS</span>' +
+                '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ' + (costCenterRows.length ? "bg-blue-50 text-blue-700 border border-blue-200" : "bg-slate-100 text-slate-400 border border-slate-200") + '">CC</span>' +
+                '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ' + (project.subsystemSummaryGuidePlanning ? "bg-violet-50 text-violet-700 border border-violet-200" : "bg-slate-100 text-slate-400 border border-slate-200") + '">GP</span>' +
+              '</div>' +
+            '</button>';
+        }).join("");
+
+        if (!currentProject) {
+          empty.classList.remove("hidden");
+          content.classList.add("hidden");
+          return;
+        }
+
+        workspace.dataset.currentProjectKey = currentProject.projectKey;
+        empty.classList.add("hidden");
+        content.classList.remove("hidden");
+        title.textContent = currentProject.projectName;
+        meta.textContent = (currentProject.projectType || "No project type") + " | " + (currentProject.projectContext || "No context");
+
+        const missingParts = [];
+        if (!currentProject.hasWbsImport) missingParts.push('<div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">Import the WBS Workload sheet before generating Workload export rows.</div>');
+        const currentCostCenterRows = currentProject.subsystemSummaryCostCenters && Array.isArray(currentProject.subsystemSummaryCostCenters.rows)
+          ? currentProject.subsystemSummaryCostCenters.rows.filter(function (row) { return !!getSubsystemSummaryCostCenterRole(row.position); })
+          : [];
+        if (!currentCostCenterRows.length) missingParts.push('<div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">No Supervisor, Technician or Worker row was found in Cost Centers for this project.</div>');
+        if (!currentProject.subsystemSummaryGuidePlanning) missingParts.push('<div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">Configure Guide Planning to fill Planning Guide and occurrences.</div>');
+        missing.classList.toggle("hidden", missingParts.length === 0);
+        missing.innerHTML = missingParts.join("");
+
+        const files = buildSubsystemSummaryVirtualFiles(currentProject);
+        const currentFileKey = workspace.dataset.currentFileKey && files.some(function (file) { return file.key === workspace.dataset.currentFileKey; })
+          ? workspace.dataset.currentFileKey
+          : "global";
+        const currentFile = files.find(function (file) { return file.key === currentFileKey; }) || files[0] || null;
+        workspace.dataset.currentFileKey = currentFile ? currentFile.key : "";
+        exportBtn.disabled = !currentFile;
+        exportBtn.dataset.subsystemSummaryExport = currentFile ? currentFile.key : "";
+
+        const globalFiles = files.filter(function (file) { return file.mode === "global"; });
+        const phaseFiles = files.filter(function (file) { return file.mode === "phase"; });
+        function fileButton(file) {
+          const active = currentFile && file.key === currentFile.key;
+          const rowCount = file.sheets.reduce(function (sum, sheet) { return sum + sheet.rows.length; }, 0);
+          return '<button type="button" data-subsystem-summary-file-select="' + escapeHtml(file.key) + '" class="w-full rounded-xl border px-3 py-2.5 text-left transition-all ' +
+            (active ? "border-cyan-300 bg-cyan-50 text-cyan-900" : "border-slate-200 bg-white hover:bg-slate-100 text-slate-700") + '">' +
+              '<div class="flex items-center gap-2">' +
+                '<span class="material-symbols-outlined text-[18px] text-cyan-600">description</span>' +
+                '<span class="min-w-0 flex-1 truncate text-sm font-semibold">' + escapeHtml(file.name) + '</span>' +
+              '</div>' +
+              '<div class="mt-1 pl-7 text-xs text-slate-500">' + file.sheets.length + ' sheet(s) | ' + rowCount + ' row(s)</div>' +
+            '</button>';
+        }
+        fileTree.innerHTML =
+          '<details class="rounded-xl border border-slate-200 bg-white p-3" open>' +
+            '<summary class="cursor-pointer text-sm font-bold text-slate-700">Global project export</summary>' +
+            '<div class="mt-3 space-y-2">' + globalFiles.map(fileButton).join("") + '</div>' +
+          '</details>' +
+          '<details class="rounded-xl border border-slate-200 bg-white p-3" open>' +
+            '<summary class="cursor-pointer text-sm font-bold text-slate-700">Phase exports</summary>' +
+            '<div class="mt-3 space-y-2">' + phaseFiles.map(fileButton).join("") + '</div>' +
+          '</details>';
+
+        renderSubsystemSummaryPreview(currentProject, currentFile);
       }
 
       function buildToolsConsumablesProjects() {
@@ -8537,6 +9039,33 @@
           return;
         }
 
+        if (itemKey !== "subsystem_summary") {
+          closeSubsystemSummaryWorkspace();
+        }
+
+        if (itemKey === "subsystem_summary") {
+          window.__costSummaryUseFallbackProjectPhases = false;
+          window.__costSummaryUseFallbackCostCenters = false;
+          window.__costSummaryUseFallbackPioDefinition = false;
+          window.__costSummaryUseFallbackGuidePlanning = false;
+          closeProjectPhasesWorkspace();
+          closeCostCentersWorkspace();
+          closeGuidePlanningWorkspace();
+          closeCurrencyExchangeWorkspace();
+          closeFirmingRulesWorkspace();
+          closePioDefinitionWorkspace();
+          closeWorkloadSynthesisWorkspace();
+          closeWhiteCollarDefinitionWorkspace();
+          closeWbsWorkspace();
+          closeToolsConsumablesWorkspace();
+          closeVehiclesWorkspace();
+          closeOscWorkspace();
+          closeMandatoryTrainingWorkspace();
+          closeDrawer();
+          renderSubsystemSummaryWorkspace();
+          return;
+        }
+
         if (itemKey === "project_phases") {
           window.__costSummaryUseFallbackProjectPhases = true;
           window.__costSummaryUseFallbackCostCenters = false;
@@ -8854,6 +9383,7 @@
           closeVehiclesWorkspace();
           closeOscWorkspace();
           closeMandatoryTrainingWorkspace();
+          closeSubsystemSummaryWorkspace();
           setFallbackDetailWorkspaceActive(false);
         },
         openProjectPhases: function () {
@@ -8866,6 +9396,7 @@
           closeCurrencyExchangeWorkspace();
           closeFirmingRulesWorkspace();
           closePioDefinitionWorkspace();
+          closeSubsystemSummaryWorkspace();
           closeDrawer();
           renderFallbackProjectPhasesDrawer(moduleDefinitions.study_setup, moduleDefinitions.study_setup.items.project_phases);
         },
@@ -8880,6 +9411,7 @@
           closeCurrencyExchangeWorkspace();
           closeFirmingRulesWorkspace();
           closePioDefinitionWorkspace();
+          closeSubsystemSummaryWorkspace();
           closeDrawer();
           renderFallbackCostCentersWorkspace();
         },
@@ -8891,6 +9423,7 @@
           closeCostCentersWorkspace();
           closeFirmingRulesWorkspace();
           closePioDefinitionWorkspace();
+          closeSubsystemSummaryWorkspace();
           closeDrawer();
           renderFallbackCurrencyExchangeWorkspace();
         },
@@ -8902,6 +9435,7 @@
           closeCostCentersWorkspace();
           closeCurrencyExchangeWorkspace();
           closePioDefinitionWorkspace();
+          closeSubsystemSummaryWorkspace();
           closeDrawer();
           renderFallbackFirmingRulesWorkspace();
         },
@@ -8916,6 +9450,7 @@
           closeCostCentersWorkspace();
           closeCurrencyExchangeWorkspace();
           closeFirmingRulesWorkspace();
+          closeSubsystemSummaryWorkspace();
           closeDrawer();
           renderFallbackPioDefinitionWorkspace();
         },
@@ -8933,6 +9468,7 @@
           closeFirmingRulesWorkspace();
           closePioDefinitionWorkspace();
           closeWbsWorkspace();
+          closeSubsystemSummaryWorkspace();
           closeDrawer();
           renderFallbackGuidePlanningWorkspace();
         },
@@ -8956,6 +9492,7 @@
           closeVehiclesWorkspace();
           closeOscWorkspace();
           closeMandatoryTrainingWorkspace();
+          closeSubsystemSummaryWorkspace();
           closeDrawer();
           setFallbackDetailWorkspaceActive(true);
 
@@ -8991,6 +9528,10 @@
             renderFallbackMandatoryTrainingWorkspace();
             return true;
           }
+          if (itemKey === "subsystem_summary") {
+            renderSubsystemSummaryWorkspace();
+            return true;
+          }
           return false;
         },
         openWorkloadSynthesis: function () {
@@ -9005,6 +9546,7 @@
           closeFirmingRulesWorkspace();
           closePioDefinitionWorkspace();
           closeGuidePlanningWorkspace();
+          closeSubsystemSummaryWorkspace();
           closeDrawer();
           renderFallbackWorkloadSynthesisWorkspace();
         },
@@ -9543,9 +10085,54 @@
             return;
           }
 
+          if (event.target.closest("#closeSubsystemSummaryWorkspaceBtn")) {
+            closeSubsystemSummaryWorkspace();
+            return;
+          }
+
           if (event.target.closest("#refreshWbsWorkspaceBtn")) {
             event.preventDefault();
             renderFallbackWbsWorkspace();
+            return;
+          }
+
+          if (event.target.closest("#refreshSubsystemSummaryWorkspaceBtn")) {
+            event.preventDefault();
+            renderSubsystemSummaryWorkspace();
+            return;
+          }
+
+          const subsystemSummaryProjectBtn = event.target.closest("[data-subsystem-summary-project-select]");
+          if (subsystemSummaryProjectBtn) {
+            event.preventDefault();
+            const ws = $("subsystemSummaryWorkspace");
+            if (ws) {
+              ws.dataset.currentProjectKey = subsystemSummaryProjectBtn.getAttribute("data-subsystem-summary-project-select") || "";
+              ws.dataset.currentFileKey = "global";
+            }
+            renderSubsystemSummaryWorkspace();
+            return;
+          }
+
+          const subsystemSummaryFileBtn = event.target.closest("[data-subsystem-summary-file-select]");
+          if (subsystemSummaryFileBtn) {
+            event.preventDefault();
+            const ws = $("subsystemSummaryWorkspace");
+            if (ws) ws.dataset.currentFileKey = subsystemSummaryFileBtn.getAttribute("data-subsystem-summary-file-select") || "";
+            renderSubsystemSummaryWorkspace();
+            return;
+          }
+
+          if (event.target.closest("#subsystemSummaryExportBtn")) {
+            event.preventDefault();
+            const ws = $("subsystemSummaryWorkspace");
+            const projects = buildSubsystemSummaryProjects();
+            const project = projects.find(function (entry) { return ws && entry.projectKey === ws.dataset.currentProjectKey; }) || projects[0] || null;
+            if (!project) return;
+            const files = buildSubsystemSummaryVirtualFiles(project);
+            const fileKey = ws ? (ws.dataset.currentFileKey || "global") : "global";
+            const file = files.find(function (entry) { return entry.key === fileKey; }) || files[0] || null;
+            exportSubsystemSummaryFile(file);
             return;
           }
 
@@ -9818,6 +10405,7 @@
             closePioDefinitionWorkspace();
             closeWorkloadSynthesisWorkspace();
             closeWbsWorkspace();
+            closeSubsystemSummaryWorkspace();
           }
         });
 
@@ -9831,6 +10419,17 @@
           }
 
           if (window.__costSummaryModuleReady && !fallbackInteractionIsActive()) return;
+
+          if (event.target.id === "subsystemSummarySheetSelect") {
+            const ws = $("subsystemSummaryWorkspace");
+            const projects = buildSubsystemSummaryProjects();
+            const project = projects.find(function (entry) { return ws && entry.projectKey === ws.dataset.currentProjectKey; }) || projects[0] || null;
+            if (!project) return;
+            const files = buildSubsystemSummaryVirtualFiles(project);
+            const file = files.find(function (entry) { return ws && entry.key === ws.dataset.currentFileKey; }) || files[0] || null;
+            renderSubsystemSummaryPreview(project, file);
+            return;
+          }
 
           const projectField = event.target.closest("[data-fallback-project-field]");
           if (projectField) {

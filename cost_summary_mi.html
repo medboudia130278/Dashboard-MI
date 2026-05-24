@@ -104,6 +104,20 @@
       </div>
 
       <section class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-[18px] text-slate-400">playlist_add_check</span>
+            <h2 class="text-[13px] font-black uppercase tracking-[0.16em] text-slate-500">Configuration Progress</h2>
+            <span class="text-xs text-slate-400">click a group to open what needs attention</span>
+          </div>
+          <div id="configurationProgressSummary" class="inline-flex items-center gap-1 self-start lg:self-auto rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">
+            -- / -- complete
+          </div>
+        </div>
+        <div id="configurationProgressCards" class="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-3"></div>
+      </section>
+
+      <section class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
         <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
           <div>
             <h2 class="text-lg font-bold">Configuration Toolbar</h2>
@@ -309,6 +323,89 @@
                 <button type="button" data-toolbar-item="subsystem_summary" data-toolbar-group="export_data" class="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left hover:bg-slate-50 transition-all"><span class="material-symbols-outlined mt-0.5 text-[18px] text-primary">chevron_right</span><span class="flex-1 min-w-0"><span class="flex items-center gap-2"><span class="text-sm font-semibold text-slate-700">Subsystem Summary</span><span data-status-dot-item="subsystem_summary"></span></span><span class="mt-1 block text-xs leading-5 text-slate-500">Configure the subsystem-level output package.</span></span></button>
                 <button type="button" data-toolbar-item="mercury_interface" data-toolbar-group="export_data" class="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left hover:bg-slate-50 transition-all"><span class="material-symbols-outlined mt-0.5 text-[18px] text-primary">chevron_right</span><span class="flex-1 min-w-0"><span class="flex items-center gap-2"><span class="text-sm font-semibold text-slate-700">Mercury Interface</span><span data-status-dot-item="mercury_interface"></span></span><span class="mt-1 block text-xs leading-5 text-slate-500">Prepare the future export mapping for Mercury.</span></span></button>
               </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="subsystemSummaryWorkspace" class="hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+        <div class="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
+          <div>
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-50 text-cyan-700 border border-cyan-200 text-[11px] font-bold uppercase tracking-[0.18em]">
+              <span class="material-symbols-outlined text-[16px]">upload_file</span>
+              Export Data
+            </div>
+            <h2 class="mt-3 text-2xl font-black tracking-tight">Subsystem Summary Workspace</h2>
+            <p class="mt-2 text-sm text-slate-500">Preview and export virtual Excel files per project. Workload rows are generated first; Materials, Subcontracting, and Overhaul &amp; Renewals will be added next.</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <div id="subsystemSummaryWorkspaceStatus" class="text-xs font-semibold text-slate-500">No project selected.</div>
+            <button id="refreshSubsystemSummaryWorkspaceBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold hover:bg-slate-100 transition-all">
+              <span class="material-symbols-outlined text-[18px]">refresh</span>
+              Refresh
+            </button>
+            <button id="closeSubsystemSummaryWorkspaceBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold hover:bg-slate-100 transition-all">
+              <span class="material-symbols-outlined text-[18px]">close</span>
+              Close
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-6 grid grid-cols-1 xl:grid-cols-[260px_minmax(0,1fr)] gap-6">
+          <aside class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div>
+              <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">Projects</h3>
+              <p class="mt-1 text-xs text-slate-500">Choose one project to preview and export its subsystem package.</p>
+            </div>
+            <div id="subsystemSummaryProjectList" class="mt-4 space-y-2"></div>
+          </aside>
+
+          <div class="min-w-0 space-y-6">
+            <div id="subsystemSummaryWorkspaceEmpty" class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-sm text-slate-500">
+              No project available yet. Configure Project Phases, Cost Centers, Workload Synthesis, Guide Planning and WBS first.
+            </div>
+
+            <div id="subsystemSummaryWorkspaceContent" class="hidden min-w-0 space-y-6">
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                  <div>
+                    <h3 id="subsystemSummaryCurrentProjectTitle" class="text-xl font-black tracking-tight">Project</h3>
+                    <p id="subsystemSummaryCurrentProjectMeta" class="mt-2 text-sm text-slate-500">Context</p>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <button id="subsystemSummaryExportBtn" type="button" class="inline-flex items-center gap-2 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-2 text-sm font-semibold text-cyan-700 hover:bg-cyan-100 transition-all">
+                      <span class="material-symbols-outlined text-[18px]">download</span>
+                      Export Excel
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              <div id="subsystemSummaryMissingData" class="hidden space-y-2"></div>
+
+              <section class="grid grid-cols-1 2xl:grid-cols-[320px_minmax(0,1fr)] gap-6">
+                <div class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                  <h3 class="text-base font-bold">Export Explorer</h3>
+                  <p class="mt-1 text-sm text-slate-500">Virtual files are generated on demand from current project data.</p>
+                  <div id="subsystemSummaryFileTree" class="mt-4 space-y-3"></div>
+                </div>
+
+                <div class="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                  <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                    <div>
+                      <h3 id="subsystemSummaryPreviewTitle" class="text-base font-bold">Preview</h3>
+                      <p id="subsystemSummaryPreviewMeta" class="mt-1 text-sm text-slate-500">Select a virtual file and a sheet.</p>
+                    </div>
+                    <select id="subsystemSummarySheetSelect" class="min-w-[220px] rounded-xl border-slate-200 px-3 py-2 text-sm"></select>
+                  </div>
+                  <div class="mt-4 overflow-x-auto custom-scrollbar">
+                    <table class="min-w-full text-xs">
+                      <thead id="subsystemSummaryPreviewHead" class="text-[10px] uppercase tracking-wider text-slate-400"></thead>
+                      <tbody id="subsystemSummaryPreviewBody" class="divide-y divide-slate-200"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </section>
             </div>
           </div>
         </div>
@@ -2452,7 +2549,7 @@
     </div>
   </aside>
 
-  <script src="cost_summary_mi_ui.js?v=20260523-wbs-ovh-renew-synthesis"></script>
-  <script type="module" src="cost_summary_mi.js?v=20260523-wbs-ovh-renew-synthesis"></script>
+  <script src="cost_summary_mi_ui.js?v=20260524-config-progress"></script>
+  <script type="module" src="cost_summary_mi.js?v=20260524-config-progress"></script>
 </body>
 </html>

@@ -610,6 +610,68 @@ const toolbarModules = [
   },
 ];
 
+const configurationProgressGroups = [
+  {
+    key: "study_setup",
+    label: "Study Setup",
+    icon: "schema",
+    items: [
+      { key: "project_phases", label: "Project Phases" },
+      { key: "cost_centers", label: "Cost Centers" },
+      { key: "pio_definition_freight_customs", label: "PIO Definition" },
+      { key: "guide_planning_definition", label: "Guide Planning" },
+    ],
+  },
+  {
+    key: "data_sources",
+    label: "Data Sources",
+    icon: "database",
+    items: [
+      { key: "currency_exchange_rates", label: "Currency & Exchange Rates" },
+      { key: "firming_rules", label: "Firming Rules" },
+    ],
+  },
+  {
+    key: "organization_risks",
+    label: "Organization",
+    icon: "groups",
+    items: [
+      { key: "workload_synthesis", label: "Workload Synthesis" },
+      { key: "white_collar_definition", label: "White Collar Definition" },
+    ],
+  },
+  {
+    key: "support_costs",
+    label: "Support Costs",
+    icon: "inventory_2",
+    items: [
+      { key: "tools_consumables", label: "Tools & Consumables" },
+      { key: "vehicles", label: "Vehicles" },
+      { key: "mandatory_training", label: "Mandatory Training" },
+      { key: "other_support_costs", label: "Other Support Costs" },
+    ],
+  },
+  {
+    key: "pricing_risks",
+    label: "Pricing & Risks",
+    icon: "price_change",
+    items: [
+      { key: "price_lists", label: "Price Lists" },
+      { key: "risk_register", label: "Risk Register" },
+      { key: "wbs", label: "WBS" },
+    ],
+  },
+  {
+    key: "export_data",
+    label: "Export Data",
+    icon: "upload_file",
+    items: [
+      { key: "subsystem_summary", label: "Subsystem Summary" },
+      { key: "mercury_interface", label: "Mercury Interface" },
+    ],
+  },
+];
+
 const moduleBuildSteps = [
   "Confirm the exact business scope and required outputs.",
   "List the workbook sheets and column mappings this module will use.",
@@ -862,6 +924,17 @@ function computeModuleStatus(moduleKey) {
       const s = readFallbackStudySlice("cost-summary-mi-mandatory-training-fallback-v1");
       return Object.values(s).some(p => p && Object.keys(p).length > 0) ? "filled" : "empty";
     }
+    case "subsystem_summary": {
+      const required = ["project_phases", "cost_centers", "workload_synthesis", "wbs"];
+      const statuses = required.map((key) => computeModuleStatus(key));
+      if (statuses.every((status) => status === "filled")) return "filled";
+      if (statuses.some((status) => status === "filled" || status === "partial")) return "partial";
+      return "empty";
+    }
+    case "price_lists":
+    case "risk_register":
+    case "mercury_interface":
+      return "empty";
     default:
       return "na";
   }
@@ -887,6 +960,79 @@ function statusDot(status) {
   return `<span title="${titles[status] || ""}" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${colors[status] || colors.empty};flex-shrink:0;margin-left:2px;"></span>`;
 }
 
+function getProgressGroupSummary(group) {
+  const items = (group.items || []).map((item) => ({
+    ...item,
+    status: computeModuleStatus(item.key),
+  }));
+  const total = items.length;
+  const complete = items.filter((item) => item.status === "filled").length;
+  const active = items.filter((item) => item.status === "filled" || item.status === "partial").length;
+  const stateName = complete === total && total > 0 ? "complete" : (active > 0 ? "progress" : "empty");
+  return {
+    items,
+    total,
+    complete,
+    active,
+    stateName,
+    targetItem: items.find((item) => item.status !== "filled") || items[0] || null,
+  };
+}
+
+function renderConfigurationProgress() {
+  const cards = $("configurationProgressCards");
+  const summaryEl = $("configurationProgressSummary");
+  if (!cards || !summaryEl) return;
+
+  const summaries = configurationProgressGroups.map((group) => ({
+    group,
+    summary: getProgressGroupSummary(group),
+  }));
+  const completeGroups = summaries.filter((entry) => entry.summary.stateName === "complete").length;
+  summaryEl.className = "inline-flex items-center gap-1 self-start lg:self-auto rounded-full px-3 py-1.5 text-xs font-bold " +
+    (completeGroups === summaries.length ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700");
+  summaryEl.innerHTML = '<span class="material-symbols-outlined text-[15px]">auto_awesome</span>' +
+    completeGroups + " / " + summaries.length + " complete";
+
+  cards.innerHTML = summaries.map(({ group, summary }) => {
+    const isComplete = summary.stateName === "complete";
+    const isProgress = summary.stateName === "progress";
+    const palette = isComplete
+      ? { card: "border-emerald-200 bg-emerald-50/70 hover:bg-emerald-50", icon: "text-emerald-600", badge: "bg-emerald-100 text-emerald-700", bar: "bg-emerald-500", track: "bg-emerald-100", status: "Complete", statusClass: "text-emerald-700" }
+      : (isProgress
+        ? { card: "border-amber-200 bg-amber-50/70 hover:bg-amber-50", icon: "text-amber-600", badge: "bg-amber-100 text-amber-700", bar: "bg-amber-500", track: "bg-amber-100", status: "In progress", statusClass: "text-amber-700" }
+        : { card: "border-slate-200 bg-white hover:bg-slate-50", icon: "text-slate-400", badge: "bg-slate-100 text-slate-500", bar: "bg-slate-300", track: "bg-slate-100", status: "Not started", statusClass: "text-slate-400" });
+    const width = summary.total ? Math.round((summary.complete / summary.total) * 100) : 0;
+    const displayWidth = isProgress ? Math.max(width, 28) : width;
+    const target = summary.targetItem || {};
+    const waitingItems = summary.items
+      .filter((item) => item.status !== "filled")
+      .map((item) => item.label)
+      .slice(0, 2)
+      .join(", ");
+    const helper = isComplete ? "All workspaces configured" : (waitingItems ? "Next: " + waitingItems : "No configured item");
+    return `
+      <button
+        type="button"
+        data-config-progress-card="${escapeHtml(group.key)}"
+        data-config-progress-target="${escapeHtml(target.key || "")}"
+        class="min-h-[128px] rounded-2xl border px-4 py-4 text-left transition-all ${palette.card}"
+      >
+        <div class="flex items-start justify-between gap-3">
+          <span class="material-symbols-outlined text-[22px] ${palette.icon}">${escapeHtml(group.icon)}</span>
+          <span class="rounded-full px-2 py-1 text-[11px] font-black ${palette.badge}">${summary.complete}/${summary.total}</span>
+        </div>
+        <div class="mt-4 text-sm font-black text-slate-800">${escapeHtml(group.label)}</div>
+        <div class="mt-4 h-1.5 rounded-full ${palette.track}">
+          <div class="h-full rounded-full ${palette.bar}" style="width:${displayWidth}%"></div>
+        </div>
+        <div class="mt-3 text-xs font-semibold ${palette.statusClass}">${escapeHtml(palette.status)}</div>
+        <div class="mt-1 truncate text-[11px] text-slate-500">${escapeHtml(helper)}</div>
+      </button>
+    `;
+  }).join("");
+}
+
 function updateToolbarStatusDots() {
   document.querySelectorAll("[data-status-dot-group]").forEach(el => {
     el.innerHTML = statusDot(computeGroupStatus(el.getAttribute("data-status-dot-group")));
@@ -894,6 +1040,7 @@ function updateToolbarStatusDots() {
   document.querySelectorAll("[data-status-dot-item]").forEach(el => {
     el.innerHTML = statusDot(computeModuleStatus(el.getAttribute("data-status-dot-item")));
   });
+  renderConfigurationProgress();
 }
 window.updateToolbarStatusDots = updateToolbarStatusDots;
 
@@ -925,6 +1072,7 @@ const fallbackWorkspaceItems = new Set([
   "vehicles",
   "mandatory_training",
   "other_support_costs",
+  "subsystem_summary",
 ]);
 
 function closeToolbarMenus() {
@@ -1163,6 +1311,26 @@ function renderModuleDrawer(menuKey, itemKey) {
   $("moduleDrawerBackdrop")?.classList.remove("hidden");
   $("moduleDrawer")?.classList.remove("translate-x-full");
   document.body.classList.add("overflow-hidden");
+}
+
+async function openConfigurationItem(menuKey, itemKey) {
+  closeToolbarMenus();
+  if (itemKey === "project_phases") {
+    await refreshProjectPhaseProjectsSource();
+  }
+  if (itemKey === "cost_centers") {
+    await refreshCostCentersSource();
+  }
+  if (itemKey === "currency_exchange_rates") {
+    await refreshCurrencyExchangeSource();
+  }
+  if (itemKey === "guide_planning_definition") {
+    await refreshGuidePlanningSource();
+  }
+  if (itemKey === "pio_definition_freight_customs") {
+    await refreshPioDefinitionSource();
+  }
+  renderModuleDrawer(menuKey, itemKey);
 }
 
 function renderConfigurationToolbar() {
@@ -5132,23 +5300,7 @@ function setupEvents() {
       event.stopPropagation();
       const menuKey = button.getAttribute("data-toolbar-group") || "";
       const itemKey = button.getAttribute("data-toolbar-item") || "";
-      closeToolbarMenus();
-      if (itemKey === "project_phases") {
-        await refreshProjectPhaseProjectsSource();
-      }
-      if (itemKey === "cost_centers") {
-        await refreshCostCentersSource();
-      }
-      if (itemKey === "currency_exchange_rates") {
-        await refreshCurrencyExchangeSource();
-      }
-      if (itemKey === "guide_planning_definition") {
-        await refreshGuidePlanningSource();
-      }
-      if (itemKey === "pio_definition_freight_customs") {
-        await refreshPioDefinitionSource();
-      }
-      renderModuleDrawer(menuKey, itemKey);
+      await openConfigurationItem(menuKey, itemKey);
     });
   });
 
@@ -5157,6 +5309,16 @@ function setupEvents() {
 
   document.addEventListener("click", (event) => {
     if (!(event.target instanceof Node)) return;
+    const progressCard = event.target.closest("[data-config-progress-card]");
+    if (progressCard) {
+      event.preventDefault();
+      const menuKey = progressCard.getAttribute("data-config-progress-card") || "";
+      const itemKey = progressCard.getAttribute("data-config-progress-target") || "";
+      if (menuKey && itemKey) {
+        openConfigurationItem(menuKey, itemKey);
+      }
+      return;
+    }
     if (!event.target.closest("[data-toolbar-root]")) {
       closeToolbarMenus();
     }
