@@ -862,7 +862,9 @@
 
       function exportCostSummaryConfigJson() {
         try {
-          const payload = buildCostSummaryConfigExport();
+          const payload = typeof window.__costSummaryBuildConfigExport === "function"
+            ? window.__costSummaryBuildConfigExport()
+            : buildCostSummaryConfigExport();
           const json = JSON.stringify(payload, null, 2);
           const blob = new Blob([json], { type: "application/json" });
           const url = URL.createObjectURL(blob);
@@ -898,9 +900,12 @@
         if (!$("subsystemSummaryWorkspace")?.classList.contains("hidden")) renderSubsystemSummaryWorkspace();
       }
 
-      function importCostSummaryConfigPayload(payload) {
+      async function importCostSummaryConfigPayload(payload) {
         if (!payload || payload.app !== "cost-summary-mi" || Number(payload.schemaVersion) !== 1 || !payload.modules || typeof payload.modules !== "object") {
           throw new Error("Invalid Cost Summary & MI configuration file.");
+        }
+        if (typeof window.__costSummaryImportConfigPayload === "function") {
+          await window.__costSummaryImportConfigPayload(payload);
         }
         const studyId = getFallbackStudyId();
         configExportStores.forEach(function (store) {
@@ -915,13 +920,13 @@
       function importCostSummaryConfigJsonFile(file) {
         if (!file) return;
         const reader = new FileReader();
-        reader.onload = function (evt) {
+        reader.onload = async function (evt) {
           try {
             const payload = JSON.parse(String(evt.target.result || ""));
             const sourceName = payload && payload.studyName ? " from \"" + payload.studyName + "\"" : "";
             const ok = window.confirm("Import Cost Summary & MI configuration" + sourceName + " into the current study? This will replace the current local configuration for this study. Excel workbook data is not included.");
             if (!ok) return;
-            importCostSummaryConfigPayload(payload);
+            await importCostSummaryConfigPayload(payload);
             window.alert("Configuration imported successfully. Re-import the Excel source files separately if they are not already loaded on this PC.");
           } catch (err) {
             console.error("Cost Summary config import error:", err);
@@ -3440,6 +3445,10 @@
               '<div class="mt-4 space-y-4">' +
                 '<details class="rounded-2xl border border-slate-200 bg-slate-50 p-4" open>' +
                   '<summary class="cursor-pointer text-sm font-bold text-slate-700">Recurrent Material Types</summary>' +
+                  '<label class="mt-4 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">' +
+                    '<input type="checkbox" data-fallback-guide-recurrent-material-toggle-all data-project-key="' + escapeHtml(currentProject.projectKey) + '" class="rounded border-slate-300 text-primary focus:ring-primary" ' + (currentProject.recurrentMaterialCatalog.length && currentProject.selectedRecurrentMaterialTypes.length === currentProject.recurrentMaterialCatalog.length ? 'checked' : '') + '/>' +
+                    '<span class="text-sm font-semibold text-slate-700">Select all</span>' +
+                  '</label>' +
                   '<div class="mt-4 flex flex-wrap gap-3">' +
                     currentProject.recurrentMaterialCatalog.map(function (materialType) {
                       return '<label class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">' +
@@ -3500,6 +3509,10 @@
               '<div class="mt-4 space-y-4">' +
                 '<details class="rounded-2xl border border-slate-200 bg-slate-50 p-4" open>' +
                   '<summary class="cursor-pointer text-sm font-bold text-slate-700">Applicable Subcontracting Types</summary>' +
+                  '<label class="mt-4 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">' +
+                    '<input type="checkbox" data-fallback-guide-recurrent-subcontracting-toggle-all data-project-key="' + escapeHtml(currentProject.projectKey) + '" class="rounded border-slate-300 text-primary focus:ring-primary" ' + (currentProject.recurrentSubcontractingCatalog.length && currentProject.selectedRecurrentSubcontractingTypes.length === currentProject.recurrentSubcontractingCatalog.length ? 'checked' : '') + '/>' +
+                    '<span class="text-sm font-semibold text-slate-700">Select all</span>' +
+                  '</label>' +
                   '<div class="mt-4 flex flex-wrap gap-3">' +
                     currentProject.recurrentSubcontractingCatalog.map(function (subcontractingType) {
                       return '<label class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">' +
@@ -8130,6 +8143,27 @@
         { id: "mt_d_13", personnelConcerned: "Track, DEQ, POS, 3rd Rail; CAT; MEP",       legalTraining: "AIPR - Proximity to Underground Networks",  periodicity: 5, costPerPerson: 200,  costPerGroup: 1000, maxPersPerGroup: 12, currency: "EUR" },
       ];
 
+      function cloneMandatoryTrainingRow(row) {
+        return Object.assign({}, row || {});
+      }
+
+      function resolveMandatoryTrainingProjectRows(projectKey) {
+        const projects = buildMandatoryTrainingProjects();
+        const project = findProjectByStoredKey(projects, projectKey);
+        const lookupKeys = project ? getProjectLookupKeys(project) : [projectKey];
+        const state = readMandatoryTrainingFallbackState();
+        const storageKey = lookupKeys.find(function (key) {
+          return key && Array.isArray(state[key]);
+        }) || (project ? project.projectKey : projectKey);
+        const persistedRows = storageKey ? state[storageKey] : null;
+        const rows = Array.isArray(persistedRows) ? persistedRows : MT_DEFAULT_ROWS;
+        return {
+          state: state,
+          storageKey: storageKey,
+          rows: rows.map(cloneMandatoryTrainingRow),
+        };
+      }
+
       function closeMandatoryTrainingWorkspace() {
         setFallbackDetailWorkspaceActive(false);
         $("mandatoryTrainingWorkspace")?.classList.add("hidden");
@@ -10320,11 +10354,11 @@
             event.preventDefault();
             const projectKey = mtAddRowBtn.getAttribute("data-project-key") || "";
             if (!projectKey) return;
-            const allState = readMandatoryTrainingFallbackState();
-            const rows = Array.isArray(allState[projectKey]) ? allState[projectKey].slice() : [];
+            const resolved = resolveMandatoryTrainingProjectRows(projectKey);
+            const rows = resolved.rows;
             rows.push({ id: "mt_" + Date.now(), personnelConcerned: "", legalTraining: "", periodicity: 1, costPerPerson: 0, costPerGroup: 0, maxPersPerGroup: 0, currency: "EUR" });
-            allState[projectKey] = rows;
-            writeMandatoryTrainingFallbackState(allState);
+            resolved.state[resolved.storageKey] = rows;
+            writeMandatoryTrainingFallbackState(resolved.state);
             renderFallbackMandatoryTrainingWorkspace();
             return;
           }
@@ -10335,9 +10369,9 @@
             const projectKey = mtDeleteRowBtn.getAttribute("data-project-key") || "";
             const rowId      = mtDeleteRowBtn.getAttribute("data-row-id") || "";
             if (!projectKey || !rowId) return;
-            const allState = readMandatoryTrainingFallbackState();
-            allState[projectKey] = (Array.isArray(allState[projectKey]) ? allState[projectKey] : []).filter(function (r) { return r.id !== rowId; });
-            writeMandatoryTrainingFallbackState(allState);
+            const resolved = resolveMandatoryTrainingProjectRows(projectKey);
+            resolved.state[resolved.storageKey] = resolved.rows.filter(function (r) { return r.id !== rowId; });
+            writeMandatoryTrainingFallbackState(resolved.state);
             renderFallbackMandatoryTrainingWorkspace();
             return;
           }
@@ -10542,6 +10576,22 @@
             return;
           }
 
+          const guideRecurrentMaterialToggleAll = event.target.closest("[data-fallback-guide-recurrent-material-toggle-all]");
+          if (guideRecurrentMaterialToggleAll) {
+            const projectKey = guideRecurrentMaterialToggleAll.getAttribute("data-project-key") || "";
+            const project = buildFallbackGuidePlanningProjects().find(function (item) { return item.projectKey === projectKey; });
+            const current = readGuidePlanningFallbackState();
+            const nextProject = Object.assign({}, current[projectKey] || {});
+            nextProject.selectedRecurrentMaterialTypes = guideRecurrentMaterialToggleAll.checked && project
+              ? project.recurrentMaterialCatalog.slice()
+              : [];
+            current[projectKey] = nextProject;
+            writeGuidePlanningFallbackState(current);
+            $("guidePlanningWorkspace").dataset.currentProjectKey = projectKey;
+            renderFallbackGuidePlanningWorkspace();
+            return;
+          }
+
           const guideRecurrentSubcontractingTypeField = event.target.closest("[data-fallback-guide-recurrent-subcontracting-type]");
           if (guideRecurrentSubcontractingTypeField) {
             const projectKey = guideRecurrentSubcontractingTypeField.getAttribute("data-project-key") || "";
@@ -10551,6 +10601,22 @@
             const current = readGuidePlanningFallbackState();
             const nextProject = Object.assign({}, current[projectKey] || {});
             nextProject.selectedRecurrentSubcontractingTypes = selectedRecurrentSubcontractingTypes;
+            current[projectKey] = nextProject;
+            writeGuidePlanningFallbackState(current);
+            $("guidePlanningWorkspace").dataset.currentProjectKey = projectKey;
+            renderFallbackGuidePlanningWorkspace();
+            return;
+          }
+
+          const guideRecurrentSubcontractingToggleAll = event.target.closest("[data-fallback-guide-recurrent-subcontracting-toggle-all]");
+          if (guideRecurrentSubcontractingToggleAll) {
+            const projectKey = guideRecurrentSubcontractingToggleAll.getAttribute("data-project-key") || "";
+            const project = buildFallbackGuidePlanningProjects().find(function (item) { return item.projectKey === projectKey; });
+            const current = readGuidePlanningFallbackState();
+            const nextProject = Object.assign({}, current[projectKey] || {});
+            nextProject.selectedRecurrentSubcontractingTypes = guideRecurrentSubcontractingToggleAll.checked && project
+              ? project.recurrentSubcontractingCatalog.slice()
+              : [];
             current[projectKey] = nextProject;
             writeGuidePlanningFallbackState(current);
             $("guidePlanningWorkspace").dataset.currentProjectKey = projectKey;
@@ -10902,15 +10968,15 @@
             const rowId      = mtCellInput.getAttribute("data-row-id")      || "";
             const field      = mtCellInput.getAttribute("data-field")       || "";
             if (!projectKey || !rowId || !field) return;
-            const allState = readMandatoryTrainingFallbackState();
-            const rows = Array.isArray(allState[projectKey]) ? allState[projectKey].slice() : [];
+            const resolved = resolveMandatoryTrainingProjectRows(projectKey);
+            const rows = resolved.rows;
             const idx  = rows.findIndex(function (r) { return r.id === rowId; });
             if (idx === -1) return;
             const isNumField = ["periodicity","costPerPerson","costPerGroup","maxPersPerGroup"].indexOf(field) !== -1;
             rows[idx] = Object.assign({}, rows[idx]);
             rows[idx][field] = isNumField ? (toNumber(mtCellInput.value) || 0) : mtCellInput.value;
-            allState[projectKey] = rows;
-            writeMandatoryTrainingFallbackState(allState);
+            resolved.state[resolved.storageKey] = rows;
+            writeMandatoryTrainingFallbackState(resolved.state);
             renderFallbackMandatoryTrainingWorkspace();
             return;
           }

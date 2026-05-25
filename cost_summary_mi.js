@@ -1569,6 +1569,250 @@ function publishProjectPhasesBridge() {
   }));
 }
 
+const CONFIG_EXPORT_FALLBACK_STORES = {
+  projectPhases: "cost-summary-mi-project-phases-fallback-v1",
+  costCenters: "cost-summary-mi-cost-centers-fallback-v1",
+  pioDefinition: "cost-summary-mi-pio-definition-fallback-v1",
+  currencyExchange: "cost-summary-mi-currency-exchange-fallback-v1",
+  firmingRules: "cost-summary-mi-firming-rules-fallback-v1",
+  guidePlanning: "cost-summary-mi-guide-planning-fallback-v1",
+  workloadSynthesis: "cost-summary-mi-workload-overrides-fallback-v1",
+  whiteCollar: "cost-summary-mi-white-collar-fallback-v1",
+  wbs: "cost-summary-mi-wbs-fallback-v1",
+  toolsConsumables: "cost-summary-mi-tools-consumables-fallback-v1",
+  vehicles: "cost-summary-mi-vehicles-fallback-v1",
+  otherSupportCosts: "cost-summary-mi-osc-fallback-v1",
+  mandatoryTraining: "cost-summary-mi-mandatory-training-fallback-v1",
+};
+
+function cloneConfigValue(value) {
+  return JSON.parse(JSON.stringify(value ?? {}));
+}
+
+function getCurrentConfigStudyId() {
+  return state.currentStudy?.studyId || localStorage.getItem("cost-summary-mi-last-open-study-id") || "default_study";
+}
+
+function readConfigFallbackModule(moduleName) {
+  const storageKey = CONFIG_EXPORT_FALLBACK_STORES[moduleName];
+  if (!storageKey) return {};
+  try {
+    const raw = localStorage.getItem(storageKey);
+    const parsed = raw ? JSON.parse(raw) : {};
+    const studyId = getCurrentConfigStudyId();
+    return cloneConfigValue(parsed && typeof parsed === "object" ? parsed[studyId] || {} : {});
+  } catch {
+    return {};
+  }
+}
+
+function mergeProjectConfigStores(fallbackStore = {}, primaryStore = {}) {
+  const fallback = fallbackStore && typeof fallbackStore === "object" ? fallbackStore : {};
+  const primary = primaryStore && typeof primaryStore === "object" ? primaryStore : {};
+  const merged = { ...cloneConfigValue(fallback), ...cloneConfigValue(primary) };
+  Array.from(new Set(Object.keys(fallback).concat(Object.keys(primary)))).forEach((projectKey) => {
+    const fallbackProject = fallback[projectKey] && typeof fallback[projectKey] === "object" ? fallback[projectKey] : {};
+    const primaryProject = primary[projectKey] && typeof primary[projectKey] === "object" ? primary[projectKey] : {};
+    merged[projectKey] = {
+      ...cloneConfigValue(fallbackProject),
+      ...cloneConfigValue(primaryProject),
+    };
+  });
+  return merged;
+}
+
+function buildConfigExportModules() {
+  const primaryModules = {
+    projectPhases: state.studyConfig?.studySetup?.projectPhases?.projects || {},
+    costCenters: state.studyConfig?.organizationRisks?.costCenters?.projects || {},
+    pioDefinition: state.studyConfig?.studySetup?.pioDefinitionFreightCustoms?.projects || {},
+    currencyExchange: state.studyConfig?.dataSources?.currencyExchangeRates?.projects || {},
+    firmingRules: state.studyConfig?.dataSources?.firmingRules?.projects || {},
+    guidePlanning: state.studyConfig?.studySetup?.guidePlanningDefinition?.projects || {},
+    workloadSynthesis: state.studyConfig?.organizationRisks?.workloadSynthesis?.projects || {},
+    whiteCollar: state.studyConfig?.organizationRisks?.whiteCollarDefinition?.projects || {},
+    wbs: state.studyConfig?.organizationRisks?.wbs?.projects || state.studyConfig?.dataSources?.wbs?.projects || {},
+    toolsConsumables: state.studyConfig?.supportCosts?.toolsConsumables?.projects || {},
+    vehicles: state.studyConfig?.supportCosts?.vehicles?.projects || {},
+    otherSupportCosts: state.studyConfig?.supportCosts?.otherSupportCosts?.projects || {},
+    mandatoryTraining: state.studyConfig?.supportCosts?.mandatoryTraining?.projects || {},
+  };
+
+  return Object.keys(CONFIG_EXPORT_FALLBACK_STORES).reduce((modules, moduleName) => {
+    modules[moduleName] = mergeProjectConfigStores(
+      readConfigFallbackModule(moduleName),
+      primaryModules[moduleName] || {}
+    );
+    return modules;
+  }, {});
+}
+
+function buildCostSummaryConfigExportPayload() {
+  const modules = buildConfigExportModules();
+  const groups = {
+    studySetup: {
+      projectPhases: cloneConfigValue(modules.projectPhases),
+      costCenters: cloneConfigValue(modules.costCenters),
+      pioDefinition: cloneConfigValue(modules.pioDefinition),
+      guidePlanning: cloneConfigValue(modules.guidePlanning),
+    },
+    dataSources: {
+      currencyExchange: cloneConfigValue(modules.currencyExchange),
+      firmingRules: cloneConfigValue(modules.firmingRules),
+    },
+    organizationRisks: {
+      workloadSynthesis: cloneConfigValue(modules.workloadSynthesis),
+      whiteCollar: cloneConfigValue(modules.whiteCollar),
+      wbs: cloneConfigValue(modules.wbs),
+    },
+    supportCosts: {
+      toolsConsumables: cloneConfigValue(modules.toolsConsumables),
+      vehicles: cloneConfigValue(modules.vehicles),
+      otherSupportCosts: cloneConfigValue(modules.otherSupportCosts),
+      mandatoryTraining: cloneConfigValue(modules.mandatoryTraining),
+    },
+  };
+
+  return {
+    app: "cost-summary-mi",
+    schemaVersion: 1,
+    exportedAt: new Date().toISOString(),
+    sourceStudyId: getCurrentConfigStudyId(),
+    studyName: state.currentStudy?.name || "Cost Summary & MI",
+    note: "Configuration only. Excel workbook data is not included.",
+    modules,
+    groups,
+    studyConfig: cloneConfigValue(state.studyConfig || {}),
+    sharedSettings: cloneConfigValue(state.settings || {}),
+  };
+}
+
+function getImportedModule(payload, moduleName) {
+  const modules = payload?.modules && typeof payload.modules === "object" ? payload.modules : {};
+  if (modules[moduleName] && typeof modules[moduleName] === "object") return cloneConfigValue(modules[moduleName]);
+  const studySetup = payload?.groups?.studySetup || {};
+  const dataSources = payload?.groups?.dataSources || {};
+  const organizationRisks = payload?.groups?.organizationRisks || {};
+  const supportCosts = payload?.groups?.supportCosts || {};
+  const groupedModules = {
+    projectPhases: studySetup.projectPhases,
+    costCenters: studySetup.costCenters,
+    pioDefinition: studySetup.pioDefinition,
+    guidePlanning: studySetup.guidePlanning,
+    currencyExchange: dataSources.currencyExchange,
+    firmingRules: dataSources.firmingRules,
+    workloadSynthesis: organizationRisks.workloadSynthesis,
+    whiteCollar: organizationRisks.whiteCollar,
+    wbs: organizationRisks.wbs,
+    toolsConsumables: supportCosts.toolsConsumables,
+    vehicles: supportCosts.vehicles,
+    otherSupportCosts: supportCosts.otherSupportCosts,
+    mandatoryTraining: supportCosts.mandatoryTraining,
+  };
+  return cloneConfigValue(groupedModules[moduleName] || {});
+}
+
+async function importCostSummaryConfigPayloadToStudy(payload) {
+  if (!payload || payload.app !== "cost-summary-mi" || Number(payload.schemaVersion) !== 1) {
+    throw new Error("Invalid Cost Summary & MI configuration file.");
+  }
+  if (!state.currentStudy?.studyId) return false;
+
+  const existing = state.studyConfig || {};
+  const nextStudySetup = {
+    ...(existing.studySetup || {}),
+    projectPhases: {
+      ...((existing.studySetup || {}).projectPhases || {}),
+      projects: getImportedModule(payload, "projectPhases"),
+      updatedAt: new Date().toISOString(),
+    },
+    pioDefinitionFreightCustoms: {
+      ...((existing.studySetup || {}).pioDefinitionFreightCustoms || {}),
+      projects: getImportedModule(payload, "pioDefinition"),
+      updatedAt: new Date().toISOString(),
+    },
+    guidePlanningDefinition: {
+      ...((existing.studySetup || {}).guidePlanningDefinition || {}),
+      projects: getImportedModule(payload, "guidePlanning"),
+      updatedAt: new Date().toISOString(),
+    },
+  };
+  const nextDataSources = {
+    ...(existing.dataSources || {}),
+    currencyExchangeRates: {
+      ...((existing.dataSources || {}).currencyExchangeRates || {}),
+      projects: getImportedModule(payload, "currencyExchange"),
+      updatedAt: new Date().toISOString(),
+    },
+    firmingRules: {
+      ...((existing.dataSources || {}).firmingRules || {}),
+      projects: getImportedModule(payload, "firmingRules"),
+      updatedAt: new Date().toISOString(),
+    },
+  };
+  const nextOrganizationRisks = {
+    ...(existing.organizationRisks || {}),
+    costCenters: {
+      ...((existing.organizationRisks || {}).costCenters || {}),
+      projects: getImportedModule(payload, "costCenters"),
+      updatedAt: new Date().toISOString(),
+    },
+    workloadSynthesis: {
+      ...((existing.organizationRisks || {}).workloadSynthesis || {}),
+      projects: getImportedModule(payload, "workloadSynthesis"),
+      updatedAt: new Date().toISOString(),
+    },
+    whiteCollarDefinition: {
+      ...((existing.organizationRisks || {}).whiteCollarDefinition || {}),
+      projects: getImportedModule(payload, "whiteCollar"),
+      updatedAt: new Date().toISOString(),
+    },
+    wbs: {
+      ...((existing.organizationRisks || {}).wbs || {}),
+      projects: getImportedModule(payload, "wbs"),
+      updatedAt: new Date().toISOString(),
+    },
+  };
+  const nextSupportCosts = {
+    ...(existing.supportCosts || {}),
+    toolsConsumables: {
+      ...((existing.supportCosts || {}).toolsConsumables || {}),
+      projects: getImportedModule(payload, "toolsConsumables"),
+      updatedAt: new Date().toISOString(),
+    },
+    vehicles: {
+      ...((existing.supportCosts || {}).vehicles || {}),
+      projects: getImportedModule(payload, "vehicles"),
+      updatedAt: new Date().toISOString(),
+    },
+    otherSupportCosts: {
+      ...((existing.supportCosts || {}).otherSupportCosts || {}),
+      projects: getImportedModule(payload, "otherSupportCosts"),
+      updatedAt: new Date().toISOString(),
+    },
+    mandatoryTraining: {
+      ...((existing.supportCosts || {}).mandatoryTraining || {}),
+      projects: getImportedModule(payload, "mandatoryTraining"),
+      updatedAt: new Date().toISOString(),
+    },
+  };
+
+  state.studyConfig = await savePersistedStudyConfig(state.currentStudy.studyId, {
+    dataSources: nextDataSources,
+    studySetup: nextStudySetup,
+    organizationRisks: nextOrganizationRisks,
+    supportCosts: nextSupportCosts,
+  });
+  publishProjectPhasesBridge();
+  publishCostCentersBridge();
+  publishGuidePlanningBridge();
+  updateToolbarStatusDots();
+  return true;
+}
+
+window.__costSummaryBuildConfigExport = buildCostSummaryConfigExportPayload;
+window.__costSummaryImportConfigPayload = importCostSummaryConfigPayloadToStudy;
+
 function isCostCenterShiftPosition(position) {
   return /team leader|supervisor|technician|worker/i.test(position || "");
 }
@@ -3722,6 +3966,10 @@ function renderGuidePlanningWorkspace() {
           <div class="mt-4 space-y-4">
             <details class="rounded-2xl border border-slate-200 bg-slate-50 p-4" open>
               <summary class="cursor-pointer text-sm font-bold text-slate-700">Recurrent Material Types</summary>
+              <label class="mt-4 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                <input type="checkbox" data-guide-recurrent-material-toggle-all data-project-key="${escapeHtml(currentProject.projectKey)}" class="rounded border-slate-300 text-primary focus:ring-primary" ${currentProject.recurrentMaterialCatalog.length && currentProject.selectedRecurrentMaterialTypes.length === currentProject.recurrentMaterialCatalog.length ? "checked" : ""}/>
+                <span class="text-sm font-semibold text-slate-700">Select all</span>
+              </label>
               <div class="mt-4 flex flex-wrap gap-3">
                 ${currentProject.recurrentMaterialCatalog.map((materialType) => `
                   <label class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
@@ -3785,6 +4033,10 @@ function renderGuidePlanningWorkspace() {
           <div class="mt-4 space-y-4">
             <details class="rounded-2xl border border-slate-200 bg-slate-50 p-4" open>
               <summary class="cursor-pointer text-sm font-bold text-slate-700">Applicable Subcontracting Types</summary>
+              <label class="mt-4 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                <input type="checkbox" data-guide-recurrent-subcontracting-toggle-all data-project-key="${escapeHtml(currentProject.projectKey)}" class="rounded border-slate-300 text-primary focus:ring-primary" ${currentProject.recurrentSubcontractingCatalog.length && currentProject.selectedRecurrentSubcontractingTypes.length === currentProject.recurrentSubcontractingCatalog.length ? "checked" : ""}/>
+                <span class="text-sm font-semibold text-slate-700">Select all</span>
+              </label>
               <div class="mt-4 flex flex-wrap gap-3">
                 ${currentProject.recurrentSubcontractingCatalog.map((subcontractingType) => `
                   <label class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
@@ -4689,6 +4941,20 @@ function setupEvents() {
       return;
     }
 
+    const guideRecurrentMaterialToggleAll = event.target.closest("[data-guide-recurrent-material-toggle-all]");
+    if (guideRecurrentMaterialToggleAll && state.activeDrawerModuleKey === "study_setup:guide_planning_definition") {
+      const projectKey = guideRecurrentMaterialToggleAll.getAttribute("data-project-key") || "";
+      const project = buildGuidePlanningProjects().find((item) => item.projectKey === projectKey);
+      await saveSingleGuidePlanningProject(projectKey, (current) => {
+        current.selectedRecurrentMaterialTypes = guideRecurrentMaterialToggleAll.checked && project
+          ? project.recurrentMaterialCatalog.slice()
+          : [];
+        return current;
+      });
+      renderGuidePlanningWorkspace();
+      return;
+    }
+
     const guideRecurrentSubcontractingTypeField = event.target.closest("[data-guide-recurrent-subcontracting-type]");
     if (guideRecurrentSubcontractingTypeField && state.activeDrawerModuleKey === "study_setup:guide_planning_definition") {
       const projectKey = guideRecurrentSubcontractingTypeField.getAttribute("data-project-key") || "";
@@ -4697,6 +4963,20 @@ function setupEvents() {
         .filter(Boolean);
       await saveSingleGuidePlanningProject(projectKey, (current) => {
         current.selectedRecurrentSubcontractingTypes = selectedRecurrentSubcontractingTypes;
+        return current;
+      });
+      renderGuidePlanningWorkspace();
+      return;
+    }
+
+    const guideRecurrentSubcontractingToggleAll = event.target.closest("[data-guide-recurrent-subcontracting-toggle-all]");
+    if (guideRecurrentSubcontractingToggleAll && state.activeDrawerModuleKey === "study_setup:guide_planning_definition") {
+      const projectKey = guideRecurrentSubcontractingToggleAll.getAttribute("data-project-key") || "";
+      const project = buildGuidePlanningProjects().find((item) => item.projectKey === projectKey);
+      await saveSingleGuidePlanningProject(projectKey, (current) => {
+        current.selectedRecurrentSubcontractingTypes = guideRecurrentSubcontractingToggleAll.checked && project
+          ? project.recurrentSubcontractingCatalog.slice()
+          : [];
         return current;
       });
       renderGuidePlanningWorkspace();
