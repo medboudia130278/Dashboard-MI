@@ -1559,6 +1559,10 @@ function publishGuidePlanningBridge() {
   window.__costSummaryGuidePlanningStore = getGuidePlanningStore();
 }
 
+function publishPioDefinitionBridge() {
+  window.__costSummaryPioDefinitionStore = getPioDefinitionStore();
+}
+
 function publishProjectPhasesBridge() {
   window.__costSummaryProjectPhaseProjects = buildProjectPhaseProjects().map((project) => ({
     ...project,
@@ -1806,6 +1810,7 @@ async function importCostSummaryConfigPayloadToStudy(payload) {
   publishProjectPhasesBridge();
   publishCostCentersBridge();
   publishGuidePlanningBridge();
+  publishPioDefinitionBridge();
   updateToolbarStatusDots();
   return true;
 }
@@ -1874,7 +1879,14 @@ function resolveCostCenterHourlyRate(row, rowOverrides, rowsByKey, nightPremiumE
 function buildCostCenterProjects() {
   const byProject = new Map();
   const persistedProjects = getCostCentersStore();
-  const pioProjectsByKey = new Map(buildPioDefinitionProjects().map((project) => [project.projectKey, project]));
+  const pioProjectsByKey = new Map();
+  buildPioDefinitionProjects().forEach((project) => {
+    [project.projectKey, project.projectName, normalizeSourceDataKey(project.projectKey), normalizeSourceDataKey(project.projectName)]
+      .filter(Boolean)
+      .forEach((key) => {
+        if (!pioProjectsByKey.has(key)) pioProjectsByKey.set(key, project);
+      });
+  });
   const mergedProjectParams = getMergedProjectGeneralParamsMap();
   const currencyCatalog = ["EUR", "USD", "AED", "SAR", "BRL", "CNY", "SGD", "INR", "GBP", "PLN"];
   const timePeriodCatalog = ["Day", "Night", "Shift", "Average", "Handback"];
@@ -1910,7 +1922,11 @@ function buildCostCenterProjects() {
 
     const projectName = params.project_name || workbook.fileName || projectKey;
     const persisted = persistedProjects[projectKey] || {};
-    const pioProject = pioProjectsByKey.get(projectKey) || {};
+    const pioProject = pioProjectsByKey.get(projectKey)
+      || pioProjectsByKey.get(projectName)
+      || pioProjectsByKey.get(normalizeSourceDataKey(projectKey))
+      || pioProjectsByKey.get(normalizeSourceDataKey(projectName))
+      || {};
     const pioRows = Array.isArray(pioProject.rows) ? pioProject.rows : [];
     const projectPioRow = pioRows.find((row) => row.origin === projectName) || pioRows[0] || null;
     const projectCaratUnit = projectPioRow?.caratUnit || "";
@@ -1955,9 +1971,7 @@ function buildCostCenterProjects() {
         const selectedCaratUnit = isExternalSupport
           ? (rowOverride.caratUnit || "")
           : projectCaratUnit;
-        const matchedPioRow = isExternalSupport
-          ? (pioRows.find((pioRow) => String(pioRow.caratUnit || "").trim() === String(selectedCaratUnit || "").trim()) || null)
-          : null;
+        const matchedPioRow = pioRows.find((pioRow) => String(pioRow.caratUnit || "").trim() === String(selectedCaratUnit || "").trim()) || null;
         const externalYearlyHours = matchedPioRow ? toNumber(matchedPioRow.yearlyHours) : null;
         const monthlyWorkingHours = isExternalSupport
           ? (externalYearlyHours !== null ? (externalYearlyHours / 12) : "")
@@ -1966,6 +1980,8 @@ function buildCostCenterProjects() {
           rowKey,
           position,
           caratUnit: selectedCaratUnit,
+          pioUnitRole: matchedPioRow?.unitRole || "",
+          pioYearlyHours: matchedPioRow?.yearlyHours || "",
           pioCaratUnitOptions,
           timePeriod,
           monthlyWorkingHours,
@@ -2806,6 +2822,7 @@ async function savePioDefinitionState(mutator) {
       },
     },
   });
+  publishPioDefinitionBridge();
   updateToolbarStatusDots();
 }
 
@@ -5841,6 +5858,7 @@ async function refreshSharedSnapshot() {
   publishProjectPhasesBridge();
   publishCostCentersBridge();
   publishGuidePlanningBridge();
+  publishPioDefinitionBridge();
   renderStudyWorkspace();
   renderSharedStoreSummary();
   renderProjectDataPreview();
@@ -5861,6 +5879,7 @@ async function switchToStudy(studyId) {
   publishProjectPhasesBridge();
   publishCostCentersBridge();
   publishGuidePlanningBridge();
+  publishPioDefinitionBridge();
   applyDraftToForm(state.draft);
   renderStudyWorkspace();
   refreshStatus(state.draft);
@@ -5878,6 +5897,7 @@ async function initCostSummaryMIPage() {
     publishProjectPhasesBridge();
     publishCostCentersBridge();
     publishGuidePlanningBridge();
+    publishPioDefinitionBridge();
     updateToolbarStatusDots();
     renderCalculationBlocks();
     renderWorkbookOutline();

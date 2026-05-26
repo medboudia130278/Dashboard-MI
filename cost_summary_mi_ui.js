@@ -396,6 +396,29 @@
         return all[getFallbackStudyId()] || {};
       }
 
+      function readCombinedPioDefinitionState() {
+        const fallback = readPioDefinitionFallbackState();
+        const primary = window.__costSummaryPioDefinitionStore && typeof window.__costSummaryPioDefinitionStore === "object"
+          ? window.__costSummaryPioDefinitionStore
+          : {};
+        const merged = Object.assign({}, fallback, primary);
+        Object.keys(fallback || {}).forEach(function (projectKey) {
+          const fallbackProject = fallback[projectKey] || {};
+          const primaryProject = primary[projectKey] || {};
+          merged[projectKey] = Object.assign({}, fallbackProject, primaryProject, {
+            customOrigins: Array.from(new Set([])
+              .concat(Array.isArray(fallbackProject.customOrigins) ? fallbackProject.customOrigins : [])
+              .concat(Array.isArray(primaryProject.customOrigins) ? primaryProject.customOrigins : [])),
+            selectedOrigins: Array.from(new Set([])
+              .concat(Array.isArray(fallbackProject.selectedOrigins) ? fallbackProject.selectedOrigins : [])
+              .concat(Array.isArray(primaryProject.selectedOrigins) ? primaryProject.selectedOrigins : [])),
+            rowOverrides: Object.assign({}, fallbackProject.rowOverrides || {}, primaryProject.rowOverrides || {}),
+            customDutiesBySubsystem: Object.assign({}, fallbackProject.customDutiesBySubsystem || {}, primaryProject.customDutiesBySubsystem || {}),
+          });
+        });
+        return merged;
+      }
+
       function writePioDefinitionFallbackState(nextState) {
         const all = safeReadJson(pioDefinitionFallbackKey, {});
         all[getFallbackStudyId()] = nextState;
@@ -1400,6 +1423,7 @@
       function buildFallbackCostCenterProjects() {
         const persisted = readCombinedCostCentersState();
         const pioProjects = buildFallbackPioDefinitionProjects();
+        const pioByLookup = buildProjectLookupMap(pioProjects);
         const workbooks = getSharedWorkbooksForWorkspace();
         if (!workbooks.length) {
           return [];
@@ -1427,13 +1451,6 @@
             const annualWorkingHours = toNumber(current.annualWorkingHours) !== null
               ? toNumber(current.annualWorkingHours)
               : (toNumber(gp.max_hours_per_year_per_person) !== null ? toNumber(gp.max_hours_per_year_per_person) : 0);
-            const pioProject = pioProjects.find(function (entry) { return entry.projectKey === projectKey; }) || null;
-            const pioRows = Array.isArray(pioProject && pioProject.rows) ? pioProject.rows : [];
-            const projectPioRow = pioRows.find(function (row) { return row.origin === projectName; }) || pioRows[0] || null;
-            const projectCaratUnit = projectPioRow && projectPioRow.caratUnit ? projectPioRow.caratUnit : "";
-            const pioCaratUnitOptions = Array.from(new Set(
-              pioRows.map(function (row) { return String(row.caratUnit || "").trim(); }).filter(Boolean)
-            ));
             const selectedPositions = Array.isArray(current.selectedPositions) ? current.selectedPositions.slice() : [];
             const generalTimePeriods = Array.isArray(current.generalTimePeriods) && current.generalTimePeriods.length
               ? current.generalTimePeriods.slice()
@@ -1445,6 +1462,18 @@
             const projectCurrency = current.projectCurrency || "EUR";
             const nightPremiumEnabled = !!current.nightPremiumEnabled;
             const nightPremiumPercent = toNumber(current.nightPremiumPercent) !== null ? toNumber(current.nightPremiumPercent) : 0;
+            const lookupKeys = getProjectLookupKeys({
+              projectKey: projectKey,
+              projectName: projectName,
+              persistedKeys: group.persistedKeys,
+            });
+            const pioProject = findProjectByLookupKeys(pioByLookup, lookupKeys) || null;
+            const pioRows = Array.isArray(pioProject && pioProject.rows) ? pioProject.rows : [];
+            const projectPioRow = pioRows.find(function (row) { return row.origin === projectName; }) || pioRows[0] || null;
+            const projectCaratUnit = projectPioRow && projectPioRow.caratUnit ? projectPioRow.caratUnit : "";
+            const pioCaratUnitOptions = Array.from(new Set(
+              pioRows.map(function (row) { return String(row.caratUnit || "").trim(); }).filter(Boolean)
+            ));
 
             const rows = [];
             selectedPositions.forEach(function (position) {
@@ -1460,9 +1489,9 @@
                 const selectedCaratUnit = isExternalSupport
                   ? (rowOverride.caratUnit || "")
                   : projectCaratUnit;
-                const matchedPioRow = isExternalSupport
-                  ? (pioRows.find(function (pioRow) { return String(pioRow.caratUnit || "").trim() === String(selectedCaratUnit || "").trim(); }) || null)
-                  : null;
+                const matchedPioRow = pioRows.find(function (pioRow) {
+                  return String(pioRow.caratUnit || "").trim() === String(selectedCaratUnit || "").trim();
+                }) || null;
                 const externalYearlyHours = matchedPioRow ? toNumber(matchedPioRow.yearlyHours) : null;
                 const monthlyWorkingHours = isExternalSupport
                   ? (externalYearlyHours !== null ? (externalYearlyHours / 12) : "")
@@ -1471,6 +1500,8 @@
                   rowKey: rowKey,
                   position: position,
                   caratUnit: selectedCaratUnit,
+                  pioUnitRole: matchedPioRow ? (matchedPioRow.unitRole || "") : "",
+                  pioYearlyHours: matchedPioRow ? matchedPioRow.yearlyHours : "",
                   pioCaratUnitOptions: pioCaratUnitOptions,
                   timePeriod: timePeriod,
                   monthlyWorkingHours: monthlyWorkingHours,
@@ -1665,8 +1696,8 @@
       }
 
       function buildFallbackPioDefinitionProjects() {
-        const persisted = readPioDefinitionFallbackState();
-        const costCentersPersisted = readCostCentersFallbackState();
+        const persisted = readCombinedPioDefinitionState();
+        const costCentersPersisted = readCombinedCostCentersState();
         const workbooks = getSharedWorkbooksForWorkspace();
         if (!workbooks.length) {
           return [];
@@ -6366,6 +6397,26 @@
         return ((end.getFullYear() - start.getFullYear()) * 12) + (end.getMonth() - start.getMonth()) + 1;
       }
 
+      function countInclusiveMonthsFractional(startDate, endDate) {
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return 0;
+        let cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+        const lastMonth = new Date(end.getFullYear(), end.getMonth(), 1);
+        let months = 0;
+        while (cursor <= lastMonth) {
+          const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+          const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
+          const activeStart = start > monthStart ? start : monthStart;
+          const activeEnd = end < monthEnd ? end : monthEnd;
+          if (activeEnd >= activeStart) {
+            months += ((activeEnd - activeStart) / 86400000 + 1) / monthEnd.getDate();
+          }
+          cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+        }
+        return Math.round(months * 100) / 100;
+      }
+
       function getSubsystemSummaryPositionRole(description) {
         const normalized = normalizeWbsText(description);
         if (normalized.indexOf("supervisor") !== -1) return "Supervisor";
@@ -6380,6 +6431,13 @@
         if (normalized === "technician" || normalized.indexOf("technician") !== -1) return "Technician";
         if (normalized === "worker" || normalized.indexOf("worker") !== -1) return "Worker";
         return "";
+      }
+
+      function getSubsystemSummaryInfraRateRole(position) {
+        const normalized = normalizeWbsText(position);
+        if (normalized.indexOf("manager") !== -1) return "Manager";
+        if (normalized.indexOf("engineer") !== -1) return "Engineer";
+        return "Manager";
       }
 
       function isSubsystemSummaryPreventive(description) {
@@ -6474,7 +6532,13 @@
         });
         return Array.from(byKey.values()).sort(function (left, right) {
           return String(left.sheetName).localeCompare(String(right.sheetName));
-        });
+        }).concat([{
+          key: "Infra_Management",
+          label: "Infra_Management",
+          sheetName: sanitizeExcelSheetName("Infra_Management_Synthesis", usedNames),
+          sourceSubsystems: [],
+          rows: [],
+        }]);
       }
 
       function resolveSubsystemSummaryPlanning(project, phase, periodType, positionRole) {
@@ -6509,12 +6573,103 @@
         return { planningGuide: "", occurrence: 0, allowed: false };
       }
 
-      function resolveSubsystemSummaryUnitRole(project, caratUnit) {
+      function resolveSubsystemSummaryInfraPlanning(project, phase, periodType, position) {
+        const guide = project.subsystemSummaryGuidePlanning || {};
+        if (!phase || !periodType || !position) return { planningGuide: "", occurrence: 0, allowed: false };
+        if (periodType === "mob") {
+          const months = toNumber((guide.workloadMonthsByPosition || {})[position]) || 0;
+          const row = (guide.generatedRows || []).find(function (candidate) {
+            return normalizeWbsText(candidate.phaseLabel) === normalizeWbsText(phase.label || phase.key)
+              && normalizeWbsText(candidate.position) === normalizeWbsText(position);
+          });
+          return { planningGuide: row ? row.guidePlanningCode : "", occurrence: months, allowed: months > 0 };
+        }
+        if (periodType === "rec") {
+          const row = (guide.recurrentWorkloadRows || []).find(function (candidate) {
+            return normalizeWbsText(candidate.phaseLabel) === normalizeWbsText(phase.label || phase.key);
+          });
+          return {
+            planningGuide: row ? row.guidePlanningCode : "",
+            occurrence: countInclusiveMonthsFractional(phase.startDate, phase.endDate),
+            allowed: true,
+          };
+        }
+        if (periodType === "dem") {
+          const months = toNumber((guide.demobilizationWorkloadMonthsByPosition || {})[position]) || 0;
+          const row = (guide.generatedDemobilizationRows || []).find(function (candidate) {
+            return normalizeWbsText(candidate.phaseLabel) === normalizeWbsText(phase.label || phase.key)
+              && normalizeWbsText(candidate.position) === normalizeWbsText(position);
+          });
+          return { planningGuide: row ? row.guidePlanningCode : "", occurrence: months, allowed: months > 0 };
+        }
+        return { planningGuide: "", occurrence: 0, allowed: false };
+      }
+
+      function resolveSubsystemSummaryInfraRate(project, phase, periodType, position) {
+        if (!phase || !periodType || !position) return 0;
+        const role = getSubsystemSummaryInfraRateRole(position);
+        const rateKey = role === "Engineer" ? "engineerRate" : "managerRate";
+        const overrides = readPersistedFallbackProjectState(readWhiteCollarFallbackState(), getProjectLookupKeys(project));
+        const subsystems = Array.isArray(project.subsystems) ? project.subsystems : [];
+        if (!subsystems.length) {
+          const emptyKey = phase.key + "||" + periodType + "|" + rateKey;
+          if (Object.prototype.hasOwnProperty.call(overrides, emptyKey)) return toNumber(overrides[emptyKey]) || 0;
+          if (periodType === "mob") return phase.postWarrantyStartDate && phase.postWarrantyEndDate ? 100 : 0;
+          if (periodType === "rec") return 100;
+          return 0;
+        }
+        const total = subsystems.reduce(function (sum, subsystem) {
+          const key = phase.key + "|" + subsystem + "|" + periodType + "|" + rateKey;
+          if (Object.prototype.hasOwnProperty.call(overrides, key)) return sum + (toNumber(overrides[key]) || 0);
+          if (periodType === "mob") return sum + (phase.postWarrantyStartDate && phase.postWarrantyEndDate ? 100 : 0);
+          if (periodType === "rec") return sum + 100;
+          return sum;
+        }, 0);
+        return total / subsystems.length;
+      }
+
+      function resolveSubsystemSummaryInfraQuantity(project, phase, periodType, position) {
+        const overrides = readPersistedFallbackProjectState(readWhiteCollarFallbackState(), getProjectLookupKeys(project));
+        const key = "wct|" + phase.key + "|" + periodType + "|" + position;
+        if (Object.prototype.hasOwnProperty.call(overrides, key)) return toNumber(overrides[key]) || 0;
+        if (periodType === "mob") return phase.postWarrantyStartDate && phase.postWarrantyEndDate ? 1 : 0;
+        if (periodType === "rec") return 1;
+        return 0;
+      }
+
+      function resolveSubsystemSummaryUnitRole(project, caratUnit, costCenterRow) {
+        if (costCenterRow && costCenterRow.pioUnitRole) return costCenterRow.pioUnitRole;
         const pioRows = Array.isArray(project.subsystemSummaryPio && project.subsystemSummaryPio.rows) ? project.subsystemSummaryPio.rows : [];
         const match = pioRows.find(function (row) {
           return normalizeWbsText(row.caratUnit) === normalizeWbsText(caratUnit);
         });
         return match ? (match.unitRole || "") : "";
+      }
+
+      function resolveSubsystemSummaryMonthlyHours(project, costCenterRow) {
+        const directHours = toNumber(costCenterRow && costCenterRow.monthlyWorkingHours);
+        if (directHours !== null) return Math.round(directHours * 100) / 100;
+        const carriedYearlyHours = toNumber(costCenterRow && costCenterRow.pioYearlyHours);
+        if (carriedYearlyHours !== null) return Math.round((carriedYearlyHours / 12) * 100) / 100;
+        const caratUnit = costCenterRow ? costCenterRow.caratUnit : "";
+        if (!caratUnit) return "";
+        const pioRows = Array.isArray(project.subsystemSummaryPio && project.subsystemSummaryPio.rows) ? project.subsystemSummaryPio.rows : [];
+        const match = pioRows.find(function (row) {
+          return normalizeWbsText(row.caratUnit) === normalizeWbsText(caratUnit);
+        });
+        const yearlyHours = match ? toNumber(match.yearlyHours) : null;
+        return yearlyHours !== null ? Math.round((yearlyHours / 12) * 100) / 100 : "";
+      }
+
+      function findSubsystemSummaryWbsRow(wbsRows, phase, periodLabel, position, subsystem) {
+        return (Array.isArray(wbsRows) ? wbsRows : []).find(function (row) {
+          const phaseMatches = normalizeWbsText(row.phase) === normalizeWbsText(phase.label || phase.key)
+            || normalizeWbsText(row.phase) === normalizeWbsText(phase.key);
+          if (!phaseMatches) return false;
+          if (normalizeWbsText(row.period) !== normalizeWbsText(periodLabel)) return false;
+          if (normalizeWbsText(row.position) !== normalizeWbsText(position)) return false;
+          return subsystem === undefined || normalizeWbsText(row.subsystem) === normalizeWbsText(subsystem);
+        }) || null;
       }
 
       function buildSubsystemSummaryWorkloadRows(project) {
@@ -6523,6 +6678,9 @@
         const projectCurrency = String(costCenterProject.projectCurrency || "").trim().toUpperCase();
         const costCenterRows = (Array.isArray(costCenterProject.rows) ? costCenterProject.rows : []).filter(function (row) {
           return !!getSubsystemSummaryCostCenterRole(row.position);
+        });
+        const infraCostCenterRows = (Array.isArray(costCenterProject.rows) ? costCenterProject.rows : []).filter(function (row) {
+          return String(row.position || "").trim() && !getSubsystemSummaryCostCenterRole(row.position);
         });
         const wbsRows = buildGeneratedWbsWorkloadRows(project);
         const rowsBySheetKey = {};
@@ -6554,14 +6712,14 @@
               "Quantity": quantity,
               "Unit": "FTE",
               "Shift": ccRow.timePeriod,
-              "Cat 1 (Hours or Months)": ccRow.monthlyWorkingHours === "" ? "" : Math.round((toNumber(ccRow.monthlyWorkingHours) || 0) * 100) / 100,
+              "Cat 1 (Hours or Months)": resolveSubsystemSummaryMonthlyHours(project, ccRow),
               "Cost Centre": ccRow.costCenter || "",
               "Currency": currency,
               "Planning Guide": planning.planningGuide || "",
               "Nb Tot. of Occurency": planning.occurrence || "",
               "Costs Type": wbsRow.costsType || "",
               "Carat Unit": ccRow.caratUnit || "",
-              "Unit Role": resolveSubsystemSummaryUnitRole(project, ccRow.caratUnit),
+              "Unit Role": resolveSubsystemSummaryUnitRole(project, ccRow.caratUnit, ccRow),
               "On/Off Shore": projectCurrency && currency === projectCurrency ? "Onshore" : "Offshore",
               "PBS/IBS": wbsRow.pbsIbs || "",
               "ABS": wbsRow.abs || "",
@@ -6584,6 +6742,64 @@
             rowsBySheetKey[sheetKey].push(outputRow);
           });
         });
+
+        (Array.isArray(project.phases) ? project.phases : []).forEach(function (phase) {
+          getWbsPeriodDefinitions(project).forEach(function (period) {
+            infraCostCenterRows.forEach(function (ccRow) {
+              const position = String(ccRow.position || "").trim();
+              const planning = resolveSubsystemSummaryInfraPlanning(project, phase, period.type, position);
+              if (!planning.allowed) return;
+
+              const baseQuantity = resolveSubsystemSummaryInfraQuantity(project, phase, period.type, position);
+              const rate = resolveSubsystemSummaryInfraRate(project, phase, period.type, position);
+              const quantity = Math.round((baseQuantity * rate / 100) * 100) / 100;
+              if (!(quantity > 0)) return;
+
+              const currency = String(ccRow.currency || "").trim().toUpperCase();
+              const matchingWbsRow = findSubsystemSummaryWbsRow(wbsRows, phase, period.label, position, "");
+              const onOffshore = currency && projectCurrency
+                ? (currency === projectCurrency ? "Onshore" : "Offshore")
+                : "";
+              const outputRow = {
+                "Phase": phase.label || phase.key,
+                "Period": period.label,
+                "Type": "Workload",
+                "Description": position,
+                "Long_Description": ["Infra_Management", position, ccRow.timePeriod, period.label].join("_"),
+                "Quantity": quantity,
+                "Unit": "FTE",
+                "Shift": ccRow.timePeriod,
+                "Cat 1 (Hours or Months)": resolveSubsystemSummaryMonthlyHours(project, ccRow),
+                "Cost Centre": ccRow.costCenter || "",
+                "Currency": currency,
+                "Planning Guide": planning.planningGuide || "",
+                "Nb Tot. of Occurency": planning.occurrence || "",
+                "Costs Type": matchingWbsRow ? (matchingWbsRow.costsType || "") : "",
+                "Carat Unit": ccRow.caratUnit || "",
+                "Unit Role": resolveSubsystemSummaryUnitRole(project, ccRow.caratUnit, ccRow),
+                "On/Off Shore": onOffshore,
+                "PBS/IBS": matchingWbsRow ? (matchingWbsRow.pbsIbs || "") : "",
+                "ABS": matchingWbsRow ? (matchingWbsRow.abs || "") : "",
+                "Associated WP": matchingWbsRow ? (matchingWbsRow.associatedWp || "") : "",
+                "Tasks": matchingWbsRow ? (matchingWbsRow.tasks || "") : "",
+                "Delegated person": "INFRA",
+                "Firming rule": currency ? ((firmingProject.firmingTexts || {})[currency] || "") : "",
+                "Freight per Unit": "",
+                "Insurances-Rates & Taxes": "",
+                "Price List Code 1": period.label,
+                "Price List Code 2": "Labour",
+                "Price List Code 3": "Infra_Management",
+              };
+              const uniqueKey = SUBSYSTEM_SUMMARY_HEADERS.map(function (header) {
+                return normalizeWbsText(outputRow[header]);
+              }).join("|");
+              if (seen.has(uniqueKey)) return;
+              seen.add(uniqueKey);
+              if (!rowsBySheetKey.Infra_Management) rowsBySheetKey.Infra_Management = [];
+              rowsBySheetKey.Infra_Management.push(outputRow);
+            });
+          });
+        });
         return rowsBySheetKey;
       }
 
@@ -6593,6 +6809,15 @@
         const allSheets = sheetDefs.map(function (sheet) {
           return Object.assign({}, sheet, { rows: workloadRowsBySheet[sheet.key] || [] });
         });
+        if (!allSheets.some(function (sheet) { return sheet.key === "Infra_Management"; })) {
+          allSheets.push({
+            key: "Infra_Management",
+            label: "Infra_Management",
+            sheetName: "Infra_Management_Synthesis",
+            sourceSubsystems: [],
+            rows: workloadRowsBySheet.Infra_Management || [],
+          });
+        }
         const phases = Array.isArray(project.phases) ? project.phases : [];
         const files = [{
           key: "global",
@@ -6629,9 +6854,12 @@
         const previewBody = $("subsystemSummaryPreviewBody");
         if (!sheetSelect || !previewTitle || !previewMeta || !previewHead || !previewBody || !file) return;
 
+        const infraSheet = file.sheets.find(function (sheet) {
+          return sheet.key === "Infra_Management" && sheet.rows.length;
+        });
         const currentSheetName = sheetSelect.value && file.sheets.some(function (sheet) { return sheet.sheetName === sheetSelect.value; })
           ? sheetSelect.value
-          : (file.sheets[0] ? file.sheets[0].sheetName : "");
+          : (infraSheet ? infraSheet.sheetName : (file.sheets[0] ? file.sheets[0].sheetName : ""));
         sheetSelect.innerHTML = file.sheets.map(function (sheet) {
           return '<option value="' + escapeHtml(sheet.sheetName) + '"' + (sheet.sheetName === currentSheetName ? " selected" : "") + '>' + escapeHtml(sheet.sheetName) + ' (' + sheet.rows.length + ')</option>';
         }).join("");
@@ -6695,7 +6923,7 @@
         list.innerHTML = projects.map(function (project) {
           const active = currentProject && project.projectKey === currentProject.projectKey;
           const costCenterRows = project.subsystemSummaryCostCenters && Array.isArray(project.subsystemSummaryCostCenters.rows)
-            ? project.subsystemSummaryCostCenters.rows.filter(function (row) { return !!getSubsystemSummaryCostCenterRole(row.position); })
+            ? project.subsystemSummaryCostCenters.rows.filter(function (row) { return String(row.position || "").trim(); })
             : [];
           return '<button type="button" data-subsystem-summary-project-select="' + escapeHtml(project.projectKey) + '" class="w-full rounded-xl border px-3 py-3 text-left transition-all ' +
             (active ? "border-cyan-300 bg-cyan-50 shadow-sm ring-1 ring-cyan-200" : "border-slate-200 bg-white hover:bg-slate-100") + '">' +
@@ -6724,9 +6952,9 @@
         const missingParts = [];
         if (!currentProject.hasWbsImport) missingParts.push('<div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">Import the WBS Workload sheet before generating Workload export rows.</div>');
         const currentCostCenterRows = currentProject.subsystemSummaryCostCenters && Array.isArray(currentProject.subsystemSummaryCostCenters.rows)
-          ? currentProject.subsystemSummaryCostCenters.rows.filter(function (row) { return !!getSubsystemSummaryCostCenterRole(row.position); })
+          ? currentProject.subsystemSummaryCostCenters.rows.filter(function (row) { return String(row.position || "").trim(); })
           : [];
-        if (!currentCostCenterRows.length) missingParts.push('<div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">No Supervisor, Technician or Worker row was found in Cost Centers for this project.</div>');
+        if (!currentCostCenterRows.length) missingParts.push('<div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">No Cost Center row was found for this project.</div>');
         if (!currentProject.subsystemSummaryGuidePlanning) missingParts.push('<div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">Configure Guide Planning to fill Planning Guide and occurrences.</div>');
         missing.classList.toggle("hidden", missingParts.length === 0);
         missing.innerHTML = missingParts.join("");
