@@ -2812,7 +2812,7 @@
                 return selectedRecurrentMaterialTypes.flatMap(function (materialType) {
                   const hasPostWarrantyWindow = Boolean((phase && phase.postWarrantyStartDate) && (phase && phase.postWarrantyEndDate));
                   const phaseCode = (phase && phase.phaseCode) || (phase && phase.key) || "PHASE";
-                  const usePostWarrantyWindow = materialType === "Corrective spares" && hasPostWarrantyWindow;
+                  const usePostWarrantyWindow = (materialType === "Corrective spares" || materialType === "Repair") && hasPostWarrantyWindow;
                   return [{
                     rowKey: "recurrent_material__" + ((phase && phase.key) || phaseCode) + "__" + materialType,
                     phaseLabel: (phase && (phase.label || phase.key)) || phaseCode,

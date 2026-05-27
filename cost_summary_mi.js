@@ -2378,7 +2378,7 @@ function buildGuidePlanningProjects() {
     const recurrentMaterialRows = Array.isArray(projectPhase?.phases)
       ? projectPhase.phases.flatMap((phase) => selectedRecurrentMaterialTypes.flatMap((materialType) => {
         const hasPostWarrantyWindow = Boolean(phase?.postWarrantyStartDate && phase?.postWarrantyEndDate);
-        const usePostWarrantyWindow = materialType === "Corrective spares" && hasPostWarrantyWindow;
+        const usePostWarrantyWindow = (materialType === "Corrective spares" || materialType === "Repair") && hasPostWarrantyWindow;
         return [{
           rowKey: `recurrent_material__${phase.key}__${materialType}`,
           phaseLabel: phase.label || phase.key,
