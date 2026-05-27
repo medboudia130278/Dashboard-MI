@@ -2665,11 +2665,11 @@
         const projectPhaseProjects = buildCombinedProjectPhaseProjects();
         const costCenterProjects = buildFallbackCostCenterProjects();
         const pioDefinitionProjects = buildFallbackPioDefinitionProjects();
-        const materialCatalog = ["Tools", "Consumables", "PPE", "Vehicles", "Spare Parts"];
+        const materialCatalog = ["Tools", "Consumables", "PPE", "Vehicles", "Spare Parts", "Preventive spares", "Corrective spares", "Repair"];
         const subcontractingCatalog = ["Training", "Technical_Support"];
         const demobilizationMaterialCatalog = ["Preventive spares", "Corrective spares", "Vehicles"];
         const demobilizationSubcontractingCatalog = ["Preventive_Subcontract", "Corrective_Subcontract", "Technical_Support", "Training", "Obsolescence"];
-        const recurrentMaterialCatalog = ["Tools", "Consumables", "PPE", "Vehicles", "Preventive spares", "Corrective spares"];
+        const recurrentMaterialCatalog = ["Tools", "Consumables", "PPE", "Vehicles", "Preventive spares", "Corrective spares", "Repair"];
         const recurrentSubcontractingCatalog = ["Corrective_Subcontract", "Preventive_Subcontract", "Technical_Support", "Training", "Obsolescence"];
         const projectPhaseMap = buildProjectLookupMap(projectPhaseProjects);
         const costCenterMap = buildProjectLookupMap(costCenterProjects);
@@ -5766,7 +5766,7 @@
           if (periodType === "mob") {
             if (!phaseHasWarranty) return false;
             if (description === "Preventive spares" || description === "Corrective spares") {
-              return selectedMobTypes.indexOf("Spare Parts") >= 0;
+              return selectedMobTypes.indexOf(description) >= 0 || selectedMobTypes.indexOf("Spare Parts") >= 0;
             }
             return selectedMobTypes.indexOf(description) >= 0;
           }
