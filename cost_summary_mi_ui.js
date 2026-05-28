@@ -1862,6 +1862,7 @@
           if (projectCurrency) {
             project.currencySet.add(projectCurrency);
           }
+          project.currencySet.add("EUR");
           const rows = Array.from(project.currencySet || []).sort(function (left, right) {
             return String(left).localeCompare(String(right));
           }).map(function (currency) {
@@ -6330,6 +6331,7 @@
         "Long_Description",
         "Quantity",
         "Unit",
+        "External Purchase – Variable",
         "Shift",
         "Cat 1 (Hours or Months)",
         "Cost Centre",
@@ -6711,6 +6713,7 @@
               "Long_Description": [wbsRow.subsystem, wbsRow.position, ccRow.timePeriod, wbsRow.period].join("_"),
               "Quantity": quantity,
               "Unit": "FTE",
+              "External Purchase – Variable": "",
               "Shift": ccRow.timePeriod,
               "Cat 1 (Hours or Months)": resolveSubsystemSummaryMonthlyHours(project, ccRow),
               "Cost Centre": ccRow.costCenter || "",
@@ -6768,6 +6771,7 @@
                 "Long_Description": ["Infra_Management", position, ccRow.timePeriod, period.label].join("_"),
                 "Quantity": quantity,
                 "Unit": "FTE",
+                "External Purchase – Variable": "",
                 "Shift": ccRow.timePeriod,
                 "Cat 1 (Hours or Months)": resolveSubsystemSummaryMonthlyHours(project, ccRow),
                 "Cost Centre": ccRow.costCenter || "",
@@ -6803,11 +6807,427 @@
         return rowsBySheetKey;
       }
 
+      function countInclusiveYearsFractional(startDate, endDate) {
+        return Math.round((countInclusiveMonthsFractional(startDate, endDate) / 12) * 100) / 100;
+      }
+
+      function normalizeSubsystemSummaryMaterialDescription(value) {
+        const normalized = normalizeWbsText(value);
+        if (normalized === "preventive spares" || normalized === "preventive spare") return "Preventive spares";
+        if (normalized === "corrective spares" || normalized === "corrective spare") return "Corrective spares";
+        if (normalized === "repair" || normalized === "repairs") return "Repair";
+        if (normalized === "tools" || normalized === "tool") return "Tools";
+        if (normalized === "consumables" || normalized === "consumable") return "Consumables";
+        if (normalized === "ppe") return "PPE";
+        if (normalized === "vehicles" || normalized === "vehicle") return "Vehicles";
+        return "";
+      }
+
+      function getSubsystemSummaryProjectCaratUnit(project) {
+        const rows = Array.isArray(project.subsystemSummaryPio && project.subsystemSummaryPio.rows) ? project.subsystemSummaryPio.rows : [];
+        const projectNameKey = normalizeWbsText(project.projectName);
+        const match = rows.find(function (row) {
+          return normalizeWbsText(row.origin) === projectNameKey;
+        }) || rows.find(function (row) {
+          return normalizeWbsText(row.source) === "onshore";
+        }) || rows[0] || null;
+        return match ? (match.caratUnit || "") : "";
+      }
+
+      function getSubsystemSummaryCustomDutyPercent(project, sheetKey, sourceSubsystems) {
+        const duties = Object.assign({}, project.subsystemSummaryPio && project.subsystemSummaryPio.customDutiesBySubsystem || {});
+        const candidates = [sheetKey].concat(sourceSubsystems || []);
+        for (let index = 0; index < candidates.length; index += 1) {
+          const directValue = toNumber(duties[candidates[index]]);
+          if (directValue !== null) return directValue;
+          const target = normalizeWbsText(candidates[index]);
+          const matchingKey = Object.keys(duties).find(function (key) {
+            return normalizeWbsText(key) === target;
+          });
+          if (matchingKey) {
+            const value = toNumber(duties[matchingKey]);
+            if (value !== null) return value;
+          }
+        }
+        return 0;
+      }
+
+      function getSubsystemSummaryEurToCurrencyRate(project, currency) {
+        const code = String(currency || "").trim().toUpperCase();
+        if (!code || code === "EUR") return 1;
+        function getSharedLiveEurToCurrencyRate(targetCurrency) {
+          const target = String(targetCurrency || "").trim().toUpperCase();
+          if (!target || target === "EUR") return 1;
+          const sharedSettings = safeReadJson(sharedSettingsKey, {}) || {};
+          const baseCurrency = String(sharedSettings.exchangeBase || "USD").trim().toUpperCase();
+          const liveRates = sharedSettings.liveRates || {};
+          function baseRate(sourceCurrency) {
+            const source = String(sourceCurrency || "").trim().toUpperCase();
+            if (!source) return null;
+            if (source === baseCurrency) return 1;
+            const rate = Number(liveRates[source]);
+            return Number.isFinite(rate) && rate > 0 ? rate : null;
+          }
+          const eurBaseRate = baseRate("EUR");
+          const targetBaseRate = baseRate(target);
+          if (eurBaseRate === null || targetBaseRate === null) return null;
+          return targetBaseRate / eurBaseRate;
+        }
+        const currencyProjects = buildFallbackCurrencyExchangeProjects();
+        const currencyProject = findProjectByLookupKeys(buildProjectLookupMap(currencyProjects), getProjectLookupKeys(project))
+          || currencyProjects.find(function (candidate) {
+            return normalizeWorkspaceKey(candidate.projectKey) === normalizeWorkspaceKey(project.projectKey)
+              || normalizeWorkspaceKey(candidate.projectName) === normalizeWorkspaceKey(project.projectName);
+          })
+          || null;
+        function findConversionRow(sourceCurrency) {
+          const source = String(sourceCurrency || "").trim().toUpperCase();
+          if (!source || !currencyProject) return null;
+          return (currencyProject.rows || []).find(function (entry) {
+            return String(entry.currency || "").trim().toUpperCase() === source;
+          }) || null;
+        }
+        function rateToConversionTarget(sourceCurrency) {
+          const source = String(sourceCurrency || "").trim().toUpperCase();
+          if (!source || !currencyProject) return null;
+          if (source === String(currencyProject.targetCurrency || "").trim().toUpperCase()) return 1;
+          const row = findConversionRow(source);
+          const rate = row ? toNumber(row.effectiveRate) : null;
+          return rate !== null && rate > 0 ? rate : null;
+        }
+        const eurToTarget = rateToConversionTarget("EUR");
+        const currencyToTarget = rateToConversionTarget(code);
+        if (eurToTarget !== null && currencyToTarget !== null && currencyToTarget > 0) {
+          return eurToTarget / currencyToTarget;
+        }
+        const sharedLiveRate = getSharedLiveEurToCurrencyRate(code);
+        if (sharedLiveRate !== null && sharedLiveRate > 0) return sharedLiveRate;
+        const option = buildTcCurrencyOptions(project.projectKey).find(function (entry) {
+          return String(entry.code || "").toUpperCase() === code;
+        });
+        const fallbackRate = option ? toNumber(option.rate) : null;
+        return fallbackRate !== null && fallbackRate > 0 ? fallbackRate : 1;
+      }
+
+      function convertSubsystemSummaryEurValue(project, value, currency) {
+        const amount = toNumber(value) || 0;
+        return Math.round(amount * getSubsystemSummaryEurToCurrencyRate(project, currency) * 100) / 100;
+      }
+
+      function resolveSubsystemSummaryStoredValue(data, phaseKey, subsystem, periodType, colKey) {
+        const directKey = phaseKey + "|" + subsystem + "|" + periodType + "|" + colKey;
+        if (Object.prototype.hasOwnProperty.call(data, directKey)) return toNumber(data[directKey]) || 0;
+        const targetPhaseKey = normalizeWbsText(phaseKey);
+        const targetSubsystemKey = normalizeWbsText(subsystem);
+        const matchKey = Object.keys(data || {}).find(function (key) {
+          const parts = String(key || "").split("|");
+          return parts.length === 4
+            && normalizeWbsText(parts[0]) === targetPhaseKey
+            && normalizeWbsText(parts[1]) === targetSubsystemKey
+            && parts[2] === periodType
+            && parts[3] === colKey;
+        });
+        return matchKey ? (toNumber(data[matchKey]) || 0) : 0;
+      }
+
+      function resolveSubsystemSummaryMaterialRate(project, phase, sourceSubsystems, periodType) {
+        if (!phase || !periodType) return 0;
+        const overrides = readPersistedFallbackProjectState(readWhiteCollarFallbackState(), getProjectLookupKeys(project));
+        const values = (sourceSubsystems || []).map(function (subsystem) {
+          const key = phase.key + "|" + subsystem + "|" + periodType + "|materialRate";
+          if (Object.prototype.hasOwnProperty.call(overrides, key)) return toNumber(overrides[key]) || 0;
+          return periodType === "rec" ? 100 : 0;
+        });
+        return values.length ? Math.max.apply(null, values) : 0;
+      }
+
+      function collectSubsystemSummaryGuideMaterialRows(project) {
+        const guide = project.subsystemSummaryGuidePlanning || {};
+        const rows = [];
+        function addRows(list, customList, periodType, periodLabel) {
+          (Array.isArray(list) ? list : []).forEach(function (row) {
+            rows.push(Object.assign({}, row, {
+              materialType: row.materialType,
+              periodType: periodType,
+              periodLabel: periodLabel,
+              isCustom: false,
+            }));
+          });
+          (Array.isArray(customList) ? customList : []).forEach(function (row) {
+            rows.push(Object.assign({}, row, {
+              materialType: row.materialType,
+              periodType: periodType,
+              periodLabel: periodLabel,
+              isCustom: true,
+            }));
+          });
+        }
+        addRows(guide.generatedMaterialRows, guide.customMaterialRows, "mob", project.mobilisationPhaseCode || "MOB");
+        addRows(guide.recurrentMaterialRows, guide.customRecurrentMaterialRows, "rec", project.recurrentCode || "REC");
+        addRows(guide.generatedDemobilizationMaterialRows, guide.customDemobilizationMaterialRows, "dem", project.demobilisationCode || "DEM");
+        return rows;
+      }
+
+      function resolveSubsystemSummaryMaterialPlanning(project, guideRow, phase, description) {
+        const periodType = guideRow.periodType;
+        if (periodType === "mob") {
+          return {
+            planningGuide: guideRow.guidePlanningCode || "",
+            occurrence: 1,
+            allowed: true,
+          };
+        }
+        if (periodType === "rec") {
+          return {
+            planningGuide: guideRow.guidePlanningCode || "",
+            occurrence: countInclusiveYearsFractional(guideRow.startDate || phase.startDate, guideRow.endDate || phase.endDate),
+            allowed: true,
+          };
+        }
+        if (periodType === "dem") {
+          const months = toNumber(((project.subsystemSummaryGuidePlanning || {}).demobilizationMaterialMonthsByType || {})[description]) || 0;
+          return {
+            planningGuide: guideRow.guidePlanningCode || "",
+            occurrence: months,
+            allowed: months > 0,
+          };
+        }
+        return { planningGuide: "", occurrence: 0, allowed: false };
+      }
+
+      function resolveSubsystemSummaryMaterialMetadata(project, description, phase, periodLabel, sheetSourceSubsystems) {
+        const rows = description === "Repair"
+          ? buildGeneratedWbsOverhaulRenewalRows(project)
+          : buildGeneratedWbsMaterialRows(project);
+        const candidates = Array.isArray(sheetSourceSubsystems) ? sheetSourceSubsystems : [];
+        const match = rows.find(function (row) {
+          if (normalizeWbsText(row.description) !== normalizeWbsText(description)) return false;
+          const phaseMatches = normalizeWbsText(row.phase) === normalizeWbsText(phase.label || phase.key)
+            || normalizeWbsText(row.phase) === normalizeWbsText(phase.key);
+          if (!phaseMatches) return false;
+          if (description !== "Repair" && normalizeWbsText(row.period) !== normalizeWbsText(periodLabel)) return false;
+          return candidates.some(function (subsystem) {
+            return normalizeWbsText(row.subsystem) === normalizeWbsText(subsystem);
+          });
+        }) || null;
+        if (match) return match;
+
+        const importedRows = description === "Repair"
+          ? (project.wbsOverhaulRenewalImportedRows || [])
+          : (project.wbsMaterialImportedRows || []);
+        const resolver = createWbsSubsystemResolver(candidates);
+        const imported = importedRows.find(function (row) {
+          const rowDescription = description === "Repair"
+            ? normalizeWbsOverhaulRenewalDescription(row.description)
+            : normalizeWbsMaterialDescription(row.description);
+          if (rowDescription !== description) return false;
+          return resolver(row.subsystem).length > 0;
+        }) || null;
+        return imported || {};
+      }
+
+      function getSubsystemSummarySynthesisMaterialType(row) {
+        return normalizeWbsText(getWbsRowValueByCandidates(row, ["Material Type", "material_type", "materialType", "MaterialType"]));
+      }
+
+      function getSubsystemSummarySynthesisType(row) {
+        return normalizeWbsText(getWbsRowValueByCandidates(row, ["Type", "type", "activity_type", "renewal_type"]));
+      }
+
+      function getSubsystemSummarySynthesisSubsystem(row) {
+        return String(getWbsRowValueByCandidates(row, ["Subsystem", "subsystem", "Sub System", "system"]) || "").trim();
+      }
+
+      function getSubsystemSummarySynthesisCurrency(row) {
+        return String(getWbsRowValueByCandidates(row, ["Currency", "currency"]) || "").trim().toUpperCase();
+      }
+
+      function getSubsystemSummarySynthesisYearlyTotal(row) {
+        return toNumber(getWbsRowValueByCandidates(row, [
+          "Yearly Total Cost",
+          "yearly_total_cost",
+          "Yearly Total",
+          "yearly_total",
+          "Total Yearly Cost",
+        ])) || 0;
+      }
+
+      function getSubsystemSummarySynthesisYearlyReparable(row) {
+        return toNumber(getWbsRowValueByCandidates(row, [
+          "Yearly Reparable Cost",
+          "yearly_reparable_cost",
+          "reparable_cost",
+          "repairable_cost",
+        ])) || 0;
+      }
+
+      function collectSubsystemSummarySynthesisExternalValues(project, description, sourceSubsystems, periodType) {
+        const targetMaterialType = description === "Preventive spares" ? "preventive spares" : "corrective spares";
+        const targetSynthesisType = description === "Preventive spares" ? "preventive" : "corrective";
+        const subsystemKeys = new Set();
+        (sourceSubsystems || []).forEach(function (subsystem) {
+          const key = normalizeWbsText(subsystem);
+          if (!key) return;
+          subsystemKeys.add(key);
+          if (key === "3rd rail" || key === "third rail" || key === "cat") {
+            subsystemKeys.add("feeding system");
+          }
+        });
+        const byCurrency = {};
+        (project.wbsSynthesisRows || []).forEach(function (row) {
+          if (!subsystemKeys.has(normalizeWbsText(getSubsystemSummarySynthesisSubsystem(row)))) return;
+          const materialType = getSubsystemSummarySynthesisMaterialType(row);
+          const synthesisType = getSubsystemSummarySynthesisType(row);
+          const materialMatches = description === "Repair"
+            ? (materialType.indexOf("corrective spares") !== -1 || synthesisType.indexOf("corrective") !== -1)
+            : (materialType.indexOf(targetMaterialType) !== -1 || (!materialType && synthesisType.indexOf(targetSynthesisType) !== -1));
+          if (!materialMatches) return;
+          const currency = getSubsystemSummarySynthesisCurrency(row);
+          if (!currency) return;
+          const rawValue = description === "Repair"
+            ? getSubsystemSummarySynthesisYearlyReparable(row)
+            : getSubsystemSummarySynthesisYearlyTotal(row);
+          if (!(rawValue > 0)) return;
+          byCurrency[currency] = (byCurrency[currency] || 0) + (periodType === "dem" ? rawValue / 12 : rawValue);
+        });
+        return Object.keys(byCurrency).sort().map(function (currency) {
+          return { currency: currency, externalPurchase: Math.round(byCurrency[currency] * 100) / 100 };
+        });
+      }
+
+      function collectSubsystemSummaryOperationalExternalValues(project, description, sourceSubsystems, phase, periodType, projectCurrency) {
+        const toolsConsumables = Object.assign({}, project.wbsToolsConsumablesProject || {});
+        const vehicles = Object.assign({}, project.wbsVehiclesProject || {});
+        let eurValue = 0;
+        (sourceSubsystems || []).forEach(function (subsystem) {
+          if (description === "Tools") {
+            eurValue += ["ind_tools", "coll_tools", "spec_tools"].reduce(function (sum, colKey) {
+              return sum + resolveSubsystemSummaryStoredValue(toolsConsumables, phase.key, subsystem, periodType, colKey);
+            }, 0);
+          } else if (description === "Consumables") {
+            eurValue += resolveSubsystemSummaryStoredValue(toolsConsumables, phase.key, subsystem, periodType, "consumables");
+          } else if (description === "PPE") {
+            eurValue += resolveSubsystemSummaryStoredValue(toolsConsumables, phase.key, subsystem, periodType, "ppe");
+          } else if (description === "Vehicles") {
+            if (periodType === "mob") {
+              eurValue += resolveSubsystemSummaryStoredValue(vehicles, phase.key, subsystem, "mob", "capex");
+            } else if (periodType === "rec") {
+              eurValue += resolveSubsystemSummaryStoredValue(vehicles, phase.key, subsystem, "rec", "fuel")
+                + resolveSubsystemSummaryStoredValue(vehicles, phase.key, subsystem, "rec", "opex");
+            } else if (periodType === "dem") {
+              eurValue += resolveSubsystemSummaryStoredValue(vehicles, phase.key, subsystem, "dem", "capex");
+            }
+          }
+        });
+        if (!(eurValue > 0)) return [];
+        return [{
+          currency: projectCurrency,
+          externalPurchase: convertSubsystemSummaryEurValue(project, eurValue, projectCurrency),
+        }];
+      }
+
+      function buildSubsystemSummaryMaterialsRows(project, sheetDefs) {
+        const costCenterProject = project.subsystemSummaryCostCenters || {};
+        const firmingProject = project.subsystemSummaryFirming || {};
+        const pioProject = project.subsystemSummaryPio || {};
+        const projectCurrency = String(costCenterProject.projectCurrency || "").trim().toUpperCase();
+        const projectCaratUnit = getSubsystemSummaryProjectCaratUnit(project);
+        const guideRows = collectSubsystemSummaryGuideMaterialRows(project);
+        const rowsBySheetKey = {};
+        const seen = new Set();
+
+        guideRows.forEach(function (guideRow) {
+          const description = normalizeSubsystemSummaryMaterialDescription(guideRow.materialType);
+          if (!description) return;
+          const phase = findSubsystemSummaryPhase(project, guideRow.phaseLabel);
+          if (!phase) return;
+          const planning = resolveSubsystemSummaryMaterialPlanning(project, guideRow, phase, description);
+          if (!planning.allowed) return;
+
+          (sheetDefs || []).forEach(function (sheet) {
+            if (!sheet || sheet.key === "Infra_Management" || !sheet.sourceSubsystems.length) return;
+            const materialRate = resolveSubsystemSummaryMaterialRate(project, phase, sheet.sourceSubsystems, guideRow.periodType);
+            let valueEntries = [];
+            let quantity = 1;
+            if (description === "Preventive spares" || description === "Corrective spares" || description === "Repair") {
+              quantity = Math.round((materialRate / 100) * 100) / 100;
+              if (!(quantity > 0)) return;
+              valueEntries = collectSubsystemSummarySynthesisExternalValues(project, description, sheet.sourceSubsystems, guideRow.periodType);
+            } else {
+              valueEntries = collectSubsystemSummaryOperationalExternalValues(project, description, sheet.sourceSubsystems, phase, guideRow.periodType, projectCurrency);
+            }
+            valueEntries.filter(function (entry) {
+              return (toNumber(entry.externalPurchase) || 0) > 0;
+            }).forEach(function (entry) {
+              const currency = String(entry.currency || projectCurrency || "").trim().toUpperCase();
+              const externalPurchase = Math.round((toNumber(entry.externalPurchase) || 0) * 100) / 100;
+              const rowQuantity = (description === "Preventive spares" || description === "Corrective spares" || description === "Repair") ? quantity : 1;
+              if (!(rowQuantity > 0) || !(externalPurchase > 0)) return;
+              const metadata = resolveSubsystemSummaryMaterialMetadata(project, description, phase, guideRow.periodLabel, sheet.sourceSubsystems);
+              const onOffshore = currency && projectCurrency
+                ? (currency === projectCurrency ? "Onshore" : "Offshore")
+                : "";
+              const freightPercent = onOffshore === "Onshore"
+                ? (toNumber(pioProject.onshoreFreightPercent) || 0)
+                : (toNumber(pioProject.offshoreFreightPercent) || 0);
+              const customDutyPercent = getSubsystemSummaryCustomDutyPercent(project, sheet.key, sheet.sourceSubsystems);
+              const freightValue = Math.round((externalPurchase * freightPercent / 100) * 100) / 100;
+              const dutyValue = onOffshore === "Offshore"
+                ? Math.round((externalPurchase * customDutyPercent / 100) * 100) / 100
+                : "";
+              const longDescription = (description === "Preventive spares" || description === "Corrective spares")
+                ? [sheet.label, description, currency, guideRow.periodLabel].join("_")
+                : [sheet.label, description, guideRow.periodLabel].join("_");
+              const outputRow = {
+                "Phase": phase.label || phase.key,
+                "Period": guideRow.periodLabel,
+                "Type": "Materials",
+                "Description": description,
+                "Long_Description": longDescription,
+                "Quantity": rowQuantity,
+                "Unit": "",
+                "External Purchase – Variable": externalPurchase,
+                "Shift": "",
+                "Cat 1 (Hours or Months)": "",
+                "Cost Centre": "",
+                "Currency": currency,
+                "Planning Guide": planning.planningGuide || "",
+                "Nb Tot. of Occurency": planning.occurrence || "",
+                "Costs Type": metadata.costsType || "",
+                "Carat Unit": projectCaratUnit,
+                "Unit Role": resolveSubsystemSummaryUnitRole(project, projectCaratUnit, null),
+                "On/Off Shore": onOffshore,
+                "PBS/IBS": metadata.pbsIbs || "",
+                "ABS": metadata.abs || "",
+                "Associated WP": metadata.associatedWp || "",
+                "Tasks": metadata.tasks || "",
+                "Delegated person": "INFRA",
+                "Firming rule": currency ? ((firmingProject.firmingTexts || {})[currency] || "") : "",
+                "Freight per Unit": freightValue,
+                "Insurances-Rates & Taxes": dutyValue,
+                "Price List Code 1": guideRow.periodLabel,
+                "Price List Code 2": "Spares and Material",
+                "Price List Code 3": sheet.label,
+              };
+              const uniqueKey = SUBSYSTEM_SUMMARY_HEADERS.map(function (header) {
+                return normalizeWbsText(outputRow[header]);
+              }).join("|");
+              if (seen.has(uniqueKey)) return;
+              seen.add(uniqueKey);
+              if (!rowsBySheetKey[sheet.key]) rowsBySheetKey[sheet.key] = [];
+              rowsBySheetKey[sheet.key].push(outputRow);
+            });
+          });
+        });
+        return rowsBySheetKey;
+      }
+
       function buildSubsystemSummaryVirtualFiles(project) {
         const sheetDefs = getSubsystemSummarySheetDefinitions(project);
         const workloadRowsBySheet = buildSubsystemSummaryWorkloadRows(project);
+        const materialRowsBySheet = buildSubsystemSummaryMaterialsRows(project, sheetDefs);
         const allSheets = sheetDefs.map(function (sheet) {
-          return Object.assign({}, sheet, { rows: workloadRowsBySheet[sheet.key] || [] });
+          return Object.assign({}, sheet, { rows: (workloadRowsBySheet[sheet.key] || []).concat(materialRowsBySheet[sheet.key] || []) });
         });
         if (!allSheets.some(function (sheet) { return sheet.key === "Infra_Management"; })) {
           allSheets.push({
@@ -6865,7 +7285,7 @@
         }).join("");
         const sheet = file.sheets.find(function (entry) { return entry.sheetName === currentSheetName; }) || file.sheets[0] || null;
         previewTitle.textContent = file.name;
-        previewMeta.textContent = sheet ? (sheet.sheetName + " | " + sheet.rows.length + " workload row(s)") : "No sheet available.";
+        previewMeta.textContent = sheet ? (sheet.sheetName + " | " + sheet.rows.length + " row(s)") : "No sheet available.";
         previewHead.innerHTML = '<tr class="border-b border-slate-200">' + SUBSYSTEM_SUMMARY_HEADERS.map(function (header) {
           return '<th class="text-left py-3 px-3 whitespace-nowrap">' + escapeHtml(header) + '</th>';
         }).join("") + '</tr>';
@@ -6875,7 +7295,7 @@
                 return '<td class="py-2 px-3 whitespace-nowrap">' + escapeHtml(row[header] ?? "") + '</td>';
               }).join("") + '</tr>';
             }).join("")
-          : '<tr><td colspan="' + SUBSYSTEM_SUMMARY_HEADERS.length + '" class="py-8 text-center text-sm text-slate-500">No Workload rows yet for this sheet. Headers will still be exported.</td></tr>';
+          : '<tr><td colspan="' + SUBSYSTEM_SUMMARY_HEADERS.length + '" class="py-8 text-center text-sm text-slate-500">No rows yet for this sheet. Headers will still be exported.</td></tr>';
       }
 
       function exportSubsystemSummaryFile(file) {
