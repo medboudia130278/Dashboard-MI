@@ -6919,11 +6919,25 @@
         if (Object.prototype.hasOwnProperty.call(data, directKey)) return toNumber(data[directKey]) || 0;
         const targetPhaseKey = normalizeWbsText(phaseKey);
         const targetSubsystemKey = normalizeWbsText(subsystem);
+        function matchesStoredSubsystem(value) {
+          const storedKey = normalizeWbsText(value);
+          if (storedKey === targetSubsystemKey) return true;
+          if (targetSubsystemKey === "shared") {
+            return storedKey === "shared" || storedKey.indexOf("shared") !== -1 || storedKey.indexOf("depot pool") !== -1;
+          }
+          if (targetSubsystemKey === "management") {
+            return storedKey === "management" || storedKey.indexOf("management") !== -1;
+          }
+          if (targetSubsystemKey === "project mgmt") {
+            return storedKey === "project mgmt" || storedKey.indexOf("project management") !== -1 || storedKey.indexOf("project mgmt") !== -1;
+          }
+          return false;
+        }
         const matchKey = Object.keys(data || {}).find(function (key) {
           const parts = String(key || "").split("|");
           return parts.length === 4
             && normalizeWbsText(parts[0]) === targetPhaseKey
-            && normalizeWbsText(parts[1]) === targetSubsystemKey
+            && matchesStoredSubsystem(parts[1])
             && parts[2] === periodType
             && parts[3] === colKey;
         });
@@ -7006,6 +7020,7 @@
             || normalizeWbsText(row.phase) === normalizeWbsText(phase.key);
           if (!phaseMatches) return false;
           if (description !== "Repair" && normalizeWbsText(row.period) !== normalizeWbsText(periodLabel)) return false;
+          if (!candidates.length) return !String(row.subsystem || "").trim();
           return candidates.some(function (subsystem) {
             return normalizeWbsText(row.subsystem) === normalizeWbsText(subsystem);
           });
@@ -7021,6 +7036,7 @@
             ? normalizeWbsOverhaulRenewalDescription(row.description)
             : normalizeWbsMaterialDescription(row.description);
           if (rowDescription !== description) return false;
+          if (!candidates.length) return !String(row.subsystem || "").trim();
           return resolver(row.subsystem).length > 0;
         }) || null;
         return imported || {};
@@ -7126,6 +7142,42 @@
         }];
       }
 
+      function collectSubsystemSummaryInfraMaterialExternalValues(project, description, phase, periodType, projectCurrency) {
+        if (["Tools", "Consumables", "PPE", "Vehicles"].indexOf(description) === -1) return [];
+        const toolsConsumables = Object.assign({}, project.wbsToolsConsumablesProject || {});
+        const vehicles = Object.assign({}, project.wbsVehiclesProject || {});
+        let eurValue = 0;
+        if (description === "Tools") {
+          ["__shared__", "__management__"].forEach(function (subsystem) {
+            eurValue += ["ind_tools", "coll_tools", "spec_tools"].reduce(function (sum, colKey) {
+              return sum + resolveSubsystemSummaryStoredValue(toolsConsumables, phase.key, subsystem, periodType, colKey);
+            }, 0);
+          });
+        } else if (description === "Consumables") {
+          ["__shared__", "__management__"].forEach(function (subsystem) {
+            eurValue += resolveSubsystemSummaryStoredValue(toolsConsumables, phase.key, subsystem, periodType, "consumables");
+          });
+        } else if (description === "PPE") {
+          ["__shared__", "__management__"].forEach(function (subsystem) {
+            eurValue += resolveSubsystemSummaryStoredValue(toolsConsumables, phase.key, subsystem, periodType, "ppe");
+          });
+        } else if (description === "Vehicles") {
+          if (periodType === "mob") {
+            eurValue += resolveSubsystemSummaryStoredValue(vehicles, phase.key, "__project_mgmt__", "mob", "capex");
+          } else if (periodType === "rec") {
+            eurValue += resolveSubsystemSummaryStoredValue(vehicles, phase.key, "__project_mgmt__", "rec", "fuel")
+              + resolveSubsystemSummaryStoredValue(vehicles, phase.key, "__project_mgmt__", "rec", "opex");
+          } else if (periodType === "dem") {
+            eurValue += resolveSubsystemSummaryStoredValue(vehicles, phase.key, "__project_mgmt__", "dem", "capex");
+          }
+        }
+        if (!(eurValue > 0)) return [];
+        return [{
+          currency: projectCurrency,
+          externalPurchase: convertSubsystemSummaryEurValue(project, eurValue, projectCurrency),
+        }];
+      }
+
       function buildSubsystemSummaryMaterialsRows(project, sheetDefs) {
         const costCenterProject = project.subsystemSummaryCostCenters || {};
         const firmingProject = project.subsystemSummaryFirming || {};
@@ -7217,6 +7269,61 @@
               if (!rowsBySheetKey[sheet.key]) rowsBySheetKey[sheet.key] = [];
               rowsBySheetKey[sheet.key].push(outputRow);
             });
+          });
+
+          if (["Tools", "Consumables", "PPE", "Vehicles"].indexOf(description) === -1) return;
+          collectSubsystemSummaryInfraMaterialExternalValues(project, description, phase, guideRow.periodType, projectCurrency).filter(function (entry) {
+            return (toNumber(entry.externalPurchase) || 0) > 0;
+          }).forEach(function (entry) {
+            const currency = String(entry.currency || projectCurrency || "").trim().toUpperCase();
+            const externalPurchase = Math.round((toNumber(entry.externalPurchase) || 0) * 100) / 100;
+            if (!(externalPurchase > 0)) return;
+            const metadata = resolveSubsystemSummaryMaterialMetadata(project, description, phase, guideRow.periodLabel, []);
+            const onOffshore = currency && projectCurrency
+              ? (currency === projectCurrency ? "Onshore" : "Offshore")
+              : "";
+            const freightPercent = onOffshore === "Onshore"
+              ? (toNumber(pioProject.onshoreFreightPercent) || 0)
+              : (toNumber(pioProject.offshoreFreightPercent) || 0);
+            const freightValue = Math.round((externalPurchase * freightPercent / 100) * 100) / 100;
+            const outputRow = {
+              "Phase": phase.label || phase.key,
+              "Period": guideRow.periodLabel,
+              "Type": "Materials",
+              "Description": description,
+              "Long_Description": ["Infra_Management", description, guideRow.periodLabel].join("_"),
+              "Quantity": 1,
+              "Unit": "",
+              "External Purchase – Variable": externalPurchase,
+              "Shift": "",
+              "Cat 1 (Hours or Months)": "",
+              "Cost Centre": "",
+              "Currency": currency,
+              "Planning Guide": planning.planningGuide || "",
+              "Nb Tot. of Occurency": planning.occurrence || "",
+              "Costs Type": metadata.costsType || "",
+              "Carat Unit": projectCaratUnit,
+              "Unit Role": resolveSubsystemSummaryUnitRole(project, projectCaratUnit, null),
+              "On/Off Shore": onOffshore,
+              "PBS/IBS": metadata.pbsIbs || "",
+              "ABS": metadata.abs || "",
+              "Associated WP": metadata.associatedWp || "",
+              "Tasks": metadata.tasks || "",
+              "Delegated person": "INFRA",
+              "Firming rule": currency ? ((firmingProject.firmingTexts || {})[currency] || "") : "",
+              "Freight per Unit": freightValue,
+              "Insurances-Rates & Taxes": "",
+              "Price List Code 1": guideRow.periodLabel,
+              "Price List Code 2": "Spares and Material",
+              "Price List Code 3": "Infra_Management",
+            };
+            const uniqueKey = SUBSYSTEM_SUMMARY_HEADERS.map(function (header) {
+              return normalizeWbsText(outputRow[header]);
+            }).join("|");
+            if (seen.has(uniqueKey)) return;
+            seen.add(uniqueKey);
+            if (!rowsBySheetKey.Infra_Management) rowsBySheetKey.Infra_Management = [];
+            rowsBySheetKey.Infra_Management.push(outputRow);
           });
         });
         return rowsBySheetKey;

@@ -336,10 +336,14 @@
               Export Data
             </div>
             <h2 class="mt-3 text-2xl font-black tracking-tight">Subsystem Summary Workspace</h2>
-            <p class="mt-2 text-sm text-slate-500">Preview and export virtual Excel files per project. Workload rows are generated first; Materials, Subcontracting, and Overhaul &amp; Renewals will be added next.</p>
+            <p class="mt-2 text-sm text-slate-500">Preview and export virtual Excel files per project. Workload and Materials rows are generated today; other cost types will be added progressively.</p>
           </div>
           <div class="flex items-center gap-3">
             <div id="subsystemSummaryWorkspaceStatus" class="text-xs font-semibold text-slate-500">No project selected.</div>
+            <button type="button" onclick="document.getElementById('subsystemSummaryHelpModal').classList.remove('hidden')" class="inline-flex items-center gap-2 min-w-[140px] justify-center whitespace-nowrap px-4 py-2 rounded-xl bg-cyan-50 border border-cyan-200 text-cyan-700 text-sm font-semibold hover:bg-cyan-100 transition-all">
+              <span class="material-symbols-outlined text-[18px]">help</span>
+              How it works
+            </button>
             <button id="refreshSubsystemSummaryWorkspaceBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold hover:bg-slate-100 transition-all">
               <span class="material-symbols-outlined text-[18px]">refresh</span>
               Refresh
@@ -2125,6 +2129,141 @@
     </main>
   </div>
 
+  <!-- Subsystem Summary "How it works" modal -->
+  <div id="subsystemSummaryHelpModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm">
+    <div class="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl border border-slate-200 p-8">
+      <button type="button" onclick="document.getElementById('subsystemSummaryHelpModal').classList.add('hidden')" class="absolute top-5 right-5 inline-flex items-center justify-center size-9 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 transition-all">
+        <span class="material-symbols-outlined text-[18px]">close</span>
+      </button>
+
+      <div class="flex items-center gap-3 mb-6">
+        <span class="material-symbols-outlined text-[24px] text-cyan-600">help</span>
+        <h2 class="text-xl font-black tracking-tight">How Subsystem Summary works</h2>
+      </div>
+
+      <div class="space-y-5 text-sm text-slate-700 leading-6">
+        <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+          <p class="font-bold text-slate-800 mb-1">Export structure</p>
+          <p>Subsystem Summary builds virtual Excel files from the current project configuration. The <strong>Global project export</strong> creates one workbook for the selected project with all phases included. The <strong>Phase exports</strong> create one workbook per phase using the same sheet structure, filtered to that phase.</p>
+        </div>
+
+        <div class="grid gap-4 lg:grid-cols-2">
+          <div class="rounded-xl border border-cyan-100 bg-cyan-50 px-4 py-4">
+            <p class="font-bold text-cyan-900 mb-2">Sheets</p>
+            <p class="text-cyan-800">Each workbook contains one sheet per subsystem, named <strong>{Subsystem}_Synthesis</strong>. The project subsystems <strong>3rd_Rail</strong> and <strong>CAT</strong> are grouped into a shared <strong>Feeding_System_Synthesis</strong> sheet. A dedicated <strong>Infra_Management_Synthesis</strong> sheet is also created for management and white-collar workload rows.</p>
+          </div>
+
+          <div class="rounded-xl border border-sky-100 bg-sky-50 px-4 py-4">
+            <p class="font-bold text-sky-900 mb-2">Common output fields</p>
+            <p class="text-sky-800">The export headers are fixed so future types can reuse the same format. The generated rows fill Phase, Period, Type, Description, Quantity, Currency, Planning Guide, Costs Type, PBS/IBS, ABS, Associated WP, Tasks, Firming rule, Price List codes, and other pricing columns when a rule exists.</p>
+          </div>
+        </div>
+
+        <div>
+          <p class="font-bold text-slate-800 mb-2">Workload rows</p>
+          <ul class="space-y-3 pl-1">
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-cyan-100 text-cyan-700 text-[11px] font-bold">1</span>
+              <div>Subsystem workload rows use the generated <strong>WBS Workload</strong> table to know which Position, Subsystem and Period must be exported.</div>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-cyan-100 text-cyan-700 text-[11px] font-bold">2</span>
+              <div>Supervisor, Technician and Worker rows are matched with the <strong>Cost Center Table</strong>. If a position exists for both Day and Night, both shifts are exported.</div>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-cyan-100 text-cyan-700 text-[11px] font-bold">3</span>
+              <div>Quantity comes from Workload Synthesis quantities multiplied by the relevant Optimization coefficient rate for the phase, period and role.</div>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-cyan-100 text-cyan-700 text-[11px] font-bold">4</span>
+              <div>Management workload rows go to <strong>Infra_Management_Synthesis</strong>. They use the remaining Cost Center positions, White Collar quantities, and the Manager or Engineer optimization rates depending on the position name.</div>
+            </li>
+          </ul>
+        </div>
+
+        <div>
+          <p class="font-bold text-slate-800 mb-2">Materials rows</p>
+          <ul class="space-y-3 pl-1">
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-bold">1</span>
+              <div>Materials rows start from the Guide Planning material tables for <strong>MOB</strong>, <strong>REC</strong> and <strong>DEM</strong>. The Material Type becomes the export Description and the guide code becomes Planning Guide.</div>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-bold">2</span>
+              <div>For subsystem sheets, <strong>Preventive spares</strong>, <strong>Corrective spares</strong> and <strong>Repair</strong> use imported Synthesis data. Currency comes from Synthesis when available, and External Purchase uses Yearly Total Cost or Yearly Reparable Cost.</div>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-bold">3</span>
+              <div>For subsystem sheets, <strong>Tools</strong>, <strong>Consumables</strong>, <strong>PPE</strong> and <strong>Vehicles</strong> use their dedicated support-cost workspaces. Stored values are treated as EUR values and converted to the Project Currency through Currency &amp; Exchange Rates.</div>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-bold">4</span>
+              <div><strong>Infra_Management_Synthesis</strong> receives Materials rows only for <strong>Tools</strong>, <strong>Consumables</strong>, <strong>PPE</strong> and <strong>Vehicles</strong>. Preventive spares, Corrective spares and Repair are ignored for this sheet.</div>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-bold">5</span>
+              <div>For Infra Management, <strong>Tools</strong>, <strong>Consumables</strong> and <strong>PPE</strong> aggregate <strong>Shared / Depot Pool</strong> plus <strong>MANAGEMENT</strong>. <strong>Vehicles</strong> uses <strong>Project / Management</strong>.</div>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-bold">6</span>
+              <div><strong>Quantity</strong> is 1 when External Purchase is greater than 0; otherwise the row is ignored. MOB occurrence is 1, REC occurrence is the inclusive number of years, and DEM occurrence comes from Demobilisation Material Types months.</div>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-bold">7</span>
+              <div><strong>Costs Type</strong>, <strong>PBS/IBS</strong>, <strong>ABS</strong>, <strong>Associated WP</strong> and <strong>Tasks</strong> come from the WBS Materials table. For Infra Management, project-level WBS Materials rows without Subsystem are used.</div>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-bold">8</span>
+              <div>Carat Unit and Unit Role come from PIO Definition. Firming rule comes from the Firming Rules table. Freight uses Onshore or Offshore Freight % depending on whether row Currency equals Project Currency. Infra Management keeps Insurances-Rates &amp; Taxes empty.</div>
+            </li>
+          </ul>
+        </div>
+
+        <div class="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-4">
+          <p class="font-bold text-emerald-900 mb-2">Infra Management Materials output</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs border border-emerald-200 rounded-xl overflow-hidden">
+              <thead class="bg-emerald-100 text-emerald-900">
+                <tr>
+                  <th class="px-3 py-2 text-left font-bold">Description</th>
+                  <th class="px-3 py-2 text-left font-bold">Source value</th>
+                  <th class="px-3 py-2 text-left font-bold">Fixed output rules</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-emerald-100 bg-white">
+                <tr>
+                  <td class="px-3 py-2 font-semibold">Tools</td>
+                  <td class="px-3 py-2">Individual tools + Collective tools + Special tools from Shared / Depot Pool and MANAGEMENT.</td>
+                  <td class="px-3 py-2">Currency = Project Currency, Type = Materials, Unit empty, Price List Code 3 = Infra_Management.</td>
+                </tr>
+                <tr class="bg-emerald-50/40">
+                  <td class="px-3 py-2 font-semibold">Consumables</td>
+                  <td class="px-3 py-2">Consumables column from Shared / Depot Pool and MANAGEMENT.</td>
+                  <td class="px-3 py-2">External Purchase is converted from EUR to Project Currency.</td>
+                </tr>
+                <tr>
+                  <td class="px-3 py-2 font-semibold">PPE</td>
+                  <td class="px-3 py-2">PPE column from Shared / Depot Pool and MANAGEMENT.</td>
+                  <td class="px-3 py-2">Long_Description = Infra_Management_{Description}_{Period}.</td>
+                </tr>
+                <tr class="bg-emerald-50/40">
+                  <td class="px-3 py-2 font-semibold">Vehicles</td>
+                  <td class="px-3 py-2">MOB uses Capex, REC uses Fuel + Operating, DEM uses Capex from Project / Management.</td>
+                  <td class="px-3 py-2">Delegated person = INFRA, Price List Code 2 = Spares and Material.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
+          <p class="font-semibold text-amber-900 mb-1">Progressive scope</p>
+          <p class="text-amber-800">At this stage the modal documents the implemented Workload and Materials export logic. Subcontracting and Overhaul &amp; Renewals will be added to this explanation when their export rules are implemented in Subsystem Summary.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- WBS "How it works" modal -->
   <div id="wbsHelpModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm">
     <div class="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl border border-slate-200 p-8">
@@ -2549,7 +2688,7 @@
     </div>
   </aside>
 
-  <script src="cost_summary_mi_ui.js?v=20260528-subsystem-materials-export-v9"></script>
-  <script type="module" src="cost_summary_mi.js?v=20260528-subsystem-materials-export-v9"></script>
+  <script src="cost_summary_mi_ui.js?v=20260529-infra-management-materials-export-v1"></script>
+  <script type="module" src="cost_summary_mi.js?v=20260529-infra-management-materials-export-v1"></script>
 </body>
 </html>
