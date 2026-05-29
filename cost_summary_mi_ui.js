@@ -2667,11 +2667,11 @@
         const costCenterProjects = buildFallbackCostCenterProjects();
         const pioDefinitionProjects = buildFallbackPioDefinitionProjects();
         const materialCatalog = ["Tools", "Consumables", "PPE", "Vehicles", "Spare Parts", "Preventive spares", "Corrective spares", "Repair"];
-        const subcontractingCatalog = ["Training", "Technical_Support"];
+        const subcontractingCatalog = ["Training", "Legal_Training", "Technical_Support"];
         const demobilizationMaterialCatalog = ["Preventive spares", "Corrective spares", "Vehicles"];
-        const demobilizationSubcontractingCatalog = ["Preventive_Subcontract", "Corrective_Subcontract", "Technical_Support", "Training", "Obsolescence"];
+        const demobilizationSubcontractingCatalog = ["Preventive_Subcontract", "Corrective_Subcontract", "Technical_Support", "Training", "Legal_Training", "Obsolescence"];
         const recurrentMaterialCatalog = ["Tools", "Consumables", "PPE", "Vehicles", "Preventive spares", "Corrective spares", "Repair"];
-        const recurrentSubcontractingCatalog = ["Corrective_Subcontract", "Preventive_Subcontract", "Technical_Support", "Training", "Obsolescence"];
+        const recurrentSubcontractingCatalog = ["Corrective_Subcontract", "Preventive_Subcontract", "Technical_Support", "Training", "Legal_Training", "Obsolescence"];
         const projectPhaseMap = buildProjectLookupMap(projectPhaseProjects);
         const costCenterMap = buildProjectLookupMap(costCenterProjects);
         const pioDefinitionMap = buildProjectLookupMap(pioDefinitionProjects);
@@ -5628,6 +5628,7 @@
       function getWbsSubcontractingGuideType(description) {
         if (description === "Technical_Training") return "Training";
         if (description === "Obsolescence_Monitoring" || description === "Obsolescence_Treatment") return "Obsolescence";
+        if (description === "Legal_Training") return "Legal_Training";
         if (description === "Preventive_Subcontract" || description === "Corrective_Subcontract" || description === "Technical_Support") return description;
         return "";
       }
@@ -5905,7 +5906,6 @@
         const demobTypes = Object.assign({}, guideProject.demobilizationSubcontractingMonthsByType || {});
         const subcontractingSubsystems = mergeWbsSubsystems(project.subsystems);
         const resolveWbsSourceSubsystems = createWbsSubsystemResolver(subcontractingSubsystems);
-        const mandatoryTotalsByPhase = getMandatoryTrainingYearlyTotalsByPhase(project);
 
         function sourceRowMatchesPeriod(sourceRow, period) {
           const sourcePeriod = normalizeWbsText(sourceRow.period);
@@ -5913,12 +5913,7 @@
           return sourcePeriod === normalizeWbsText(period.type) || sourcePeriod === normalizeWbsText(period.label);
         }
 
-        function legalTrainingAllowedForPeriod(phase, periodType) {
-          return !!phase && periodType === "rec" && (toNumber(mandatoryTotalsByPhase[phase.key]) || 0) > 0;
-        }
-
         function subcontractingAllowedForPeriod(description, phase, periodType, phaseHasWarranty) {
-          if (description === "Legal_Training") return legalTrainingAllowedForPeriod(phase, periodType);
           const guideType = getWbsSubcontractingGuideType(description);
           if (!guideType) return false;
           if (periodType === "mob") {
@@ -6332,6 +6327,7 @@
         "Quantity",
         "Unit",
         "External Purchase – Variable",
+        "External Services Variable Cost",
         "Shift",
         "Cat 1 (Hours or Months)",
         "Cost Centre",
@@ -6714,6 +6710,7 @@
               "Quantity": quantity,
               "Unit": "FTE",
               "External Purchase – Variable": "",
+              "External Services Variable Cost": "",
               "Shift": ccRow.timePeriod,
               "Cat 1 (Hours or Months)": resolveSubsystemSummaryMonthlyHours(project, ccRow),
               "Cost Centre": ccRow.costCenter || "",
@@ -6772,6 +6769,7 @@
                 "Quantity": quantity,
                 "Unit": "FTE",
                 "External Purchase – Variable": "",
+                "External Services Variable Cost": "",
                 "Shift": ccRow.timePeriod,
                 "Cat 1 (Hours or Months)": resolveSubsystemSummaryMonthlyHours(project, ccRow),
                 "Cost Centre": ccRow.costCenter || "",
@@ -6820,6 +6818,17 @@
         if (normalized === "consumables" || normalized === "consumable") return "Consumables";
         if (normalized === "ppe") return "PPE";
         if (normalized === "vehicles" || normalized === "vehicle") return "Vehicles";
+        return "";
+      }
+
+      function normalizeSubsystemSummarySubcontractingDescription(value) {
+        const normalized = normalizeWbsText(value);
+        if (normalized === "preventive subcontract" || normalized === "preventive subcontracts") return "Preventive_Subcontract";
+        if (normalized === "corrective subcontract" || normalized === "corrective subcontracts") return "Corrective_Subcontract";
+        if (normalized === "technical support" || normalized === "technical supports") return "Technical_Support";
+        if (normalized === "legal training" || normalized === "legal trainings") return "Legal_Training";
+        if (normalized === "training" || normalized === "trining" || normalized === "technical training" || normalized === "technical trainings") return "Technical_Training";
+        if (normalized === "obsolescence" || normalized === "obsolescence monitoring") return "Obsolescence_Monitoring";
         return "";
       }
 
@@ -6982,6 +6991,33 @@
         return rows;
       }
 
+      function collectSubsystemSummaryGuideSubcontractingRows(project) {
+        const guide = project.subsystemSummaryGuidePlanning || {};
+        const rows = [];
+        function addRows(list, customList, periodType, periodLabel) {
+          (Array.isArray(list) ? list : []).forEach(function (row) {
+            rows.push(Object.assign({}, row, {
+              subcontractingType: row.subcontractingType,
+              periodType: periodType,
+              periodLabel: periodLabel,
+              isCustom: false,
+            }));
+          });
+          (Array.isArray(customList) ? customList : []).forEach(function (row) {
+            rows.push(Object.assign({}, row, {
+              subcontractingType: row.subcontractingType,
+              periodType: periodType,
+              periodLabel: periodLabel,
+              isCustom: true,
+            }));
+          });
+        }
+        addRows(guide.generatedSubcontractingRows, guide.customSubcontractingRows, "mob", project.mobilisationPhaseCode || "MOB");
+        addRows(guide.recurrentSubcontractingRows, guide.customRecurrentSubcontractingRows, "rec", project.recurrentCode || "REC");
+        addRows(guide.generatedDemobilizationSubcontractingRows, guide.customDemobilizationSubcontractingRows, "dem", project.demobilisationCode || "DEM");
+        return rows;
+      }
+
       function resolveSubsystemSummaryMaterialPlanning(project, guideRow, phase, description) {
         const periodType = guideRow.periodType;
         if (periodType === "mob") {
@@ -7000,6 +7036,41 @@
         }
         if (periodType === "dem") {
           const months = toNumber(((project.subsystemSummaryGuidePlanning || {}).demobilizationMaterialMonthsByType || {})[description]) || 0;
+          return {
+            planningGuide: guideRow.guidePlanningCode || "",
+            occurrence: months,
+            allowed: months > 0,
+          };
+        }
+        return { planningGuide: "", occurrence: 0, allowed: false };
+      }
+
+      function resolveSubsystemSummarySubcontractingPlanning(project, guideRow, phase, guideType) {
+        const periodType = guideRow.periodType;
+        if (periodType === "mob") {
+          return {
+            planningGuide: guideRow.guidePlanningCode || "",
+            occurrence: 1,
+            allowed: true,
+          };
+        }
+        if (periodType === "rec") {
+          return {
+            planningGuide: guideRow.guidePlanningCode || "",
+            occurrence: countInclusiveYearsFractional(guideRow.startDate || phase.startDate, guideRow.endDate || phase.endDate),
+            allowed: true,
+          };
+        }
+        if (periodType === "dem") {
+          const monthsByType = (project.subsystemSummaryGuidePlanning || {}).demobilizationSubcontractingMonthsByType || {};
+          const normalizedGuideType = normalizeSubsystemSummarySubcontractingDescription(guideType) || guideType;
+          const directMonths = toNumber(monthsByType[guideType]);
+          const normalizedMonths = toNumber(monthsByType[normalizedGuideType]);
+          const matchingKey = Object.keys(monthsByType).find(function (key) {
+            return normalizeSubsystemSummarySubcontractingDescription(key) === normalizedGuideType
+              || normalizeWbsText(key) === normalizeWbsText(guideType);
+          });
+          const months = directMonths || normalizedMonths || (matchingKey ? (toNumber(monthsByType[matchingKey]) || 0) : 0);
           return {
             planningGuide: guideRow.guidePlanningCode || "",
             occurrence: months,
@@ -7077,6 +7148,30 @@
         ])) || 0;
       }
 
+      function getSubsystemSummarySynthesisYearlySubcontracting(row) {
+        return toNumber(getWbsRowValueByCandidates(row, [
+          "Yearly Cost (Subcontracting)",
+          "yearly_cost_subcontracting",
+          "Yearly Subcontracting Cost",
+          "subcontracting_yearly_cost",
+          "Subcontracting Yearly Cost",
+        ])) || 0;
+      }
+
+      function subsystemSummarySubcontractingTypeMatches(rowType, description) {
+        const typeKey = normalizeWbsText(rowType);
+        const descriptionKey = normalizeWbsText(description);
+        if (!typeKey || !descriptionKey) return false;
+        if (typeKey === descriptionKey || typeKey.indexOf(descriptionKey) !== -1) return true;
+        if (description === "Technical_Training") {
+          return typeKey === "training" || typeKey.indexOf("technical training") !== -1;
+        }
+        if (description === "Obsolescence_Monitoring") {
+          return typeKey === "obsolescence" || typeKey.indexOf("obsolescence monitoring") !== -1;
+        }
+        return false;
+      }
+
       function collectSubsystemSummarySynthesisExternalValues(project, description, sourceSubsystems, periodType) {
         const targetMaterialType = description === "Preventive spares" ? "preventive spares" : "corrective spares";
         const targetSynthesisType = description === "Preventive spares" ? "preventive" : "corrective";
@@ -7140,6 +7235,80 @@
           currency: projectCurrency,
           externalPurchase: convertSubsystemSummaryEurValue(project, eurValue, projectCurrency),
         }];
+      }
+
+      function resolveSubsystemSummarySubcontractingMetadata(project, description, phase, periodLabel, sheetSourceSubsystems) {
+        const rows = buildGeneratedWbsSubcontractingRows(project);
+        const candidates = Array.isArray(sheetSourceSubsystems) ? sheetSourceSubsystems : [];
+        const match = rows.find(function (row) {
+          if (normalizeWbsText(row.description) !== normalizeWbsText(description)) return false;
+          const phaseMatches = normalizeWbsText(row.phase) === normalizeWbsText(phase.label || phase.key)
+            || normalizeWbsText(row.phase) === normalizeWbsText(phase.key);
+          if (!phaseMatches) return false;
+          if (normalizeWbsText(row.period) !== normalizeWbsText(periodLabel)) return false;
+          if (!candidates.length) return !String(row.subsystem || "").trim();
+          return candidates.some(function (subsystem) {
+            return normalizeWbsText(row.subsystem) === normalizeWbsText(subsystem);
+          });
+        }) || null;
+        if (match) return match;
+
+        const resolver = createWbsSubsystemResolver(candidates);
+        const imported = (project.wbsSubcontractingImportedRows || []).find(function (row) {
+          if (normalizeWbsSubcontractingDescription(row.description) !== description) return false;
+          if (!candidates.length) return !String(row.subsystem || "").trim();
+          return resolver(row.subsystem).length > 0;
+        }) || null;
+        return imported || {};
+      }
+
+      function collectSubsystemSummaryInfraLegalTrainingValues(project, phase, periodType, projectCurrency) {
+        if (!phase || !projectCurrency) return [];
+        const totalsByPhase = getMandatoryTrainingYearlyTotalsByPhase(project);
+        const phaseKeys = [phase.key, phase.label].map(function (value) { return String(value || ""); }).filter(Boolean);
+        let yearlyTotal = null;
+        phaseKeys.some(function (key) {
+          if (Object.prototype.hasOwnProperty.call(totalsByPhase, key)) {
+            yearlyTotal = toNumber(totalsByPhase[key]) || 0;
+            return true;
+          }
+          return false;
+        });
+        if (yearlyTotal === null) {
+          const normalizedPhaseKeys = phaseKeys.map(function (key) { return normalizeWbsText(key); });
+          const matchingKey = Object.keys(totalsByPhase).find(function (key) {
+            return normalizedPhaseKeys.indexOf(normalizeWbsText(key)) >= 0;
+          });
+          yearlyTotal = matchingKey ? (toNumber(totalsByPhase[matchingKey]) || 0) : 0;
+        }
+        const eurValue = periodType === "dem" ? yearlyTotal / 12 : yearlyTotal;
+        if (!(eurValue > 0)) return [];
+        return [{
+          currency: projectCurrency,
+          externalServices: convertSubsystemSummaryEurValue(project, eurValue, projectCurrency),
+        }];
+      }
+
+      function collectSubsystemSummarySubcontractingValues(project, description, sourceSubsystems, periodType) {
+        const subsystemKeys = new Set();
+        (sourceSubsystems || []).forEach(function (subsystem) {
+          const key = normalizeWbsText(subsystem);
+          if (!key) return;
+          subsystemKeys.add(key);
+        });
+        const byCurrency = {};
+        (project.wbsSynthesisRows || []).forEach(function (row) {
+          if (!subsystemKeys.has(normalizeWbsText(getSubsystemSummarySynthesisSubsystem(row)))) return;
+          if (!subsystemSummarySubcontractingTypeMatches(getSubsystemSummarySynthesisType(row), description)) return;
+          const currency = getSubsystemSummarySynthesisCurrency(row);
+          if (!currency) return;
+          const rawValue = getSubsystemSummarySynthesisYearlySubcontracting(row);
+          if (!(rawValue > 0)) return;
+          byCurrency[currency] = (byCurrency[currency] || 0) + (periodType === "dem" ? rawValue / 12 : rawValue);
+        });
+        return Object.keys(byCurrency).sort().map(function (currency) {
+          return { currency: currency, externalServices: Math.round(byCurrency[currency] * 100) / 100 };
+        });
       }
 
       function collectSubsystemSummaryInfraMaterialExternalValues(project, description, phase, periodType, projectCurrency) {
@@ -7239,6 +7408,7 @@
                 "Quantity": rowQuantity,
                 "Unit": "",
                 "External Purchase – Variable": externalPurchase,
+                "External Services Variable Cost": "",
                 "Shift": "",
                 "Cat 1 (Hours or Months)": "",
                 "Cost Centre": "",
@@ -7295,6 +7465,7 @@
               "Quantity": 1,
               "Unit": "",
               "External Purchase – Variable": externalPurchase,
+              "External Services Variable Cost": "",
               "Shift": "",
               "Cat 1 (Hours or Months)": "",
               "Cost Centre": "",
@@ -7329,12 +7500,151 @@
         return rowsBySheetKey;
       }
 
+      function buildSubsystemSummarySubcontractingRows(project, sheetDefs) {
+        const costCenterProject = project.subsystemSummaryCostCenters || {};
+        const firmingProject = project.subsystemSummaryFirming || {};
+        const projectCurrency = String(costCenterProject.projectCurrency || "").trim().toUpperCase();
+        const projectCaratUnit = getSubsystemSummaryProjectCaratUnit(project);
+        const guideRows = collectSubsystemSummaryGuideSubcontractingRows(project);
+        const rowsBySheetKey = {};
+        const seen = new Set();
+
+        guideRows.forEach(function (guideRow) {
+          const guideType = String(guideRow.subcontractingType || "").trim();
+          const description = normalizeSubsystemSummarySubcontractingDescription(guideType);
+          if (!description) return;
+          const phase = findSubsystemSummaryPhase(project, guideRow.phaseLabel);
+          if (!phase) return;
+          const planning = resolveSubsystemSummarySubcontractingPlanning(project, guideRow, phase, guideType);
+          if (!planning.allowed) return;
+
+          if (description === "Legal_Training") {
+            collectSubsystemSummaryInfraLegalTrainingValues(project, phase, guideRow.periodType, projectCurrency).filter(function (entry) {
+              return (toNumber(entry.externalServices) || 0) > 0;
+            }).forEach(function (entry) {
+              const currency = String(entry.currency || projectCurrency || "").trim().toUpperCase();
+              const externalServices = Math.round((toNumber(entry.externalServices) || 0) * 100) / 100;
+              if (!currency || !(externalServices > 0)) return;
+              const metadata = resolveSubsystemSummarySubcontractingMetadata(project, description, phase, guideRow.periodLabel, []);
+              const onOffshore = currency && projectCurrency
+                ? (currency === projectCurrency ? "Onshore" : "Offshore")
+                : "";
+              const outputRow = {
+                "Phase": phase.label || phase.key,
+                "Period": guideRow.periodLabel,
+                "Type": "Subcontracting",
+                "Description": description,
+                "Long_Description": ["Infra_Management", description, guideRow.periodLabel].join("_"),
+                "Quantity": 1,
+                "Unit": "",
+                "External Purchase â€“ Variable": "",
+                "External Services Variable Cost": externalServices,
+                "Shift": "",
+                "Cat 1 (Hours or Months)": "",
+                "Cost Centre": "",
+                "Currency": currency,
+                "Planning Guide": planning.planningGuide || "",
+                "Nb Tot. of Occurency": planning.occurrence || "",
+                "Costs Type": metadata.costsType || "",
+                "Carat Unit": projectCaratUnit,
+                "Unit Role": resolveSubsystemSummaryUnitRole(project, projectCaratUnit, null),
+                "On/Off Shore": onOffshore,
+                "PBS/IBS": metadata.pbsIbs || "",
+                "ABS": metadata.abs || "",
+                "Associated WP": metadata.associatedWp || "",
+                "Tasks": metadata.tasks || "",
+                "Delegated person": "INFRA",
+                "Firming rule": currency ? ((firmingProject.firmingTexts || {})[currency] || "") : "",
+                "Freight per Unit": "",
+                "Insurances-Rates & Taxes": "",
+                "Price List Code 1": guideRow.periodLabel,
+                "Price List Code 2": "External Services",
+                "Price List Code 3": "Infra_Management",
+              };
+              const uniqueKey = SUBSYSTEM_SUMMARY_HEADERS.map(function (header) {
+                return normalizeWbsText(outputRow[header]);
+              }).join("|");
+              if (seen.has(uniqueKey)) return;
+              seen.add(uniqueKey);
+              if (!rowsBySheetKey.Infra_Management) rowsBySheetKey.Infra_Management = [];
+              rowsBySheetKey.Infra_Management.push(outputRow);
+            });
+            return;
+          }
+
+          (sheetDefs || []).forEach(function (sheet) {
+            if (!sheet || sheet.key === "Infra_Management" || !sheet.sourceSubsystems.length) return;
+            const valueEntries = collectSubsystemSummarySubcontractingValues(project, description, sheet.sourceSubsystems, guideRow.periodType)
+              .filter(function (entry) { return (toNumber(entry.externalServices) || 0) > 0; });
+            if (!valueEntries.length) return;
+            const hasMultipleCurrencies = valueEntries.length > 1;
+            valueEntries.forEach(function (entry) {
+              const currency = String(entry.currency || "").trim().toUpperCase();
+              const externalServices = Math.round((toNumber(entry.externalServices) || 0) * 100) / 100;
+              if (!currency || !(externalServices > 0)) return;
+              const metadata = resolveSubsystemSummarySubcontractingMetadata(project, description, phase, guideRow.periodLabel, sheet.sourceSubsystems);
+              const onOffshore = currency && projectCurrency
+                ? (currency === projectCurrency ? "Onshore" : "Offshore")
+                : "";
+              const longDescription = hasMultipleCurrencies
+                ? [sheet.label, description, currency, guideRow.periodLabel].join("_")
+                : [sheet.label, description, guideRow.periodLabel].join("_");
+              const outputRow = {
+                "Phase": phase.label || phase.key,
+                "Period": guideRow.periodLabel,
+                "Type": "Subcontracting",
+                "Description": description,
+                "Long_Description": longDescription,
+                "Quantity": 1,
+                "Unit": "",
+                "External Purchase – Variable": "",
+                "External Services Variable Cost": externalServices,
+                "Shift": "",
+                "Cat 1 (Hours or Months)": "",
+                "Cost Centre": "",
+                "Currency": currency,
+                "Planning Guide": planning.planningGuide || "",
+                "Nb Tot. of Occurency": planning.occurrence || "",
+                "Costs Type": metadata.costsType || "",
+                "Carat Unit": projectCaratUnit,
+                "Unit Role": resolveSubsystemSummaryUnitRole(project, projectCaratUnit, null),
+                "On/Off Shore": onOffshore,
+                "PBS/IBS": metadata.pbsIbs || "",
+                "ABS": metadata.abs || "",
+                "Associated WP": metadata.associatedWp || "",
+                "Tasks": metadata.tasks || "",
+                "Delegated person": "INFRA",
+                "Firming rule": currency ? ((firmingProject.firmingTexts || {})[currency] || "") : "",
+                "Freight per Unit": "",
+                "Insurances-Rates & Taxes": "",
+                "Price List Code 1": guideRow.periodLabel,
+                "Price List Code 2": "External Services",
+                "Price List Code 3": sheet.label,
+              };
+              const uniqueKey = SUBSYSTEM_SUMMARY_HEADERS.map(function (header) {
+                return normalizeWbsText(outputRow[header]);
+              }).join("|");
+              if (seen.has(uniqueKey)) return;
+              seen.add(uniqueKey);
+              if (!rowsBySheetKey[sheet.key]) rowsBySheetKey[sheet.key] = [];
+              rowsBySheetKey[sheet.key].push(outputRow);
+            });
+          });
+        });
+        return rowsBySheetKey;
+      }
+
       function buildSubsystemSummaryVirtualFiles(project) {
         const sheetDefs = getSubsystemSummarySheetDefinitions(project);
         const workloadRowsBySheet = buildSubsystemSummaryWorkloadRows(project);
         const materialRowsBySheet = buildSubsystemSummaryMaterialsRows(project, sheetDefs);
+        const subcontractingRowsBySheet = buildSubsystemSummarySubcontractingRows(project, sheetDefs);
         const allSheets = sheetDefs.map(function (sheet) {
-          return Object.assign({}, sheet, { rows: (workloadRowsBySheet[sheet.key] || []).concat(materialRowsBySheet[sheet.key] || []) });
+          return Object.assign({}, sheet, {
+            rows: (workloadRowsBySheet[sheet.key] || [])
+              .concat(materialRowsBySheet[sheet.key] || [])
+              .concat(subcontractingRowsBySheet[sheet.key] || [])
+          });
         });
         if (!allSheets.some(function (sheet) { return sheet.key === "Infra_Management"; })) {
           allSheets.push({

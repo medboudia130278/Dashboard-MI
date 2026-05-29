@@ -2250,11 +2250,11 @@ function buildGuidePlanningProjects() {
   const pioDefinitionMap = new Map(buildPioDefinitionProjects().map((project) => [project.projectKey, project]));
   const persistedProjects = getGuidePlanningStore();
   const materialCatalog = ["Tools", "Consumables", "PPE", "Vehicles", "Spare Parts", "Preventive spares", "Corrective spares", "Repair"];
-  const subcontractingCatalog = ["Training", "Technical_Support"];
+  const subcontractingCatalog = ["Training", "Legal_Training", "Technical_Support"];
   const demobilizationMaterialCatalog = ["Preventive spares", "Corrective spares", "Vehicles"];
-  const demobilizationSubcontractingCatalog = ["Preventive_Subcontract", "Corrective_Subcontract", "Technical_Support", "Training", "Obsolescence"];
+  const demobilizationSubcontractingCatalog = ["Preventive_Subcontract", "Corrective_Subcontract", "Technical_Support", "Training", "Legal_Training", "Obsolescence"];
   const recurrentMaterialCatalog = ["Tools", "Consumables", "PPE", "Vehicles", "Preventive spares", "Corrective spares", "Repair"];
-  const recurrentSubcontractingCatalog = ["Corrective_Subcontract", "Preventive_Subcontract", "Technical_Support", "Training", "Obsolescence"];
+  const recurrentSubcontractingCatalog = ["Corrective_Subcontract", "Preventive_Subcontract", "Technical_Support", "Training", "Legal_Training", "Obsolescence"];
   const projectKeys = Array.from(new Set(
     Array.from(projectPhaseMap.keys())
       .concat(Array.from(costCenterMap.keys()))

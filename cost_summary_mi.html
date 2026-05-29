@@ -2150,7 +2150,7 @@
         <div class="grid gap-4 lg:grid-cols-2">
           <div class="rounded-xl border border-cyan-100 bg-cyan-50 px-4 py-4">
             <p class="font-bold text-cyan-900 mb-2">Sheets</p>
-            <p class="text-cyan-800">Each workbook contains one sheet per subsystem, named <strong>{Subsystem}_Synthesis</strong>. The project subsystems <strong>3rd_Rail</strong> and <strong>CAT</strong> are grouped into a shared <strong>Feeding_System_Synthesis</strong> sheet. A dedicated <strong>Infra_Management_Synthesis</strong> sheet is also created for management and white-collar workload rows.</p>
+            <p class="text-cyan-800">Each workbook contains one sheet per subsystem, named <strong>{Subsystem}_Synthesis</strong>. The project subsystems <strong>3rd_Rail</strong> and <strong>CAT</strong> are grouped into a shared <strong>Feeding_System_Synthesis</strong> sheet. A dedicated <strong>Infra_Management_Synthesis</strong> sheet is also created for management workload, project-level materials, and project-level subcontracting rows.</p>
           </div>
 
           <div class="rounded-xl border border-sky-100 bg-sky-50 px-4 py-4">
@@ -2256,9 +2256,71 @@
           </div>
         </div>
 
+        <div>
+          <p class="font-bold text-slate-800 mb-2">Subcontracting rows</p>
+          <ul class="space-y-3 pl-1">
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-700 text-[11px] font-bold">1</span>
+              <div>Subcontracting rows start from Guide Planning subcontracting tables for <strong>MOB</strong>, <strong>REC</strong> and <strong>DEM</strong>. Training is exported as <strong>Technical_Training</strong>; Obsolescence is exported as <strong>Obsolescence_Monitoring</strong>.</div>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-700 text-[11px] font-bold">2</span>
+              <div>The export uses Synthesis rows matching the sheet subsystem, Type and Currency. <strong>External Services Variable Cost</strong> comes from <strong>Yearly Cost (Subcontracting)</strong>; DEM uses the same value divided by 12.</div>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-700 text-[11px] font-bold">3</span>
+              <div>If several currencies exist for the same Description and subsystem, one row is generated per currency. Quantity is 1 when External Services Variable Cost is greater than 0; otherwise the row is ignored.</div>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-700 text-[11px] font-bold">4</span>
+              <div>Costs Type, PBS/IBS, ABS, Associated WP and Tasks come from the WBS Subcontracting table. Carat Unit comes from PIO Definition, Firming rule comes from Firming Rules, and Freight plus Insurances-Rates &amp; Taxes stay empty.</div>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-700 text-[11px] font-bold">5</span>
+              <div><strong>Legal_Training</strong> is project-level and is exported only in <strong>Infra_Management_Synthesis</strong>. It does not use a subsystem and it is generated only when the Guide Planning subcontracting tables contain Legal_Training for the related phase and period.</div>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-700 text-[11px] font-bold">6</span>
+              <div>For Infra Management Legal_Training, External Services Variable Cost comes from Mandatory Training <strong>Yearly total</strong> by phase. Values are treated as EUR and converted to Project Currency through Currency &amp; Exchange Rates. DEM uses Yearly total / 12.</div>
+            </li>
+          </ul>
+        </div>
+
+        <div class="rounded-xl border border-violet-100 bg-violet-50 px-4 py-4">
+          <p class="font-bold text-violet-900 mb-2">Infra Management Subcontracting output</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs border border-violet-200 rounded-xl overflow-hidden">
+              <thead class="bg-violet-100 text-violet-900">
+                <tr>
+                  <th class="px-3 py-2 text-left font-bold">Description</th>
+                  <th class="px-3 py-2 text-left font-bold">Source value</th>
+                  <th class="px-3 py-2 text-left font-bold">Fixed output rules</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-violet-100 bg-white">
+                <tr>
+                  <td class="px-3 py-2 font-semibold">Legal_Training</td>
+                  <td class="px-3 py-2">Mandatory Training Yearly total for the same phase. MOB and REC use the full value; DEM uses the value divided by 12.</td>
+                  <td class="px-3 py-2">Currency = Project Currency, Type = Subcontracting, Quantity = 1 when cost &gt; 0.</td>
+                </tr>
+                <tr class="bg-violet-50/40">
+                  <td class="px-3 py-2 font-semibold">WBS metadata</td>
+                  <td class="px-3 py-2">Costs Type, PBS/IBS, ABS, Associated WP and Tasks come from the project-level WBS Subcontracting Legal_Training row with an empty Subsystem.</td>
+                  <td class="px-3 py-2">Long_Description = Infra_Management_Legal_Training_{Period}.</td>
+                </tr>
+                <tr>
+                  <td class="px-3 py-2 font-semibold">Pricing fields</td>
+                  <td class="px-3 py-2">Carat Unit comes from PIO Definition, Firming rule comes from Firming Rules, and On/Off Shore follows the Currency vs Project Currency rule.</td>
+                  <td class="px-3 py-2">Price List Code 2 = External Services, Price List Code 3 = Infra_Management, Freight and Insurances-Rates &amp; Taxes stay empty.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <div class="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
           <p class="font-semibold text-amber-900 mb-1">Progressive scope</p>
-          <p class="text-amber-800">At this stage the modal documents the implemented Workload and Materials export logic. Subcontracting and Overhaul &amp; Renewals will be added to this explanation when their export rules are implemented in Subsystem Summary.</p>
+          <p class="text-amber-800">At this stage the modal documents the implemented Workload, Materials and Subcontracting export logic. Overhaul &amp; Renewals will be added to this explanation when its export rules are implemented in Subsystem Summary.</p>
         </div>
       </div>
     </div>
@@ -2317,7 +2379,7 @@
 
           <div class="rounded-xl border border-violet-100 bg-violet-50 px-4 py-4">
             <p class="font-bold text-violet-900 mb-2">Subcontracting table</p>
-            <p class="text-violet-800">Reads the Excel <strong>Subcontracting</strong> sheet. Regular rows depend only on Guide Planning Applicable Subcontracting Types. Technical_Training maps to Training, Obsolescence_Monitoring and Obsolescence_Treatment map to Obsolescence. Legal_Training is project-level only, REC only, and is generated when the current phase has Mandatory Training Yearly Total greater than 0.</p>
+            <p class="text-violet-800">Reads the Excel <strong>Subcontracting</strong> sheet. Regular rows depend on Guide Planning Applicable Subcontracting Types. Technical_Training maps to Training, Obsolescence_Monitoring and Obsolescence_Treatment map to Obsolescence. Legal_Training stays project-level, with an empty Subsystem, and now follows the same MOB/REC/DEM Guide Planning rules as the other subcontracting types.</p>
           </div>
 
           <div class="rounded-xl border border-amber-100 bg-amber-50 px-4 py-4">
@@ -2688,7 +2750,7 @@
     </div>
   </aside>
 
-  <script src="cost_summary_mi_ui.js?v=20260529-infra-management-materials-export-v1"></script>
-  <script type="module" src="cost_summary_mi.js?v=20260529-infra-management-materials-export-v1"></script>
+  <script src="cost_summary_mi_ui.js?v=20260529-infra-legal-training-subcontracting-v1"></script>
+  <script type="module" src="cost_summary_mi.js?v=20260529-infra-legal-training-subcontracting-v1"></script>
 </body>
 </html>
