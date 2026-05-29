@@ -336,7 +336,7 @@
               Export Data
             </div>
             <h2 class="mt-3 text-2xl font-black tracking-tight">Subsystem Summary Workspace</h2>
-            <p class="mt-2 text-sm text-slate-500">Preview and export virtual Excel files per project. Workload and Materials rows are generated today; other cost types will be added progressively.</p>
+            <p class="mt-2 text-sm text-slate-500">Preview and export virtual Excel files per project. Workload, Materials and Subcontracting rows are generated today; other cost types will be added progressively.</p>
           </div>
           <div class="flex items-center gap-3">
             <div id="subsystemSummaryWorkspaceStatus" class="text-xs font-semibold text-slate-500">No project selected.</div>
@@ -2198,11 +2198,11 @@
             </li>
             <li class="flex gap-3">
               <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-bold">4</span>
-              <div><strong>Infra_Management_Synthesis</strong> receives Materials rows only for <strong>Tools</strong>, <strong>Consumables</strong>, <strong>PPE</strong> and <strong>Vehicles</strong>. Preventive spares, Corrective spares and Repair are ignored for this sheet.</div>
+              <div><strong>Infra_Management_Synthesis</strong> receives Materials rows only for <strong>Other Support Costs</strong>, <strong>Tools</strong>, <strong>Consumables</strong>, <strong>PPE</strong> and <strong>Vehicles</strong>. Preventive spares, Corrective spares and Repair are ignored for this sheet.</div>
             </li>
             <li class="flex gap-3">
               <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-bold">5</span>
-              <div>For Infra Management, <strong>Tools</strong>, <strong>Consumables</strong> and <strong>PPE</strong> aggregate <strong>Shared / Depot Pool</strong> plus <strong>MANAGEMENT</strong>. <strong>Vehicles</strong> uses <strong>Project / Management</strong>.</div>
+              <div>For Infra Management, <strong>Other Support Costs</strong> uses the Other Support Costs table, <strong>Tools</strong>, <strong>Consumables</strong> and <strong>PPE</strong> aggregate <strong>Shared / Depot Pool</strong> plus <strong>MANAGEMENT</strong>, and <strong>Vehicles</strong> uses <strong>Project / Management</strong>.</div>
             </li>
             <li class="flex gap-3">
               <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-bold">6</span>
@@ -2232,21 +2232,26 @@
               </thead>
               <tbody class="divide-y divide-emerald-100 bg-white">
                 <tr>
+                  <td class="px-3 py-2 font-semibold">Other Support Costs</td>
+                  <td class="px-3 py-2">MOB uses Capex Cost, REC uses Annual Opex, and DEM reuses Capex Cost for the same phase because the source table has no DEM period.</td>
+                  <td class="px-3 py-2">Currency = Project Currency, Freight = Onshore Freight % x External Purchase.</td>
+                </tr>
+                <tr class="bg-emerald-50/40">
                   <td class="px-3 py-2 font-semibold">Tools</td>
                   <td class="px-3 py-2">Individual tools + Collective tools + Special tools from Shared / Depot Pool and MANAGEMENT.</td>
                   <td class="px-3 py-2">Currency = Project Currency, Type = Materials, Unit empty, Price List Code 3 = Infra_Management.</td>
                 </tr>
-                <tr class="bg-emerald-50/40">
+                <tr>
                   <td class="px-3 py-2 font-semibold">Consumables</td>
                   <td class="px-3 py-2">Consumables column from Shared / Depot Pool and MANAGEMENT.</td>
                   <td class="px-3 py-2">External Purchase is converted from EUR to Project Currency.</td>
                 </tr>
-                <tr>
+                <tr class="bg-emerald-50/40">
                   <td class="px-3 py-2 font-semibold">PPE</td>
                   <td class="px-3 py-2">PPE column from Shared / Depot Pool and MANAGEMENT.</td>
                   <td class="px-3 py-2">Long_Description = Infra_Management_{Description}_{Period}.</td>
                 </tr>
-                <tr class="bg-emerald-50/40">
+                <tr>
                   <td class="px-3 py-2 font-semibold">Vehicles</td>
                   <td class="px-3 py-2">MOB uses Capex, REC uses Fuel + Operating, DEM uses Capex from Project / Management.</td>
                   <td class="px-3 py-2">Delegated person = INFRA, Price List Code 2 = Spares and Material.</td>
@@ -2374,7 +2379,7 @@
 
           <div class="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-4">
             <p class="font-bold text-emerald-900 mb-2">Materials table</p>
-            <p class="text-emerald-800">Reads the Excel <strong>Materials</strong> sheet. Regular material rows depend on Guide Planning Material selections for MOB/REC/DEM. Project-level rows are allowed for Other Support Costs, Tools, PPE, and Vehicles. Tools uses Shared / Depot Pool, PPE uses MANAGEMENT, Vehicles uses Project / Management, and Other Support Costs uses the Other Support Costs table.</p>
+            <p class="text-emerald-800">Reads the Excel <strong>Materials</strong> sheet. Regular material rows depend on Guide Planning Material selections for MOB/REC/DEM. Project-level rows are allowed for Other Support Costs, Tools, PPE, and Vehicles. Other Support Costs is now also a Guide Planning material type for MOB, REC and DEM.</p>
           </div>
 
           <div class="rounded-xl border border-violet-100 bg-violet-50 px-4 py-4">
@@ -2401,7 +2406,7 @@
               <tbody class="divide-y divide-slate-100">
                 <tr>
                   <td class="px-3 py-2 font-semibold">Other Support Costs</td>
-                  <td class="px-3 py-2">MOB if Capex Cost &gt; 0, REC if Annual Opex &gt; 0, DEM not used.</td>
+                  <td class="px-3 py-2">MOB if Capex Cost &gt; 0, REC if Annual Opex &gt; 0, DEM if Demobilisation Material Types value is &gt; 0 and Capex Cost is available for the same phase.</td>
                 </tr>
                 <tr class="bg-slate-50">
                   <td class="px-3 py-2 font-semibold">Tools</td>
@@ -2750,7 +2755,7 @@
     </div>
   </aside>
 
-  <script src="cost_summary_mi_ui.js?v=20260529-infra-legal-training-subcontracting-v1"></script>
-  <script type="module" src="cost_summary_mi.js?v=20260529-infra-legal-training-subcontracting-v1"></script>
+  <script src="cost_summary_mi_ui.js?v=20260529-other-support-guide-material-v1"></script>
+  <script type="module" src="cost_summary_mi.js?v=20260529-other-support-guide-material-v1"></script>
 </body>
 </html>

@@ -2249,11 +2249,11 @@ function buildGuidePlanningProjects() {
   const costCenterMap = new Map(buildCostCenterProjects().map((project) => [project.projectKey, project]));
   const pioDefinitionMap = new Map(buildPioDefinitionProjects().map((project) => [project.projectKey, project]));
   const persistedProjects = getGuidePlanningStore();
-  const materialCatalog = ["Tools", "Consumables", "PPE", "Vehicles", "Spare Parts", "Preventive spares", "Corrective spares", "Repair"];
+  const materialCatalog = ["Tools", "Consumables", "PPE", "Vehicles", "Spare Parts", "Preventive spares", "Corrective spares", "Repair", "Other Support Costs"];
   const subcontractingCatalog = ["Training", "Legal_Training", "Technical_Support"];
-  const demobilizationMaterialCatalog = ["Preventive spares", "Corrective spares", "Vehicles"];
+  const demobilizationMaterialCatalog = ["Preventive spares", "Corrective spares", "Vehicles", "Other Support Costs"];
   const demobilizationSubcontractingCatalog = ["Preventive_Subcontract", "Corrective_Subcontract", "Technical_Support", "Training", "Legal_Training", "Obsolescence"];
-  const recurrentMaterialCatalog = ["Tools", "Consumables", "PPE", "Vehicles", "Preventive spares", "Corrective spares", "Repair"];
+  const recurrentMaterialCatalog = ["Tools", "Consumables", "PPE", "Vehicles", "Preventive spares", "Corrective spares", "Repair", "Other Support Costs"];
   const recurrentSubcontractingCatalog = ["Corrective_Subcontract", "Preventive_Subcontract", "Technical_Support", "Training", "Legal_Training", "Obsolescence"];
   const projectKeys = Array.from(new Set(
     Array.from(projectPhaseMap.keys())

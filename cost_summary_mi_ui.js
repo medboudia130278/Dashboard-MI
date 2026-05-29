@@ -2666,11 +2666,11 @@
         const projectPhaseProjects = buildCombinedProjectPhaseProjects();
         const costCenterProjects = buildFallbackCostCenterProjects();
         const pioDefinitionProjects = buildFallbackPioDefinitionProjects();
-        const materialCatalog = ["Tools", "Consumables", "PPE", "Vehicles", "Spare Parts", "Preventive spares", "Corrective spares", "Repair"];
+        const materialCatalog = ["Tools", "Consumables", "PPE", "Vehicles", "Spare Parts", "Preventive spares", "Corrective spares", "Repair", "Other Support Costs"];
         const subcontractingCatalog = ["Training", "Legal_Training", "Technical_Support"];
-        const demobilizationMaterialCatalog = ["Preventive spares", "Corrective spares", "Vehicles"];
+        const demobilizationMaterialCatalog = ["Preventive spares", "Corrective spares", "Vehicles", "Other Support Costs"];
         const demobilizationSubcontractingCatalog = ["Preventive_Subcontract", "Corrective_Subcontract", "Technical_Support", "Training", "Legal_Training", "Obsolescence"];
-        const recurrentMaterialCatalog = ["Tools", "Consumables", "PPE", "Vehicles", "Preventive spares", "Corrective spares", "Repair"];
+        const recurrentMaterialCatalog = ["Tools", "Consumables", "PPE", "Vehicles", "Preventive spares", "Corrective spares", "Repair", "Other Support Costs"];
         const recurrentSubcontractingCatalog = ["Corrective_Subcontract", "Preventive_Subcontract", "Technical_Support", "Training", "Legal_Training", "Obsolescence"];
         const projectPhaseMap = buildProjectLookupMap(projectPhaseProjects);
         const costCenterMap = buildProjectLookupMap(costCenterProjects);
@@ -5808,6 +5808,11 @@
           if (periodType === "rec") {
             return (toNumber(otherSupportCosts[phase.key + "|rec|opex"]) || 0) > 0;
           }
+          if (periodType === "dem") {
+            if (!((toNumber(demobTypes["Other Support Costs"]) || 0) > 0)) return false;
+            return (toNumber(otherSupportCosts[phase.key + "|dem|capex"]) || 0) > 0
+              || (toNumber(otherSupportCosts[phase.key + "|mob|capex"]) || 0) > 0;
+          }
           return false;
         }
 
@@ -6811,6 +6816,7 @@
 
       function normalizeSubsystemSummaryMaterialDescription(value) {
         const normalized = normalizeWbsText(value);
+        if (normalized === "other support costs" || normalized === "other support cost") return "Other Support Costs";
         if (normalized === "preventive spares" || normalized === "preventive spare") return "Preventive spares";
         if (normalized === "corrective spares" || normalized === "corrective spare") return "Corrective spares";
         if (normalized === "repair" || normalized === "repairs") return "Repair";
@@ -7312,11 +7318,21 @@
       }
 
       function collectSubsystemSummaryInfraMaterialExternalValues(project, description, phase, periodType, projectCurrency) {
-        if (["Tools", "Consumables", "PPE", "Vehicles"].indexOf(description) === -1) return [];
+        if (["Tools", "Consumables", "PPE", "Vehicles", "Other Support Costs"].indexOf(description) === -1) return [];
         const toolsConsumables = Object.assign({}, project.wbsToolsConsumablesProject || {});
         const vehicles = Object.assign({}, project.wbsVehiclesProject || {});
+        const otherSupportCosts = Object.assign({}, project.wbsOtherSupportCostProject || {});
         let eurValue = 0;
-        if (description === "Tools") {
+        if (description === "Other Support Costs") {
+          if (periodType === "mob") {
+            eurValue += toNumber(otherSupportCosts[phase.key + "|mob|capex"]) || 0;
+          } else if (periodType === "rec") {
+            eurValue += toNumber(otherSupportCosts[phase.key + "|rec|opex"]) || 0;
+          } else if (periodType === "dem") {
+            eurValue += (toNumber(otherSupportCosts[phase.key + "|dem|capex"]) || 0)
+              || (toNumber(otherSupportCosts[phase.key + "|mob|capex"]) || 0);
+          }
+        } else if (description === "Tools") {
           ["__shared__", "__management__"].forEach(function (subsystem) {
             eurValue += ["ind_tools", "coll_tools", "spec_tools"].reduce(function (sum, colKey) {
               return sum + resolveSubsystemSummaryStoredValue(toolsConsumables, phase.key, subsystem, periodType, colKey);
@@ -7441,7 +7457,7 @@
             });
           });
 
-          if (["Tools", "Consumables", "PPE", "Vehicles"].indexOf(description) === -1) return;
+          if (["Tools", "Consumables", "PPE", "Vehicles", "Other Support Costs"].indexOf(description) === -1) return;
           collectSubsystemSummaryInfraMaterialExternalValues(project, description, phase, guideRow.periodType, projectCurrency).filter(function (entry) {
             return (toNumber(entry.externalPurchase) || 0) > 0;
           }).forEach(function (entry) {
