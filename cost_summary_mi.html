@@ -39,7 +39,7 @@
 <body class="bg-background-light text-slate-900 min-h-screen font-display">
   <div class="min-h-screen flex flex-col">
     <header class="sticky top-0 z-20 bg-white/90 backdrop-blur-md border-b border-slate-200">
-      <div class="max-w-7xl mx-auto px-6 py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div class="max-w-[1440px] mx-auto px-6 py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div class="space-y-2">
           <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-50 text-cyan-700 border border-cyan-200 text-[11px] font-bold uppercase tracking-[0.18em]">
             <span class="material-symbols-outlined text-[16px]">table_view</span>
@@ -63,7 +63,7 @@
       </div>
     </header>
 
-    <main class="flex-1 max-w-7xl w-full mx-auto px-6 py-8 space-y-6">
+    <main class="flex-1 max-w-[1440px] w-full mx-auto px-6 py-8 space-y-6">
       <section id="costSummaryRuntimeAlert" class="hidden rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 shadow-sm">
         <div class="flex items-start gap-3">
           <span class="material-symbols-outlined text-[20px] text-rose-600">error</span>
@@ -336,7 +336,7 @@
               Export Data
             </div>
             <h2 class="mt-3 text-2xl font-black tracking-tight">Subsystem Summary Workspace</h2>
-            <p class="mt-2 text-sm text-slate-500">Preview and export virtual Excel files per project. Workload, Materials and Subcontracting rows are generated today; other cost types will be added progressively.</p>
+            <p class="mt-2 text-sm text-slate-500">Preview and export virtual Excel files per project. Workload, Materials, Subcontracting, and Overhaul &amp; Renewals rows are generated today.</p>
           </div>
           <div class="flex items-center gap-3">
             <div id="subsystemSummaryWorkspaceStatus" class="text-xs font-semibold text-slate-500">No project selected.</div>
@@ -355,7 +355,7 @@
           </div>
         </div>
 
-        <div class="mt-6 grid grid-cols-1 xl:grid-cols-[260px_minmax(0,1fr)] gap-6">
+        <div class="mt-6 grid grid-cols-1 xl:grid-cols-[240px_minmax(0,1fr)] gap-4">
           <aside class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <div>
               <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">Projects</h3>
@@ -387,7 +387,7 @@
 
               <div id="subsystemSummaryMissingData" class="hidden space-y-2"></div>
 
-              <section class="grid grid-cols-1 2xl:grid-cols-[320px_minmax(0,1fr)] gap-6">
+              <section class="grid grid-cols-1 2xl:grid-cols-[270px_minmax(0,1fr)] gap-4">
                 <div class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
                   <h3 class="text-base font-bold">Export Explorer</h3>
                   <p class="mt-1 text-sm text-slate-500">Virtual files are generated on demand from current project data.</p>
@@ -2323,9 +2323,63 @@
           </div>
         </div>
 
+        <div>
+          <p class="font-bold text-slate-800 mb-2">Overhaul &amp; Renewals rows</p>
+          <ul class="space-y-3 pl-1">
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 text-[11px] font-bold">1</span>
+              <div>Overhaul &amp; Renewals rows start from the <strong>Overhaul &amp; Renewals Guide Planning Table</strong>. Period stays empty and Nb Tot. of Occurency is always 1.</div>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 text-[11px] font-bold">2</span>
+              <div><strong>Overhaul</strong> creates <strong>Ovh_Workload</strong> and <strong>Ovh_Material</strong>. <strong>Renewal</strong> creates <strong>Renew_Management</strong>, <strong>Renew_T&amp;C</strong> and <strong>Renew_Material</strong>.</div>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 text-[11px] font-bold">3</span>
+              <div>The <strong>Total</strong> phase uses Synthesis totals. Other phases use <strong>Overhaul and Renewal Planning</strong>, except <strong>DEQ</strong> and <strong>VMI</strong> which use <strong>DEQ_VMI_Planning</strong>.</div>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 text-[11px] font-bold">4</span>
+              <div>Planning years are assigned to the phase containing <strong>1 July</strong> of that year. The final project phase also includes its end year.</div>
+            </li>
+          </ul>
+        </div>
+
+        <div class="rounded-xl border border-amber-100 bg-amber-50 px-4 py-4">
+          <p class="font-bold text-amber-900 mb-2">Overhaul &amp; Renewals output</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs border border-amber-200 rounded-xl overflow-hidden">
+              <thead class="bg-amber-100 text-amber-900">
+                <tr>
+                  <th class="px-3 py-2 text-left font-bold">Export type</th>
+                  <th class="px-3 py-2 text-left font-bold">Source value</th>
+                  <th class="px-3 py-2 text-left font-bold">Fixed output rules</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-amber-100 bg-white">
+                <tr>
+                  <td class="px-3 py-2 font-semibold">Ovh_Workload</td>
+                  <td class="px-3 py-2">Generated when Synthesis has Overhaul Total Replacement Time &gt; 0. External Purchase stays empty.</td>
+                  <td class="px-3 py-2">Currency = Project Currency, Price List Code 1 = OVHL, Price List Code 2 = Labour.</td>
+                </tr>
+                <tr class="bg-amber-50/40">
+                  <td class="px-3 py-2 font-semibold">Ovh_Material</td>
+                  <td class="px-3 py-2">Total uses Synthesis Total Global Cost. Phase rows use Global Cost, or Unit Cost for DEQ/VMI.</td>
+                  <td class="px-3 py-2">Price List Code 1 = OVHL, Price List Code 2 = Spares and Material.</td>
+                </tr>
+                <tr>
+                  <td class="px-3 py-2 font-semibold">Renew_Management / Renew_T&amp;C / Renew_Material</td>
+                  <td class="px-3 py-2">Total uses Synthesis renewal split. Phase rows use Management, T&amp;C and Material costs; DEQ/VMI split Unit Cost as 5%, 15%, 80%.</td>
+                  <td class="px-3 py-2">Price List Code 1 = RENEW; Freight and taxes apply only to Renew_Material.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <div class="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
           <p class="font-semibold text-amber-900 mb-1">Progressive scope</p>
-          <p class="text-amber-800">At this stage the modal documents the implemented Workload, Materials and Subcontracting export logic. Overhaul &amp; Renewals will be added to this explanation when its export rules are implemented in Subsystem Summary.</p>
+          <p class="text-amber-800">At this stage the modal documents the implemented Workload, Materials, Subcontracting, and Overhaul &amp; Renewals export logic.</p>
         </div>
       </div>
     </div>
@@ -2755,7 +2809,7 @@
     </div>
   </aside>
 
-  <script src="cost_summary_mi_ui.js?v=20260529-other-support-guide-material-v1"></script>
-  <script type="module" src="cost_summary_mi.js?v=20260529-other-support-guide-material-v1"></script>
+  <script src="cost_summary_mi_ui.js?v=20260530-subsystem-summary-ovh-renew-v1"></script>
+  <script type="module" src="cost_summary_mi.js?v=20260530-subsystem-summary-ovh-renew-v1"></script>
 </body>
 </html>

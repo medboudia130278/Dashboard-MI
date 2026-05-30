@@ -2350,6 +2350,8 @@
             persistedKeysSet: new Set(),
             synthesisRows: [],
             hoursRows: [],
+            overhaulRenewalPlanningRows: [],
+            deqVmiPlanningRows: [],
           };
           group.persistedKeys.forEach(function (key) {
             existing.persistedKeysSet.add(key);
@@ -2360,6 +2362,12 @@
 
           const hoursRows = (workbook.sheets && (workbook.sheets.hoursReport || workbook.sheets.workloadHoursReport)) || [];
           if (hoursRows.length) existing.hoursRows = hoursRows;
+
+          const overhaulRenewalPlanningRows = (workbook.sheets && workbook.sheets.overhaulRenewalPlanning) || [];
+          if (overhaulRenewalPlanningRows.length) existing.overhaulRenewalPlanningRows = overhaulRenewalPlanningRows;
+
+          const deqVmiPlanningRows = (workbook.sheets && workbook.sheets.deqVmiPlanning) || [];
+          if (deqVmiPlanningRows.length) existing.deqVmiPlanningRows = deqVmiPlanningRows;
 
           byProject.set(projectKey, existing);
         });
@@ -2381,6 +2389,8 @@
               hasSynthesis: hasSynthesis,
               hasHoursReport: hasHoursReport,
               synthesisRows: project.synthesisRows,
+              overhaulRenewalPlanningRows: project.overhaulRenewalPlanningRows,
+              deqVmiPlanningRows: project.deqVmiPlanningRows,
               workloadRows: workloadRows,
               gapAlerts: workloadRows.filter(function (r) { return r.gapHours < 0; }),
             };
@@ -4985,6 +4995,8 @@
             wbsOverhaulRenewalImportedAt: current.overhaulRenewalImportedAt || "",
             wbsOverhaulRenewalRowOverrides: Object.assign({}, current.overhaulRenewalRowOverrides || {}),
             wbsSynthesisRows: Array.isArray(workloadProject && workloadProject.synthesisRows) ? workloadProject.synthesisRows : [],
+            wbsOverhaulRenewalPlanningRows: Array.isArray(workloadProject && workloadProject.overhaulRenewalPlanningRows) ? workloadProject.overhaulRenewalPlanningRows : [],
+            wbsDeqVmiPlanningRows: Array.isArray(workloadProject && workloadProject.deqVmiPlanningRows) ? workloadProject.deqVmiPlanningRows : [],
             wbsGuidePlanningProject: guidePlanningProject,
             wbsOtherSupportCostProject: otherSupportCostProject,
             wbsToolsConsumablesProject: toolsConsumablesProject,
@@ -6736,7 +6748,7 @@
               "Insurances-Rates & Taxes": "",
               "Price List Code 1": wbsRow.period,
               "Price List Code 2": "Labour",
-              "Price List Code 3": wbsRow.subsystem,
+              "Price List Code 3": sheetKey,
             };
             const uniqueKey = SUBSYSTEM_SUMMARY_HEADERS.map(function (header) {
               return normalizeWbsText(outputRow[header]);
@@ -7190,9 +7202,10 @@
             subsystemKeys.add("feeding system");
           }
         });
-        const byCurrency = {};
+        const byCurrencyAndSubsystem = {};
         (project.wbsSynthesisRows || []).forEach(function (row) {
-          if (!subsystemKeys.has(normalizeWbsText(getSubsystemSummarySynthesisSubsystem(row)))) return;
+          const rowSubsystem = getSubsystemSummarySynthesisSubsystem(row);
+          if (!subsystemKeys.has(normalizeWbsText(rowSubsystem))) return;
           const materialType = getSubsystemSummarySynthesisMaterialType(row);
           const synthesisType = getSubsystemSummarySynthesisType(row);
           const materialMatches = description === "Repair"
@@ -7205,10 +7218,22 @@
             ? getSubsystemSummarySynthesisYearlyReparable(row)
             : getSubsystemSummarySynthesisYearlyTotal(row);
           if (!(rawValue > 0)) return;
-          byCurrency[currency] = (byCurrency[currency] || 0) + (periodType === "dem" ? rawValue / 12 : rawValue);
+          const subsystemLabel = resolveSubsystemSummarySourceSubsystemLabel(sourceSubsystems, rowSubsystem);
+          const key = currency + "||" + subsystemLabel;
+          byCurrencyAndSubsystem[key] = byCurrencyAndSubsystem[key] || {
+            currency: currency,
+            subsystemLabel: subsystemLabel,
+            externalPurchase: 0,
+          };
+          byCurrencyAndSubsystem[key].externalPurchase += periodType === "dem" ? rawValue / 12 : rawValue;
         });
-        return Object.keys(byCurrency).sort().map(function (currency) {
-          return { currency: currency, externalPurchase: Math.round(byCurrency[currency] * 100) / 100 };
+        return Object.keys(byCurrencyAndSubsystem).sort().map(function (key) {
+          const entry = byCurrencyAndSubsystem[key];
+          return {
+            currency: entry.currency,
+            subsystemLabel: entry.subsystemLabel,
+            externalPurchase: Math.round(entry.externalPurchase * 100) / 100,
+          };
         });
       }
 
@@ -7363,6 +7388,254 @@
         }];
       }
 
+      function collectSubsystemSummaryGuideOverhaulRenewalRows(project) {
+        const guide = project.subsystemSummaryGuidePlanning || {};
+        return []
+          .concat(Array.isArray(guide.overhaulRenewalRows) ? guide.overhaulRenewalRows : [])
+          .concat(Array.isArray(guide.customOverhaulRenewalRows) ? guide.customOverhaulRenewalRows : []);
+      }
+
+      function getSubsystemSummarySourceSubsystemKeys(sourceSubsystems) {
+        const keys = new Set();
+        (sourceSubsystems || []).forEach(function (subsystem) {
+          const key = normalizeWbsText(subsystem);
+          if (!key) return;
+          keys.add(key);
+          if (key === "3rd rail" || key === "third rail" || key === "cat") {
+            keys.add("feeding system");
+          }
+        });
+        return keys;
+      }
+
+      function subsystemSummarySourceMatches(sourceSubsystems, value) {
+        const key = normalizeWbsText(value);
+        if (!key) return false;
+        return getSubsystemSummarySourceSubsystemKeys(sourceSubsystems).has(key);
+      }
+
+      function resolveSubsystemSummarySourceSubsystemLabel(sourceSubsystems, value) {
+        const rawKey = normalizeWbsText(value);
+        const candidates = Array.isArray(sourceSubsystems) ? sourceSubsystems : [];
+        const exact = candidates.find(function (subsystem) {
+          return normalizeWbsText(subsystem) === rawKey;
+        });
+        if (exact) return exact;
+        if (rawKey === "feeding system") {
+          return candidates.find(function (subsystem) {
+            const key = normalizeWbsText(subsystem);
+            return key === "3rd rail" || key === "third rail" || key === "cat";
+          }) || value || "";
+        }
+        return value || candidates[0] || "";
+      }
+
+      function resolveSubsystemSummaryOverhaulRenewalPlanning(project, phase, sourceSubsystems, description) {
+        const rows = collectSubsystemSummaryGuideOverhaulRenewalRows(project);
+        const match = rows.find(function (row) {
+          const phaseMatches = normalizeWbsText(row.phaseLabel) === normalizeWbsText(phase.label || phase.key)
+            || normalizeWbsText(row.phaseLabel) === normalizeWbsText(phase.key);
+          return phaseMatches && subsystemSummarySourceMatches(sourceSubsystems, row.subsystem);
+        }) || null;
+        if (!match) return { planningGuide: "", occurrence: 0, allowed: false };
+        return {
+          planningGuide: description === "Renewal" ? (match.renewalGuidePlanningCode || "") : (match.overhaulGuidePlanningCode || ""),
+          occurrence: 1,
+          allowed: true,
+        };
+      }
+
+      function getSubsystemSummaryOvhExportWbsType(exportType) {
+        return {
+          Ovh_Workload: "Workload",
+          Ovh_Material: "Material",
+          Renew_Management: "Management",
+          "Renew_T&C": "T&C",
+          Renew_Material: "Material",
+        }[exportType] || "";
+      }
+
+      function resolveSubsystemSummaryOverhaulRenewalMetadata(project, description, exportType, phase, sheetSourceSubsystems) {
+        const expectedType = getSubsystemSummaryOvhExportWbsType(exportType);
+        const candidates = Array.isArray(sheetSourceSubsystems) ? sheetSourceSubsystems : [];
+        const rows = buildGeneratedWbsOverhaulRenewalRows(project);
+        const match = rows.find(function (row) {
+          if (normalizeWbsOverhaulRenewalDescription(row.description) !== description) return false;
+          if (normalizeWbsText(row.type) !== normalizeWbsText(expectedType)) return false;
+          const phaseMatches = normalizeWbsText(row.phase) === normalizeWbsText(phase.label || phase.key)
+            || normalizeWbsText(row.phase) === normalizeWbsText(phase.key);
+          if (!phaseMatches) return false;
+          return candidates.some(function (subsystem) {
+            return normalizeWbsText(row.subsystem) === normalizeWbsText(subsystem);
+          });
+        }) || null;
+        if (match) return match;
+
+        const resolver = createWbsSubsystemResolver(candidates);
+        return (project.wbsOverhaulRenewalImportedRows || []).find(function (row) {
+          if (normalizeWbsOverhaulRenewalDescription(row.description) !== description) return false;
+          if (normalizeWbsText(row.type) !== normalizeWbsText(expectedType)) return false;
+          return resolver(row.subsystem).length > 0;
+        }) || {};
+      }
+
+      function getSubsystemSummaryOvhPlanningYears(project, phase) {
+        if (!phase || normalizeWbsText(phase.key) === "total" || normalizeWbsText(phase.label) === "total") return null;
+        const startDate = new Date(String(phase.startDate || ""));
+        const endDate = new Date(String(phase.endDate || ""));
+        if (!Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime())) return [];
+        const datedPhases = (project.phases || []).filter(function (item) {
+          return item && normalizeWbsText(item.key) !== "total" && String(item.startDate || "").trim() && String(item.endDate || "").trim();
+        });
+        const lastPhase = datedPhases[datedPhases.length - 1] || null;
+        const isLastPhase = lastPhase && normalizeWbsText(lastPhase.key) === normalizeWbsText(phase.key);
+        const years = [];
+        for (let year = startDate.getFullYear(); year <= endDate.getFullYear(); year += 1) {
+          const julyFirst = new Date(year, 6, 1);
+          if ((julyFirst >= startDate && julyFirst <= endDate) || (isLastPhase && year === endDate.getFullYear())) {
+            years.push(year);
+          }
+        }
+        return years;
+      }
+
+      function getSubsystemSummaryOvhRowType(row) {
+        return normalizeWbsText(getWbsRowValueByCandidates(row, ["Type", "type", "renewal_type", "activity_type"]));
+      }
+
+      function getSubsystemSummaryOvhRowCurrency(row) {
+        return String(getWbsRowValueByCandidates(row, ["Currency", "currency", "curr", "devise"]) || "").trim().toUpperCase();
+      }
+
+      function getSubsystemSummaryOvhRowSubsystem(row) {
+        return String(getWbsRowValueByCandidates(row, ["Subsystem", "subsystem", "sub_system", "system"]) || "").trim();
+      }
+
+      function getSubsystemSummaryOvhRowYear(row) {
+        return toNumber(getWbsRowValueByCandidates(row, ["Year of Planning", "year_of_planning", "planning_year", "Year"])) || null;
+      }
+
+      function collectSubsystemSummaryOvhSynthesisValues(project, description, exportType, sourceSubsystems, projectCurrency) {
+        if (exportType === "Ovh_Workload") {
+          const bySubsystem = {};
+          (project.wbsSynthesisRows || []).forEach(function (row) {
+            const rowSubsystem = getSubsystemSummarySynthesisSubsystem(row);
+            if (!subsystemSummarySourceMatches(sourceSubsystems, rowSubsystem)) return;
+            if (getSubsystemSummarySynthesisType(row).indexOf("overhaul") === -1) return;
+            if (!((toNumber(getWbsRowValueByCandidates(row, ["Total Replacement Time", "total_replacement_time", "replacement_time"])) || 0) > 0)) return;
+            const subsystemLabel = resolveSubsystemSummarySourceSubsystemLabel(sourceSubsystems, rowSubsystem);
+            bySubsystem[subsystemLabel] = {
+              currency: projectCurrency,
+              subsystemLabel: subsystemLabel,
+              externalPurchase: "",
+            };
+          });
+          return projectCurrency ? Object.keys(bySubsystem).sort().map(function (key) { return bySubsystem[key]; }) : [];
+        }
+        const byCurrencyAndSubsystem = {};
+        (project.wbsSynthesisRows || []).forEach(function (row) {
+          const rowSubsystem = getSubsystemSummarySynthesisSubsystem(row);
+          if (!subsystemSummarySourceMatches(sourceSubsystems, rowSubsystem)) return;
+          const rowType = getSubsystemSummarySynthesisType(row);
+          if (description === "Overhaul" && rowType.indexOf("overhaul") === -1) return;
+          if (description === "Renewal" && rowType.indexOf("renewal") === -1) return;
+          const currency = getSubsystemSummarySynthesisCurrency(row);
+          if (!currency) return;
+          let value = 0;
+          if (description === "Overhaul" && exportType === "Ovh_Material") {
+            value = toNumber(getWbsRowValueByCandidates(row, ["Total Global Cost", "total_global_cost", "global_cost", "total_cost"])) || 0;
+          } else if (description === "Renewal" && exportType === "Renew_Management") {
+            value = toNumber(getWbsRowValueByCandidates(row, ["Total Management Cost", "total_management_cost", "management_cost"])) || 0;
+          } else if (description === "Renewal" && exportType === "Renew_T&C") {
+            value = toNumber(getWbsRowValueByCandidates(row, ["Total T&C Cost", "total_t_c_cost", "total_tc_cost", "t_c_cost", "tc_cost"])) || 0;
+          } else if (description === "Renewal" && exportType === "Renew_Material") {
+            value = toNumber(getWbsRowValueByCandidates(row, ["Total Material Cost", "total_material_cost", "material_cost"])) || 0;
+          }
+          if (!(value > 0)) return;
+          const subsystemLabel = resolveSubsystemSummarySourceSubsystemLabel(sourceSubsystems, rowSubsystem);
+          const key = currency + "||" + subsystemLabel;
+          byCurrencyAndSubsystem[key] = byCurrencyAndSubsystem[key] || {
+            currency: currency,
+            subsystemLabel: subsystemLabel,
+            externalPurchase: 0,
+          };
+          byCurrencyAndSubsystem[key].externalPurchase += value;
+        });
+        return Object.keys(byCurrencyAndSubsystem).sort().map(function (key) {
+          const entry = byCurrencyAndSubsystem[key];
+          return {
+            currency: entry.currency,
+            subsystemLabel: entry.subsystemLabel,
+            externalPurchase: Math.round(entry.externalPurchase * 100) / 100,
+          };
+        });
+      }
+
+      function collectSubsystemSummaryOvhPlanningValues(project, description, exportType, phase, sourceSubsystems) {
+        const years = getSubsystemSummaryOvhPlanningYears(project, phase);
+        if (!years || !years.length) return [];
+        const yearSet = new Set(years.map(function (year) { return Number(year); }));
+        const usesDeqVmi = (sourceSubsystems || []).some(function (subsystem) {
+          const key = normalizeWbsText(subsystem);
+          return key === "deq" || key === "vmi";
+        });
+        const rows = usesDeqVmi
+          ? (Array.isArray(project.wbsDeqVmiPlanningRows) ? project.wbsDeqVmiPlanningRows : [])
+          : (Array.isArray(project.wbsOverhaulRenewalPlanningRows) ? project.wbsOverhaulRenewalPlanningRows : []);
+        const byCurrencyAndSubsystem = {};
+        rows.forEach(function (row) {
+          const year = getSubsystemSummaryOvhRowYear(row);
+          if (!yearSet.has(Number(year))) return;
+          const rowSubsystem = getSubsystemSummaryOvhRowSubsystem(row);
+          if (!subsystemSummarySourceMatches(sourceSubsystems, rowSubsystem)) return;
+          const rowType = getSubsystemSummaryOvhRowType(row);
+          if (description === "Overhaul" && rowType.indexOf("overhaul") === -1) return;
+          if (description === "Renewal" && rowType.indexOf("renewal") === -1) return;
+          const currency = getSubsystemSummaryOvhRowCurrency(row);
+          if (!currency) return;
+          let value = 0;
+          if (usesDeqVmi) {
+            const unitCost = toNumber(getWbsRowValueByCandidates(row, ["Unit Cost", "unit_cost", "global_cost", "material_cost"])) || 0;
+            if (description === "Overhaul" && exportType === "Ovh_Material") value = unitCost;
+            if (description === "Renewal" && exportType === "Renew_Material") value = unitCost * 0.8;
+            if (description === "Renewal" && exportType === "Renew_T&C") value = unitCost * 0.15;
+            if (description === "Renewal" && exportType === "Renew_Management") value = unitCost * 0.05;
+          } else if (description === "Overhaul" && exportType === "Ovh_Material") {
+            value = toNumber(getWbsRowValueByCandidates(row, ["Global Cost", "global_cost", "Total Global Cost", "total_global_cost"])) || 0;
+          } else if (description === "Renewal" && exportType === "Renew_Management") {
+            value = toNumber(getWbsRowValueByCandidates(row, ["Management Cost", "management_cost"])) || 0;
+          } else if (description === "Renewal" && exportType === "Renew_T&C") {
+            value = toNumber(getWbsRowValueByCandidates(row, ["T&C Cost", "t_c_cost", "tc_cost"])) || 0;
+          } else if (description === "Renewal" && exportType === "Renew_Material") {
+            value = toNumber(getWbsRowValueByCandidates(row, ["Material Cost", "material_cost"])) || 0;
+          }
+          if (!(value > 0)) return;
+          const subsystemLabel = resolveSubsystemSummarySourceSubsystemLabel(sourceSubsystems, rowSubsystem);
+          const key = currency + "||" + subsystemLabel;
+          byCurrencyAndSubsystem[key] = byCurrencyAndSubsystem[key] || {
+            currency: currency,
+            subsystemLabel: subsystemLabel,
+            externalPurchase: 0,
+          };
+          byCurrencyAndSubsystem[key].externalPurchase += value;
+        });
+        return Object.keys(byCurrencyAndSubsystem).sort().map(function (key) {
+          const entry = byCurrencyAndSubsystem[key];
+          return {
+            currency: entry.currency,
+            subsystemLabel: entry.subsystemLabel,
+            externalPurchase: Math.round(entry.externalPurchase * 100) / 100,
+          };
+        });
+      }
+
+      function collectSubsystemSummaryOverhaulRenewalValues(project, description, exportType, phase, sourceSubsystems, projectCurrency) {
+        const isTotalPhase = normalizeWbsText(phase && phase.key) === "total" || normalizeWbsText(phase && phase.label) === "total";
+        return isTotalPhase || exportType === "Ovh_Workload"
+          ? collectSubsystemSummaryOvhSynthesisValues(project, description, exportType, sourceSubsystems, projectCurrency)
+          : collectSubsystemSummaryOvhPlanningValues(project, description, exportType, phase, sourceSubsystems);
+      }
+
       function buildSubsystemSummaryMaterialsRows(project, sheetDefs) {
         const costCenterProject = project.subsystemSummaryCostCenters || {};
         const firmingProject = project.subsystemSummaryFirming || {};
@@ -7412,9 +7685,10 @@
               const dutyValue = onOffshore === "Offshore"
                 ? Math.round((externalPurchase * customDutyPercent / 100) * 100) / 100
                 : "";
+              const longDescriptionSubsystem = entry.subsystemLabel || sheet.label;
               const longDescription = (description === "Preventive spares" || description === "Corrective spares")
-                ? [sheet.label, description, currency, guideRow.periodLabel].join("_")
-                : [sheet.label, description, guideRow.periodLabel].join("_");
+                ? [longDescriptionSubsystem, description, currency, guideRow.periodLabel].join("_")
+                : [longDescriptionSubsystem, description, guideRow.periodLabel].join("_");
               const outputRow = {
                 "Phase": phase.label || phase.key,
                 "Period": guideRow.periodLabel,
@@ -7553,7 +7827,7 @@
                 "Long_Description": ["Infra_Management", description, guideRow.periodLabel].join("_"),
                 "Quantity": 1,
                 "Unit": "",
-                "External Purchase â€“ Variable": "",
+                "External Purchase – Variable": "",
                 "External Services Variable Cost": externalServices,
                 "Shift": "",
                 "Cat 1 (Hours or Months)": "",
@@ -7650,16 +7924,127 @@
         return rowsBySheetKey;
       }
 
+      function buildSubsystemSummaryOverhaulRenewalRows(project, sheetDefs) {
+        const costCenterProject = project.subsystemSummaryCostCenters || {};
+        const firmingProject = project.subsystemSummaryFirming || {};
+        const pioProject = project.subsystemSummaryPio || {};
+        const projectCurrency = String(costCenterProject.projectCurrency || "").trim().toUpperCase();
+        const projectCaratUnit = getSubsystemSummaryProjectCaratUnit(project);
+        const rowsBySheetKey = {};
+        const seen = new Set();
+        const definitions = [
+          { description: "Overhaul", exportType: "Ovh_Workload" },
+          { description: "Overhaul", exportType: "Ovh_Material" },
+          { description: "Renewal", exportType: "Renew_Management" },
+          { description: "Renewal", exportType: "Renew_T&C" },
+          { description: "Renewal", exportType: "Renew_Material" },
+        ];
+
+        (sheetDefs || []).forEach(function (sheet) {
+          if (!sheet || sheet.key === "Infra_Management" || !sheet.sourceSubsystems.length) return;
+          (project.phases || []).forEach(function (phase) {
+            definitions.forEach(function (definition) {
+              const planning = resolveSubsystemSummaryOverhaulRenewalPlanning(project, phase, sheet.sourceSubsystems, definition.description);
+              if (!planning.allowed) return;
+              const entries = collectSubsystemSummaryOverhaulRenewalValues(
+                project,
+                definition.description,
+                definition.exportType,
+                phase,
+                sheet.sourceSubsystems,
+                projectCurrency
+              );
+              entries.forEach(function (entry) {
+                const isWorkload = definition.exportType === "Ovh_Workload";
+                const currency = String(entry.currency || projectCurrency || "").trim().toUpperCase();
+                const externalPurchase = isWorkload ? "" : Math.round((toNumber(entry.externalPurchase) || 0) * 100) / 100;
+                if (!currency) return;
+                if (!isWorkload && !(externalPurchase > 0)) return;
+                const metadata = resolveSubsystemSummaryOverhaulRenewalMetadata(project, definition.description, definition.exportType, phase, sheet.sourceSubsystems);
+                const onOffshore = currency && projectCurrency
+                  ? (currency === projectCurrency ? "Onshore" : "Offshore")
+                  : "";
+                const isMaterialType = definition.exportType === "Ovh_Material" || definition.exportType === "Renew_Material";
+                const freightPercent = isMaterialType
+                  ? (onOffshore === "Onshore" ? (toNumber(pioProject.onshoreFreightPercent) || 0) : (toNumber(pioProject.offshoreFreightPercent) || 0))
+                  : 0;
+                const freightValue = isMaterialType ? Math.round((externalPurchase * freightPercent / 100) * 100) / 100 : "";
+                const dutyPercent = isMaterialType && currency !== projectCurrency
+                  ? getSubsystemSummaryCustomDutyPercent(project, sheet.key, sheet.sourceSubsystems)
+                  : 0;
+                const dutyValue = dutyPercent ? Math.round((externalPurchase * dutyPercent / 100) * 100) / 100 : "";
+                const priceListCode1 = definition.description === "Overhaul" ? "OVHL" : "RENEW";
+                const priceListCode2 = (definition.exportType === "Ovh_Material" || definition.exportType === "Renew_Material")
+                  ? "Spares and Material"
+                  : "Labour";
+                const longDescriptionSubsystem = entry.subsystemLabel || sheet.label;
+                const longDescription = definition.exportType === "Ovh_Workload"
+                  ? [longDescriptionSubsystem, definition.description, "Workload"].join("_")
+                  : definition.exportType === "Ovh_Material"
+                    ? [longDescriptionSubsystem, definition.description, "Material", currency].join("_")
+                    : definition.exportType === "Renew_Material"
+                      ? [longDescriptionSubsystem, definition.description, "Material", currency].join("_")
+                      : definition.exportType === "Renew_Management"
+                        ? [longDescriptionSubsystem, definition.description, "Management"].join("_")
+                        : [longDescriptionSubsystem, definition.description, "T&C"].join("_");
+                const outputRow = {
+                  "Phase": phase.label || phase.key,
+                  "Period": "",
+                  "Type": definition.exportType,
+                  "Description": definition.description,
+                  "Long_Description": longDescription,
+                  "Quantity": 1,
+                  "Unit": "",
+                  "External Purchase – Variable": externalPurchase,
+                  "External Services Variable Cost": "",
+                  "Shift": "",
+                  "Cat 1 (Hours or Months)": "",
+                  "Cost Centre": "",
+                  "Currency": currency,
+                  "Planning Guide": planning.planningGuide || "",
+                  "Nb Tot. of Occurency": 1,
+                  "Costs Type": metadata.costsType || "",
+                  "Carat Unit": projectCaratUnit,
+                  "Unit Role": resolveSubsystemSummaryUnitRole(project, projectCaratUnit, null),
+                  "On/Off Shore": onOffshore,
+                  "PBS/IBS": metadata.pbsIbs || "",
+                  "ABS": metadata.abs || "",
+                  "Associated WP": metadata.associatedWp || "",
+                  "Tasks": metadata.tasks || "",
+                  "Delegated person": "INFRA",
+                  "Firming rule": currency ? ((firmingProject.firmingTexts || {})[currency] || "") : "",
+                  "Freight per Unit": freightValue,
+                  "Insurances-Rates & Taxes": dutyValue,
+                  "Price List Code 1": priceListCode1,
+                  "Price List Code 2": priceListCode2,
+                  "Price List Code 3": sheet.label,
+                };
+                const uniqueKey = SUBSYSTEM_SUMMARY_HEADERS.map(function (header) {
+                  return normalizeWbsText(outputRow[header]);
+                }).join("|");
+                if (seen.has(uniqueKey)) return;
+                seen.add(uniqueKey);
+                if (!rowsBySheetKey[sheet.key]) rowsBySheetKey[sheet.key] = [];
+                rowsBySheetKey[sheet.key].push(outputRow);
+              });
+            });
+          });
+        });
+        return rowsBySheetKey;
+      }
+
       function buildSubsystemSummaryVirtualFiles(project) {
         const sheetDefs = getSubsystemSummarySheetDefinitions(project);
         const workloadRowsBySheet = buildSubsystemSummaryWorkloadRows(project);
         const materialRowsBySheet = buildSubsystemSummaryMaterialsRows(project, sheetDefs);
         const subcontractingRowsBySheet = buildSubsystemSummarySubcontractingRows(project, sheetDefs);
+        const overhaulRenewalRowsBySheet = buildSubsystemSummaryOverhaulRenewalRows(project, sheetDefs);
         const allSheets = sheetDefs.map(function (sheet) {
           return Object.assign({}, sheet, {
             rows: (workloadRowsBySheet[sheet.key] || [])
               .concat(materialRowsBySheet[sheet.key] || [])
               .concat(subcontractingRowsBySheet[sheet.key] || [])
+              .concat(overhaulRenewalRowsBySheet[sheet.key] || [])
           });
         });
         if (!allSheets.some(function (sheet) { return sheet.key === "Infra_Management"; })) {
