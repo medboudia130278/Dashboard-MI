@@ -972,6 +972,88 @@
         </div>
       </section>
 
+      <section id="priceListsWorkspace" class="hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+        <div class="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
+          <div>
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-bold uppercase tracking-[0.18em]">
+              <span class="material-symbols-outlined text-[16px]">price_change</span>
+              Pricing &amp; Risks
+            </div>
+            <h2 class="mt-3 text-2xl font-black tracking-tight">Price Lists Workspace</h2>
+            <p class="mt-2 text-sm text-slate-500">Configure client price-list columns and the global Text 1 to Text 9 mapping per project.</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <div id="priceListsWorkspaceStatus" class="text-xs font-semibold text-slate-500">No project selected.</div>
+            <button id="refreshPriceListsWorkspaceBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold hover:bg-slate-100 transition-all">
+              <span class="material-symbols-outlined text-[18px]">refresh</span>
+              Refresh
+            </button>
+            <button id="closePriceListsWorkspaceBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold hover:bg-slate-100 transition-all">
+              <span class="material-symbols-outlined text-[18px]">close</span>
+              Close
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-6 grid grid-cols-1 xl:grid-cols-[240px_minmax(0,1fr)] gap-4">
+          <aside class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div>
+              <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">Projects</h3>
+              <p class="mt-1 text-xs text-slate-500">Choose one project to configure its client price-list mapping.</p>
+            </div>
+            <div id="priceListsProjectList" class="mt-4 space-y-2"></div>
+          </aside>
+
+          <div class="min-w-0 space-y-6">
+            <div id="priceListsWorkspaceEmpty" class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-sm text-slate-500">
+              No project available yet. Import workbooks with <span class="font-semibold">General Parameters</span> in the main dashboard, then refresh this workspace.
+            </div>
+
+            <div id="priceListsWorkspaceContent" class="hidden min-w-0 space-y-6">
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                  <div>
+                    <h3 id="priceListsCurrentProjectTitle" class="text-xl font-black tracking-tight">Project</h3>
+                    <p id="priceListsCurrentProjectMeta" class="mt-2 text-sm text-slate-500">Context</p>
+                  </div>
+                  <label class="block min-w-[190px]">
+                    <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Client price Lists</span>
+                    <select id="priceListsCountSelect" class="mt-2 w-full rounded-xl border-slate-200 px-3 py-2 text-sm font-semibold"></select>
+                  </label>
+                </div>
+              </section>
+
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                  <div>
+                    <h3 class="text-base font-bold">Client price-list values</h3>
+                    <p class="mt-1 text-sm text-slate-500">Rows are manual. Reducing the number of visible price lists masks columns but keeps their values.</p>
+                  </div>
+                  <button id="priceListsAddRowBtn" type="button" class="inline-flex items-center gap-2 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-2 text-sm font-semibold text-cyan-700 hover:bg-cyan-100 transition-all">
+                    <span class="material-symbols-outlined text-[18px]">add</span>
+                    Add row
+                  </button>
+                </div>
+                <div class="mt-4 overflow-x-auto custom-scrollbar">
+                  <table class="min-w-full text-sm">
+                    <thead id="priceListsTableHead" class="text-[10px] uppercase tracking-wider text-slate-400"></thead>
+                    <tbody id="priceListsTableBody" class="divide-y divide-slate-200"></tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div>
+                  <h3 class="text-base font-bold">Text mapping</h3>
+                  <p class="mt-1 text-sm text-slate-500">Global mapping for Text 1 to Text 9. Client Price List choices follow the selected count above.</p>
+                </div>
+                <div id="priceListsTextMappingGrid" class="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"></div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section id="wbsWorkspace" class="hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
         <div class="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
           <div>

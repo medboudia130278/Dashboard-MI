@@ -73,6 +73,27 @@
             },
           },
         },
+        pricing_risks: {
+          label: "Pricing & Risks",
+          icon: "price_change",
+          items: {
+            price_lists: {
+              label: "Price Lists",
+              description: "Define client price-list columns and the Text 1 to Text 9 mapping used by future exports.",
+              inputs: ["Client price-list columns", "Manual values", "Text mapping"],
+            },
+            risk_register: {
+              label: "Risk Register",
+              description: "Define the risk structure, scoring, and cost impact logic for scenario management.",
+              inputs: ["Risk categories", "Probability-impact logic", "Mitigation ownership"],
+            },
+            wbs: {
+              label: "WBS",
+              description: "Define the work breakdown structure source, mapping granularity, and expected ownership levels.",
+              inputs: ["WBS source workbook", "WBS level mapping", "Project ownership rules"],
+            },
+          },
+        },
         support_costs: {
           label: "Support Costs",
           icon: "inventory_2",
@@ -159,6 +180,7 @@
       const vehiclesFallbackKey         = "cost-summary-mi-vehicles-fallback-v1";
       const oscFallbackKey              = "cost-summary-mi-osc-fallback-v1";
       const mandatoryTrainingFallbackKey = "cost-summary-mi-mandatory-training-fallback-v1";
+      const priceListsFallbackKey = "cost-summary-mi-price-lists-fallback-v1";
       const sharedStoreWorkbookPrefix = "shared-store-workbook-v1:";
       const sharedStoreWorkbookLitePrefix = "shared-store-workbook-lite-v1:";
       const sharedSettingsKey = "shared-store-settings-v1";
@@ -688,6 +710,18 @@
         window.updateToolbarStatusDots?.();
       }
 
+      function readPriceListsFallbackState() {
+        const all = safeReadJson(priceListsFallbackKey, {});
+        return all[getFallbackStudyId()] || {};
+      }
+
+      function writePriceListsFallbackState(nextState) {
+        const all = safeReadJson(priceListsFallbackKey, {});
+        all[getFallbackStudyId()] = nextState;
+        localStorage.setItem(priceListsFallbackKey, JSON.stringify(all));
+        window.updateToolbarStatusDots?.();
+      }
+
       function buildMtCurrencyOptions(projectKey) {
         const sharedSettings = safeReadJson(sharedSettingsKey, {}) || {};
         const baseCurrency   = String(sharedSettings.exchangeBase || "USD").toUpperCase();
@@ -810,6 +844,7 @@
         { key: vehiclesFallbackKey, name: "vehicles" },
         { key: oscFallbackKey, name: "otherSupportCosts" },
         { key: mandatoryTrainingFallbackKey, name: "mandatoryTraining" },
+        { key: priceListsFallbackKey, name: "priceLists" },
       ];
 
       function cloneJsonValue(value) {
@@ -853,6 +888,7 @@
             costCenters: cloneJsonValue(modules.costCenters),
             pioDefinition: cloneJsonValue(modules.pioDefinition),
             guidePlanning: cloneJsonValue(modules.guidePlanning),
+            priceLists: cloneJsonValue(modules.priceLists),
           },
           dataSources: {
             currencyExchange: cloneJsonValue(modules.currencyExchange),
@@ -868,6 +904,9 @@
             vehicles: cloneJsonValue(modules.vehicles),
             otherSupportCosts: cloneJsonValue(modules.otherSupportCosts),
             mandatoryTraining: cloneJsonValue(modules.mandatoryTraining),
+          },
+          pricingRisks: {
+            priceLists: cloneJsonValue(modules.priceLists),
           },
         };
         return {
@@ -920,6 +959,7 @@
         if (!$("vehiclesWorkspace")?.classList.contains("hidden")) renderFallbackVehiclesWorkspace();
         if (!$("oscWorkspace")?.classList.contains("hidden")) renderFallbackOscWorkspace();
         if (!$("mandatoryTrainingWorkspace")?.classList.contains("hidden")) renderFallbackMandatoryTrainingWorkspace();
+        if (!$("priceListsWorkspace")?.classList.contains("hidden")) renderFallbackPriceListsWorkspace();
         if (!$("subsystemSummaryWorkspace")?.classList.contains("hidden")) renderSubsystemSummaryWorkspace();
       }
 
@@ -4403,6 +4443,162 @@
           : '<tr><td colspan="3" class="py-6 text-center text-sm text-slate-500">No currency found in Synthesis or Cost Centers for this project.</td></tr>';
       }
 
+      function createFallbackPriceListRow() {
+        return {
+          id: "pl_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+          values: {},
+        };
+      }
+
+      function normalizeFallbackPriceListProjectConfig(projectConfig) {
+        const config = projectConfig && typeof projectConfig === "object" ? projectConfig : {};
+        const count = Math.max(0, Math.min(9, Math.round(toNumber(config.count) || 0)));
+        const rows = Array.isArray(config.rows) ? config.rows.map(function (row, index) {
+          return {
+            id: row && row.id ? String(row.id) : "pl_row_" + index,
+            values: Object.assign({}, row && row.values ? row.values : {}),
+          };
+        }) : [];
+        const textMappings = Array.from({ length: 9 }, function (_, index) {
+          const value = Array.isArray(config.textMappings) ? config.textMappings[index] : "";
+          return value || "Not applicable";
+        });
+        return { count: count, rows: rows, textMappings: textMappings };
+      }
+
+      function buildFallbackPriceListsProjects() {
+        const persisted = readPriceListsFallbackState();
+        return buildCombinedProjectPhaseProjects().map(function (project) {
+          const lookupKeys = getProjectLookupKeys(project);
+          const current = readMergedPersistedFallbackProjectState(persisted, lookupKeys);
+          return Object.assign({}, project, {
+            priceListsConfig: normalizeFallbackPriceListProjectConfig(current),
+            persistedKeys: lookupKeys,
+          });
+        });
+      }
+
+      function saveFallbackPriceListsProjectConfig(projectKey, updater) {
+        if (!projectKey) return;
+        const projects = buildFallbackPriceListsProjects();
+        const project = findProjectByStoredKey(projects, projectKey) || projects.find(function (entry) { return entry.projectKey === projectKey; });
+        const storageKey = project ? project.projectKey : projectKey;
+        const lookupKeys = project ? getProjectLookupKeys(project) : [projectKey];
+        const currentState = readPriceListsFallbackState();
+        const currentConfig = normalizeFallbackPriceListProjectConfig(readMergedPersistedFallbackProjectState(currentState, lookupKeys));
+        const nextConfig = normalizeFallbackPriceListProjectConfig(typeof updater === "function" ? updater(currentConfig) : updater);
+        currentState[storageKey] = nextConfig;
+        writePriceListsFallbackState(currentState);
+      }
+
+      function getFallbackPriceListTextChoices(count) {
+        return ["Project_name", "Phase", "Phase code", "Duration"]
+          .concat(Array.from({ length: count }, function (_, index) { return "Client Price List " + (index + 1); }))
+          .concat(["Not applicable"]);
+      }
+
+      function renderFallbackPriceListsWorkspace() {
+        const workspace = $("priceListsWorkspace");
+        const list = $("priceListsProjectList");
+        const empty = $("priceListsWorkspaceEmpty");
+        const content = $("priceListsWorkspaceContent");
+        const status = $("priceListsWorkspaceStatus");
+        const title = $("priceListsCurrentProjectTitle");
+        const meta = $("priceListsCurrentProjectMeta");
+        const countSelect = $("priceListsCountSelect");
+        const tableHead = $("priceListsTableHead");
+        const tableBody = $("priceListsTableBody");
+        const mappingGrid = $("priceListsTextMappingGrid");
+        const addRowBtn = $("priceListsAddRowBtn");
+        if (!workspace || !list || !empty || !content || !status || !title || !meta || !countSelect || !tableHead || !tableBody || !mappingGrid || !addRowBtn) return;
+
+        const projects = buildFallbackPriceListsProjects();
+        const currentKey = workspace.dataset.currentProjectKey && projects.some(function (project) {
+          return project.projectKey === workspace.dataset.currentProjectKey;
+        }) ? workspace.dataset.currentProjectKey : (projects[0] ? projects[0].projectKey : "");
+        const currentProject = projects.find(function (project) { return project.projectKey === currentKey; }) || null;
+
+        workspace.classList.remove("hidden");
+        setFallbackDetailWorkspaceActive(true);
+        status.textContent = projects.length ? (projects.length + " project(s) available") : "No project available.";
+
+        list.innerHTML = projects.map(function (project) {
+          const active = currentProject && project.projectKey === currentProject.projectKey;
+          const config = project.priceListsConfig || normalizeFallbackPriceListProjectConfig(null);
+          const hasRows = config.rows.some(function (row) {
+            return Object.values(row.values || {}).some(function (value) { return String(value || "").trim(); });
+          });
+          const badges = [
+            '<span class="inline-flex items-center rounded-full border border-cyan-200 bg-cyan-50 px-2 py-0.5 text-[10px] font-bold text-cyan-700">' + config.count + ' PL</span>',
+            hasRows ? '<span class="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Rows</span>' : '<span class="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">Empty</span>',
+          ].join("");
+          return (
+            '<button type="button" data-fallback-price-lists-project-select="' + escapeHtml(project.projectKey) + '" class="w-full rounded-xl border px-3 py-3 text-left transition-all ' + (active ? "border-amber-300 bg-amber-50 shadow-sm ring-1 ring-amber-200" : "border-slate-200 bg-white hover:bg-slate-100") + '">' +
+              '<div class="text-sm font-semibold text-slate-900">' + escapeHtml(project.projectName) + '</div>' +
+              '<div class="mt-1 text-xs text-slate-500">' + escapeHtml(project.projectContext || "No context") + '</div>' +
+              '<div class="mt-2 flex flex-wrap gap-1.5">' + badges + '</div>' +
+            '</button>'
+          );
+        }).join("");
+
+        if (!currentProject) {
+          empty.classList.remove("hidden");
+          content.classList.add("hidden");
+          return;
+        }
+
+        workspace.dataset.currentProjectKey = currentProject.projectKey;
+        empty.classList.add("hidden");
+        content.classList.remove("hidden");
+        title.textContent = currentProject.projectName;
+        meta.textContent = (currentProject.projectType || "No project type") + " | " + (currentProject.projectContext || "No context");
+
+        const config = currentProject.priceListsConfig || normalizeFallbackPriceListProjectConfig(null);
+        countSelect.setAttribute("data-project-key", currentProject.projectKey);
+        countSelect.innerHTML = Array.from({ length: 10 }, function (_, value) {
+          return '<option value="' + value + '"' + (value === config.count ? " selected" : "") + '>' + value + '</option>';
+        }).join("");
+        addRowBtn.setAttribute("data-project-key", currentProject.projectKey);
+        addRowBtn.disabled = config.count <= 0;
+        addRowBtn.classList.toggle("opacity-50", config.count <= 0);
+        addRowBtn.classList.toggle("cursor-not-allowed", config.count <= 0);
+
+        const visibleColumns = Array.from({ length: config.count }, function (_, index) { return index + 1; });
+        tableHead.innerHTML = '<tr>' + visibleColumns.map(function (colIndex) {
+          return '<th class="text-left py-3 px-3 whitespace-nowrap">Client Price List ' + colIndex + '</th>';
+        }).join("") + '<th class="text-right py-3 pl-3 w-16">Actions</th></tr>';
+        if (config.count <= 0) {
+          tableBody.innerHTML = '<tr><td colspan="1" class="py-8 text-center text-sm text-slate-500">Choose a Client price Lists number from 1 to 9 to create visible columns.</td></tr>';
+        } else if (!config.rows.length) {
+          tableBody.innerHTML = '<tr><td colspan="' + (config.count + 1) + '" class="py-8 text-center text-sm text-slate-500">No manual row yet. Use Add row to start.</td></tr>';
+        } else {
+          tableBody.innerHTML = config.rows.map(function (row) {
+            return '<tr>' + visibleColumns.map(function (colIndex) {
+              const field = "clientPriceList" + colIndex;
+              return '<td class="py-2 px-3 min-w-[180px]"><input type="text" data-fallback-price-list-cell data-project-key="' + escapeHtml(currentProject.projectKey) + '" data-row-id="' + escapeHtml(row.id) + '" data-field="' + field + '" class="w-full rounded-xl border-slate-200 px-3 py-2 text-sm" value="' + escapeHtml((row.values || {})[field] || "") + '"/></td>';
+            }).join("") +
+            '<td class="py-2 pl-3 text-right"><button type="button" data-fallback-price-list-row-remove data-project-key="' + escapeHtml(currentProject.projectKey) + '" data-row-id="' + escapeHtml(row.id) + '" class="inline-flex items-center justify-center size-9 rounded-xl border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 transition-all" title="Remove row"><span class="material-symbols-outlined text-[18px]">delete</span></button></td>' +
+            '</tr>';
+          }).join("");
+        }
+
+        const choices = getFallbackPriceListTextChoices(config.count);
+        mappingGrid.innerHTML = Array.from({ length: 9 }, function (_, index) {
+          const currentValue = config.textMappings[index] || "Not applicable";
+          const finalChoices = choices.indexOf(currentValue) >= 0 ? choices : choices.concat([currentValue]);
+          return (
+            '<label class="block rounded-xl border border-slate-200 bg-white px-4 py-3">' +
+              '<span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Text ' + (index + 1) + '</span>' +
+              '<select data-fallback-price-list-text-map data-project-key="' + escapeHtml(currentProject.projectKey) + '" data-index="' + index + '" class="mt-2 w-full rounded-xl border-slate-200 px-3 py-2 text-sm">' +
+                finalChoices.map(function (choice) {
+                  return '<option value="' + escapeHtml(choice) + '"' + (choice === currentValue ? " selected" : "") + '>' + escapeHtml(choice) + '</option>';
+                }).join("") +
+              '</select>' +
+            '</label>'
+          );
+        }).join("");
+      }
+
       function saveFallbackProjectField(projectKey, field, value) {
         const current = readProjectPhaseFallbackState();
         const nextProject = Object.assign({}, current[projectKey] || {});
@@ -4537,6 +4733,11 @@
       function closeFirmingRulesWorkspace() {
         setFallbackDetailWorkspaceActive(false);
         $("firmingRulesWorkspace")?.classList.add("hidden");
+      }
+
+      function closePriceListsWorkspace() {
+        setFallbackDetailWorkspaceActive(false);
+        $("priceListsWorkspace")?.classList.add("hidden");
       }
 
       function closeGuidePlanningWorkspace() {
@@ -10542,6 +10743,9 @@
         if (itemKey !== "subsystem_summary") {
           closeSubsystemSummaryWorkspace();
         }
+        if (itemKey !== "price_lists") {
+          closePriceListsWorkspace();
+        }
 
         if (itemKey === "subsystem_summary") {
           window.__costSummaryUseFallbackProjectPhases = false;
@@ -10561,8 +10765,32 @@
           closeVehiclesWorkspace();
           closeOscWorkspace();
           closeMandatoryTrainingWorkspace();
+          closePriceListsWorkspace();
           closeDrawer();
           renderSubsystemSummaryWorkspace();
+          return;
+        }
+
+        if (itemKey === "price_lists") {
+          window.__costSummaryUseFallbackProjectPhases = false;
+          window.__costSummaryUseFallbackCostCenters = false;
+          window.__costSummaryUseFallbackPioDefinition = false;
+          window.__costSummaryUseFallbackGuidePlanning = false;
+          closeProjectPhasesWorkspace();
+          closeCostCentersWorkspace();
+          closeGuidePlanningWorkspace();
+          closeCurrencyExchangeWorkspace();
+          closeFirmingRulesWorkspace();
+          closePioDefinitionWorkspace();
+          closeWorkloadSynthesisWorkspace();
+          closeWhiteCollarDefinitionWorkspace();
+          closeWbsWorkspace();
+          closeToolsConsumablesWorkspace();
+          closeVehiclesWorkspace();
+          closeOscWorkspace();
+          closeMandatoryTrainingWorkspace();
+          closeDrawer();
+          renderFallbackPriceListsWorkspace();
           return;
         }
 
@@ -10883,6 +11111,7 @@
           closeVehiclesWorkspace();
           closeOscWorkspace();
           closeMandatoryTrainingWorkspace();
+          closePriceListsWorkspace();
           closeSubsystemSummaryWorkspace();
           setFallbackDetailWorkspaceActive(false);
         },
@@ -10992,6 +11221,7 @@
           closeVehiclesWorkspace();
           closeOscWorkspace();
           closeMandatoryTrainingWorkspace();
+          closePriceListsWorkspace();
           closeSubsystemSummaryWorkspace();
           closeDrawer();
           setFallbackDetailWorkspaceActive(true);
@@ -11026,6 +11256,10 @@
           }
           if (itemKey === "mandatory_training") {
             renderFallbackMandatoryTrainingWorkspace();
+            return true;
+          }
+          if (itemKey === "price_lists") {
+            renderFallbackPriceListsWorkspace();
             return true;
           }
           if (itemKey === "subsystem_summary") {
@@ -11138,10 +11372,30 @@
             var s = _readStatusSlice("cost-summary-mi-mandatory-training-fallback-v1");
             return Object.values(s).some(function(p) { return p && Object.keys(p).length > 0; }) ? "filled" : "empty";
           }
+          case "price_lists": {
+            var s = _readStatusSlice("cost-summary-mi-price-lists-fallback-v1");
+            var projects = Object.values(s);
+            var statuses = projects.map(function(p) {
+              return {
+                hasCount: p && Number(p.count || 0) > 0,
+                hasRows: p && Array.isArray(p.rows) && p.rows.some(function(row) {
+                  return row && row.values && Object.values(row.values).some(function(value) { return String(value || "").trim(); });
+                }),
+                hasMappings: p && Array.isArray(p.textMappings) && p.textMappings.some(function(value) {
+                  return String(value || "").trim() && String(value || "") !== "Not applicable";
+                })
+              };
+            });
+            var hasCount = statuses.some(function(status) { return status.hasCount; });
+            var isFilled = statuses.some(function(status) {
+              return status.hasCount && status.hasRows && status.hasMappings;
+            });
+            return isFilled ? "filled" : hasCount ? "partial" : "empty";
+          }
           default: return "na";
         }
       }
-
+      // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       function _statusDot(status) {
         if (status === "na") return "";
         var colors = { empty: "#cbd5e1", partial: "#fcd34d", filled: "#6ee7b7" };
@@ -11369,6 +11623,14 @@
             return;
           }
 
+          const selectPriceListsProjectBtn = event.target.closest("[data-fallback-price-lists-project-select]");
+          if (selectPriceListsProjectBtn) {
+            event.preventDefault();
+            $("priceListsWorkspace").dataset.currentProjectKey = selectPriceListsProjectBtn.getAttribute("data-fallback-price-lists-project-select") || "";
+            renderFallbackPriceListsWorkspace();
+            return;
+          }
+
           const selectWorkloadProjectBtn = event.target.closest("[data-fallback-workload-project-select]");
           if (selectWorkloadProjectBtn) {
             event.preventDefault();
@@ -11445,6 +11707,11 @@
             return;
           }
 
+          if (event.target.closest("#closePriceListsWorkspaceBtn")) {
+            closePriceListsWorkspace();
+            return;
+          }
+
           if (event.target.closest("#closePioDefinitionWorkspaceBtn")) {
             closePioDefinitionWorkspace();
             return;
@@ -11503,6 +11770,40 @@
           if (event.target.closest("#refreshFirmingRulesWorkspaceBtn")) {
             event.preventDefault();
             renderFallbackFirmingRulesWorkspace();
+            return;
+          }
+
+          if (event.target.closest("#refreshPriceListsWorkspaceBtn")) {
+            event.preventDefault();
+            renderFallbackPriceListsWorkspace();
+            return;
+          }
+
+          const addPriceListRowBtn = event.target.closest("#priceListsAddRowBtn");
+          if (addPriceListRowBtn) {
+            event.preventDefault();
+            const projectKey = addPriceListRowBtn.getAttribute("data-project-key") || "";
+            saveFallbackPriceListsProjectConfig(projectKey, function (config) {
+              if (config.count <= 0) return config;
+              return Object.assign({}, config, { rows: config.rows.concat([createFallbackPriceListRow()]) });
+            });
+            $("priceListsWorkspace").dataset.currentProjectKey = projectKey;
+            renderFallbackPriceListsWorkspace();
+            return;
+          }
+
+          const removePriceListRowBtn = event.target.closest("[data-fallback-price-list-row-remove]");
+          if (removePriceListRowBtn) {
+            event.preventDefault();
+            const projectKey = removePriceListRowBtn.getAttribute("data-project-key") || "";
+            const rowId = removePriceListRowBtn.getAttribute("data-row-id") || "";
+            saveFallbackPriceListsProjectConfig(projectKey, function (config) {
+              return Object.assign({}, config, {
+                rows: config.rows.filter(function (row) { return row.id !== rowId; }),
+              });
+            });
+            $("priceListsWorkspace").dataset.currentProjectKey = projectKey;
+            renderFallbackPriceListsWorkspace();
             return;
           }
 
@@ -11905,6 +12206,7 @@
             closePioDefinitionWorkspace();
             closeWorkloadSynthesisWorkspace();
             closeWbsWorkspace();
+            closePriceListsWorkspace();
             closeSubsystemSummaryWorkspace();
           }
         });
@@ -11928,6 +12230,52 @@
             const files = buildSubsystemSummaryVirtualFiles(project);
             const file = files.find(function (entry) { return ws && entry.key === ws.dataset.currentFileKey; }) || files[0] || null;
             renderSubsystemSummaryPreview(project, file);
+            return;
+          }
+
+          if (event.target.id === "priceListsCountSelect") {
+            const projectKey = event.target.getAttribute("data-project-key") || "";
+            const count = Math.max(0, Math.min(9, Math.round(toNumber(event.target.value) || 0)));
+            saveFallbackPriceListsProjectConfig(projectKey, function (config) {
+              const mappings = config.textMappings.map(function (mapping) {
+                const clientMatch = String(mapping || "").match(/^Client Price List\s+(\d+)$/i);
+                if (clientMatch && Number(clientMatch[1]) > count) return "Not applicable";
+                return mapping || "Not applicable";
+              });
+              return Object.assign({}, config, { count: count, textMappings: mappings });
+            });
+            $("priceListsWorkspace").dataset.currentProjectKey = projectKey;
+            renderFallbackPriceListsWorkspace();
+            return;
+          }
+
+          const priceListTextMap = event.target.closest("[data-fallback-price-list-text-map]");
+          if (priceListTextMap) {
+            const projectKey = priceListTextMap.getAttribute("data-project-key") || "";
+            const index = Math.max(0, Math.min(8, Math.round(toNumber(priceListTextMap.getAttribute("data-index")) || 0)));
+            saveFallbackPriceListsProjectConfig(projectKey, function (config) {
+              const textMappings = config.textMappings.slice();
+              textMappings[index] = priceListTextMap.value || "Not applicable";
+              return Object.assign({}, config, { textMappings: textMappings });
+            });
+            return;
+          }
+
+          const priceListCell = event.target.closest("[data-fallback-price-list-cell]");
+          if (priceListCell) {
+            const projectKey = priceListCell.getAttribute("data-project-key") || "";
+            const rowId = priceListCell.getAttribute("data-row-id") || "";
+            const field = priceListCell.getAttribute("data-field") || "";
+            saveFallbackPriceListsProjectConfig(projectKey, function (config) {
+              return Object.assign({}, config, {
+                rows: config.rows.map(function (row) {
+                  if (row.id !== rowId) return row;
+                  const values = Object.assign({}, row.values || {});
+                  values[field] = priceListCell.value || "";
+                  return Object.assign({}, row, { values: values });
+                }),
+              });
+            });
             return;
           }
 

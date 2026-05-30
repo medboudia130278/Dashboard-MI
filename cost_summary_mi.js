@@ -927,6 +927,28 @@ function computeModuleStatus(moduleKey) {
       const s = readFallbackStudySlice("cost-summary-mi-mandatory-training-fallback-v1");
       return Object.values(s).some(p => p && Object.keys(p).length > 0) ? "filled" : "empty";
     }
+    case "price_lists": {
+      const projectStatus = (project) => {
+        if (!project) return { hasCount: false, hasRows: false, hasMappings: false };
+        return {
+          hasCount: Number(project.count || 0) > 0,
+          hasRows: Array.isArray(project.rows) && project.rows.some((row) =>
+            row?.values && Object.values(row.values).some((value) => String(value || "").trim())
+          ),
+          hasMappings: Array.isArray(project.textMappings) && project.textMappings.some((value) =>
+            String(value || "").trim() && String(value || "") !== "Not applicable"
+          ),
+        };
+      };
+      const primaryStatuses = Object.values(getPrimaryProjectConfigs(state.studyConfig?.studySetup?.priceLists)).map(projectStatus);
+      if (primaryStatuses.some((status) => status.hasCount && status.hasRows && status.hasMappings)) return "filled";
+      if (primaryStatuses.some((status) => status.hasCount)) return "partial";
+      const s = readFallbackStudySlice("cost-summary-mi-price-lists-fallback-v1");
+      const fallbackStatuses = Object.values(s).map(projectStatus);
+      const hasCount = fallbackStatuses.some(status => status.hasCount);
+      if (fallbackStatuses.some((status) => status.hasCount && status.hasRows && status.hasMappings)) return "filled";
+      return hasCount ? "partial" : "empty";
+    }
     case "subsystem_summary": {
       const required = ["project_phases", "cost_centers", "workload_synthesis", "wbs"];
       const statuses = required.map((key) => computeModuleStatus(key));
@@ -934,7 +956,6 @@ function computeModuleStatus(moduleKey) {
       if (statuses.some((status) => status === "filled" || status === "partial")) return "partial";
       return "empty";
     }
-    case "price_lists":
     case "risk_register":
     case "mercury_interface":
       return "empty";
@@ -1075,6 +1096,7 @@ const fallbackWorkspaceItems = new Set([
   "vehicles",
   "mandatory_training",
   "other_support_costs",
+  "price_lists",
   "subsystem_summary",
 ]);
 
@@ -1590,6 +1612,7 @@ const CONFIG_EXPORT_FALLBACK_STORES = {
   vehicles: "cost-summary-mi-vehicles-fallback-v1",
   otherSupportCosts: "cost-summary-mi-osc-fallback-v1",
   mandatoryTraining: "cost-summary-mi-mandatory-training-fallback-v1",
+  priceLists: "cost-summary-mi-price-lists-fallback-v1",
 };
 
 function cloneConfigValue(value) {
@@ -1636,6 +1659,7 @@ function buildConfigExportModules() {
     currencyExchange: state.studyConfig?.dataSources?.currencyExchangeRates?.projects || {},
     firmingRules: state.studyConfig?.dataSources?.firmingRules?.projects || {},
     guidePlanning: state.studyConfig?.studySetup?.guidePlanningDefinition?.projects || {},
+    priceLists: state.studyConfig?.studySetup?.priceLists?.projects || {},
     workloadSynthesis: state.studyConfig?.organizationRisks?.workloadSynthesis?.projects || {},
     whiteCollar: state.studyConfig?.organizationRisks?.whiteCollarDefinition?.projects || {},
     wbs: state.studyConfig?.organizationRisks?.wbs?.projects || state.studyConfig?.dataSources?.wbs?.projects || {},
@@ -1662,6 +1686,7 @@ function buildCostSummaryConfigExportPayload() {
       costCenters: cloneConfigValue(modules.costCenters),
       pioDefinition: cloneConfigValue(modules.pioDefinition),
       guidePlanning: cloneConfigValue(modules.guidePlanning),
+      priceLists: cloneConfigValue(modules.priceLists),
     },
     dataSources: {
       currencyExchange: cloneConfigValue(modules.currencyExchange),
@@ -1677,6 +1702,9 @@ function buildCostSummaryConfigExportPayload() {
       vehicles: cloneConfigValue(modules.vehicles),
       otherSupportCosts: cloneConfigValue(modules.otherSupportCosts),
       mandatoryTraining: cloneConfigValue(modules.mandatoryTraining),
+    },
+    pricingRisks: {
+      priceLists: cloneConfigValue(modules.priceLists),
     },
   };
 
@@ -1701,11 +1729,13 @@ function getImportedModule(payload, moduleName) {
   const dataSources = payload?.groups?.dataSources || {};
   const organizationRisks = payload?.groups?.organizationRisks || {};
   const supportCosts = payload?.groups?.supportCosts || {};
+  const pricingRisks = payload?.groups?.pricingRisks || {};
   const groupedModules = {
     projectPhases: studySetup.projectPhases,
     costCenters: studySetup.costCenters,
     pioDefinition: studySetup.pioDefinition,
     guidePlanning: studySetup.guidePlanning,
+    priceLists: studySetup.priceLists || pricingRisks.priceLists,
     currencyExchange: dataSources.currencyExchange,
     firmingRules: dataSources.firmingRules,
     workloadSynthesis: organizationRisks.workloadSynthesis,
@@ -1741,6 +1771,11 @@ async function importCostSummaryConfigPayloadToStudy(payload) {
     guidePlanningDefinition: {
       ...((existing.studySetup || {}).guidePlanningDefinition || {}),
       projects: getImportedModule(payload, "guidePlanning"),
+      updatedAt: new Date().toISOString(),
+    },
+    priceLists: {
+      ...((existing.studySetup || {}).priceLists || {}),
+      projects: getImportedModule(payload, "priceLists"),
       updatedAt: new Date().toISOString(),
     },
   };
