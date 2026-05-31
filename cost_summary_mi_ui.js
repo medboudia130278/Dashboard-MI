@@ -6567,7 +6567,13 @@
         "Price List Code 1",
         "Price List Code 2",
         "Price List Code 3",
-      ];
+      ].concat(Array.from({ length: 9 }, function (_, index) {
+        return "Text " + (index + 1);
+      }));
+
+      const SUBSYSTEM_SUMMARY_TEXT_HEADERS = Array.from({ length: 9 }, function (_, index) {
+        return "Text " + (index + 1);
+      });
 
       function closeSubsystemSummaryWorkspace() {
         setFallbackDetailWorkspaceActive(false);
@@ -6674,7 +6680,9 @@
       function findSubsystemSummaryPhase(project, phaseLabel) {
         const phaseKey = normalizeWbsText(phaseLabel);
         return (project.phases || []).find(function (phase) {
-          return phaseKey === normalizeWbsText(phase.key) || phaseKey === normalizeWbsText(phase.label);
+          return phaseKey === normalizeWbsText(phase.key)
+            || phaseKey === normalizeWbsText(phase.label)
+            || phaseKey === normalizeWbsText(phase.phaseCode);
         }) || null;
       }
 
@@ -6720,6 +6728,7 @@
         const guideByLookup = buildProjectLookupMap(buildFallbackGuidePlanningProjects());
         const pioByLookup = buildProjectLookupMap(buildFallbackPioDefinitionProjects());
         const firmingByLookup = buildProjectLookupMap(buildFallbackFirmingRulesProjects());
+        const priceListsByLookup = buildProjectLookupMap(buildFallbackPriceListsProjects());
         return wbsProjects.map(function (project) {
           const lookupKeys = getProjectLookupKeys(project);
           return Object.assign({}, project, {
@@ -6727,7 +6736,78 @@
             subsystemSummaryGuidePlanning: findProjectByLookupKeys(guideByLookup, lookupKeys) || null,
             subsystemSummaryPio: findProjectByLookupKeys(pioByLookup, lookupKeys) || null,
             subsystemSummaryFirming: findProjectByLookupKeys(firmingByLookup, lookupKeys) || null,
+            subsystemSummaryPriceLists: findProjectByLookupKeys(priceListsByLookup, lookupKeys) || null,
           });
+        });
+      }
+
+      function getSubsystemSummaryPriceListsConfig(project) {
+        const priceListsProject = project && project.subsystemSummaryPriceLists;
+        return normalizeFallbackPriceListProjectConfig(priceListsProject && priceListsProject.priceListsConfig);
+      }
+
+      function getSubsystemSummaryTextMapping(project, textIndex) {
+        const config = getSubsystemSummaryPriceListsConfig(project);
+        return (config.textMappings || [])[textIndex] || "Not applicable";
+      }
+
+      function getSubsystemSummaryPhaseMeta(project, phaseLabel) {
+        const phase = findSubsystemSummaryPhase(project, phaseLabel);
+        if (!phase) return { phaseCode: "", durationYears: "" };
+        const duration = toNumber(phase.durationYears);
+        return {
+          phaseCode: phase.phaseCode || "",
+          durationYears: duration !== null ? duration : "",
+        };
+      }
+
+      function getSubsystemSummaryPriceListValues(project, mapping) {
+        const match = /^Client Price List\s+([1-9])$/i.exec(String(mapping || "").trim());
+        if (!match) return [];
+        const config = getSubsystemSummaryPriceListsConfig(project);
+        const field = "clientPriceList" + match[1];
+        const seen = new Set();
+        const values = [];
+        (config.rows || []).forEach(function (row) {
+          const value = String(((row.values || {})[field]) || "").trim();
+          const key = normalizeWbsText(value);
+          if (!value || seen.has(key)) return;
+          seen.add(key);
+          values.push(value);
+        });
+        return values;
+      }
+
+      function buildSubsystemSummaryTextValidationLists(project) {
+        const lists = {};
+        SUBSYSTEM_SUMMARY_TEXT_HEADERS.forEach(function (header, index) {
+          const values = getSubsystemSummaryPriceListValues(project, getSubsystemSummaryTextMapping(project, index));
+          if (values.length) lists[header] = values;
+        });
+        return lists;
+      }
+
+      function applySubsystemSummaryTextMappings(project, rows) {
+        const config = getSubsystemSummaryPriceListsConfig(project);
+        const mappings = config.textMappings || [];
+        return (rows || []).map(function (row) {
+          const nextRow = Object.assign({}, row);
+          const phaseMeta = getSubsystemSummaryPhaseMeta(project, nextRow.Phase);
+          SUBSYSTEM_SUMMARY_TEXT_HEADERS.forEach(function (header, index) {
+            const mapping = mappings[index] || "Not applicable";
+            if (mapping === "Project_name") {
+              nextRow[header] = project.projectName || "";
+            } else if (mapping === "Phase") {
+              nextRow[header] = nextRow.Phase || "";
+            } else if (mapping === "Phase code") {
+              nextRow[header] = phaseMeta.phaseCode || "";
+            } else if (mapping === "Duration") {
+              nextRow[header] = phaseMeta.durationYears === "" ? "" : phaseMeta.durationYears;
+            } else {
+              nextRow[header] = "";
+            }
+          });
+          return nextRow;
         });
       }
 
@@ -8241,11 +8321,12 @@
         const subcontractingRowsBySheet = buildSubsystemSummarySubcontractingRows(project, sheetDefs);
         const overhaulRenewalRowsBySheet = buildSubsystemSummaryOverhaulRenewalRows(project, sheetDefs);
         const allSheets = sheetDefs.map(function (sheet) {
+          const generatedRows = (workloadRowsBySheet[sheet.key] || [])
+            .concat(materialRowsBySheet[sheet.key] || [])
+            .concat(subcontractingRowsBySheet[sheet.key] || [])
+            .concat(overhaulRenewalRowsBySheet[sheet.key] || []);
           return Object.assign({}, sheet, {
-            rows: (workloadRowsBySheet[sheet.key] || [])
-              .concat(materialRowsBySheet[sheet.key] || [])
-              .concat(subcontractingRowsBySheet[sheet.key] || [])
-              .concat(overhaulRenewalRowsBySheet[sheet.key] || [])
+            rows: applySubsystemSummaryTextMappings(project, generatedRows),
           });
         });
         if (!allSheets.some(function (sheet) { return sheet.key === "Infra_Management"; })) {
@@ -8254,16 +8335,18 @@
             label: "Infra_Management",
             sheetName: "Infra_Management_Synthesis",
             sourceSubsystems: [],
-            rows: workloadRowsBySheet.Infra_Management || [],
+            rows: applySubsystemSummaryTextMappings(project, workloadRowsBySheet.Infra_Management || []),
           });
         }
         const phases = Array.isArray(project.phases) ? project.phases : [];
+        const textValidationLists = buildSubsystemSummaryTextValidationLists(project);
         const files = [{
           key: "global",
           mode: "global",
           name: sanitizeExportFileName(project.projectName) + "_All_Phases.xlsx",
           label: "Project global file",
           sheets: allSheets,
+          textValidationLists: textValidationLists,
         }];
         phases.forEach(function (phase) {
           const phaseLabel = phase.label || phase.key;
@@ -8273,6 +8356,7 @@
             phaseKey: phase.key,
             name: sanitizeExportFileName(project.projectName + "_" + phaseLabel) + ".xlsx",
             label: phaseLabel,
+            textValidationLists: textValidationLists,
             sheets: allSheets.map(function (sheet) {
               return Object.assign({}, sheet, {
                 rows: sheet.rows.filter(function (row) {
@@ -8317,13 +8401,133 @@
           : '<tr><td colspan="' + SUBSYSTEM_SUMMARY_HEADERS.length + '" class="py-8 text-center text-sm text-slate-500">No rows yet for this sheet. Headers will still be exported.</td></tr>';
       }
 
-      function exportSubsystemSummaryFile(file) {
+      function buildSubsystemSummaryValidationRanges(workbook, textValidationLists) {
+        const lists = textValidationLists || {};
+        const activeHeaders = SUBSYSTEM_SUMMARY_TEXT_HEADERS.filter(function (header) {
+          return Array.isArray(lists[header]) && lists[header].length;
+        });
+        if (!activeHeaders.length || typeof ExcelJS === "undefined") return {};
+        const sourceSheet = workbook.addWorksheet("_Text_Lists");
+        sourceSheet.state = "veryHidden";
+        const ranges = {};
+        activeHeaders.forEach(function (header, index) {
+          const colNumber = index + 1;
+          sourceSheet.getCell(1, colNumber).value = header;
+          lists[header].forEach(function (value, rowIndex) {
+            sourceSheet.getCell(rowIndex + 2, colNumber).value = value;
+          });
+          const colLetter = sourceSheet.getColumn(colNumber).letter;
+          ranges[header] = "'_Text_Lists'!$" + colLetter + "$2:$" + colLetter + "$" + (lists[header].length + 1);
+        });
+        return ranges;
+      }
+
+      function downloadSubsystemSummaryBuffer(buffer, fileName) {
+        const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = fileName || "Subsystem_Summary.xlsx";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      }
+
+      async function exportSubsystemSummaryFileWithExcelJs(file) {
+        const workbook = new ExcelJS.Workbook();
+        workbook.creator = "Cost Summary & MI";
+        workbook.created = new Date();
+        const worksheetEntries = [];
+        file.sheets.forEach(function (sheet) {
+          const worksheet = workbook.addWorksheet(sheet.sheetName);
+          worksheet.addRow(SUBSYSTEM_SUMMARY_HEADERS);
+          sheet.rows.forEach(function (row) {
+            worksheet.addRow(SUBSYSTEM_SUMMARY_HEADERS.map(function (header) { return row[header] ?? ""; }));
+          });
+          worksheet.columns = SUBSYSTEM_SUMMARY_HEADERS.map(function (header) {
+            return { width: Math.min(Math.max(String(header).length + 2, 12), 28) };
+          });
+          worksheet.getRow(1).font = { bold: true };
+          worksheet.views = [{ state: "frozen", ySplit: 1 }];
+          worksheetEntries.push({ worksheet: worksheet, sheet: sheet });
+        });
+        const validationRanges = buildSubsystemSummaryValidationRanges(workbook, file.textValidationLists || {});
+        worksheetEntries.forEach(function (entry) {
+          Object.keys(validationRanges).forEach(function (header) {
+            const colIndex = SUBSYSTEM_SUMMARY_HEADERS.indexOf(header) + 1;
+            if (colIndex <= 0) return;
+            const lastRow = Math.max(2, entry.sheet.rows.length + 1);
+            for (let rowIndex = 2; rowIndex <= lastRow; rowIndex += 1) {
+              entry.worksheet.getCell(rowIndex, colIndex).dataValidation = {
+                type: "list",
+                allowBlank: true,
+                formulae: [validationRanges[header]],
+              };
+            }
+          });
+        });
+        const buffer = await workbook.xlsx.writeBuffer();
+        downloadSubsystemSummaryBuffer(buffer, file.name);
+      }
+
+      function applySubsystemSummaryXlsxValidations(worksheet, textValidationLists, sourceRanges, rowCount) {
+        const validations = [];
+        Object.keys(sourceRanges || {}).forEach(function (header) {
+          const colIndex = SUBSYSTEM_SUMMARY_HEADERS.indexOf(header);
+          if (colIndex < 0) return;
+          const colLetter = XLSX.utils.encode_col(colIndex);
+          const sqref = colLetter + "2:" + colLetter + Math.max(2, rowCount + 1);
+          validations.push({
+            sqref: sqref,
+            type: "list",
+            allowBlank: true,
+            formula1: sourceRanges[header],
+            formulae: [sourceRanges[header]],
+          });
+        });
+        if (validations.length) {
+          worksheet["!dataValidation"] = validations;
+          worksheet["!dataValidations"] = validations;
+        }
+      }
+
+      function appendSubsystemSummaryXlsxValidationSheet(workbook, textValidationLists) {
+        const lists = textValidationLists || {};
+        const activeHeaders = SUBSYSTEM_SUMMARY_TEXT_HEADERS.filter(function (header) {
+          return Array.isArray(lists[header]) && lists[header].length;
+        });
+        if (!activeHeaders.length) return {};
+        const validationSheetName = "_Text_Lists";
+        const maxRows = Math.max.apply(null, activeHeaders.map(function (header) { return lists[header].length; }));
+        const aoa = [activeHeaders].concat(Array.from({ length: maxRows }, function (_, rowIndex) {
+          return activeHeaders.map(function (header) { return lists[header][rowIndex] || ""; });
+        }));
+        const worksheet = XLSX.utils.aoa_to_sheet(aoa);
+        XLSX.utils.book_append_sheet(workbook, worksheet, validationSheetName);
+        return activeHeaders.reduce(function (acc, header, index) {
+          const colLetter = XLSX.utils.encode_col(index);
+          acc[header] = "'" + validationSheetName + "'!$" + colLetter + "$2:$" + colLetter + "$" + (lists[header].length + 1);
+          return acc;
+        }, {});
+      }
+
+      async function exportSubsystemSummaryFile(file) {
         if (!file) return;
+        if (typeof ExcelJS !== "undefined") {
+          try {
+            await exportSubsystemSummaryFileWithExcelJs(file);
+            return;
+          } catch (err) {
+            console.warn("ExcelJS export failed, falling back to XLSX export.", err);
+          }
+        }
         if (typeof XLSX === "undefined") {
           window.alert("XLSX library is not available on this page.");
           return;
         }
         const workbook = XLSX.utils.book_new();
+        const sourceRanges = appendSubsystemSummaryXlsxValidationSheet(workbook, file.textValidationLists || {});
         file.sheets.forEach(function (sheet) {
           const aoa = [SUBSYSTEM_SUMMARY_HEADERS].concat(sheet.rows.map(function (row) {
             return SUBSYSTEM_SUMMARY_HEADERS.map(function (header) { return row[header] ?? ""; });
@@ -8332,8 +8536,20 @@
           worksheet["!cols"] = SUBSYSTEM_SUMMARY_HEADERS.map(function (header) {
             return { wch: Math.min(Math.max(String(header).length + 2, 12), 28) };
           });
+          applySubsystemSummaryXlsxValidations(worksheet, file.textValidationLists || {}, sourceRanges, sheet.rows.length);
           XLSX.utils.book_append_sheet(workbook, worksheet, sheet.sheetName);
         });
+        if (workbook.Workbook && Array.isArray(workbook.Workbook.Sheets)) {
+          workbook.Workbook.Sheets.forEach(function (sheetMeta) {
+            if (sheetMeta && sheetMeta.name === "_Text_Lists") sheetMeta.Hidden = 2;
+          });
+        } else if (workbook.SheetNames && workbook.SheetNames.length) {
+          workbook.Workbook = {
+            Sheets: workbook.SheetNames.map(function (name) {
+              return { name: name, Hidden: name === "_Text_Lists" ? 2 : 0 };
+            }),
+          };
+        }
         XLSX.writeFile(workbook, file.name);
       }
 
