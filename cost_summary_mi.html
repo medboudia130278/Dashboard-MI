@@ -416,6 +416,87 @@
         </div>
       </section>
 
+      <section id="mercuryInterfaceWorkspace" class="hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+        <div class="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
+          <div>
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-50 text-cyan-700 border border-cyan-200 text-[11px] font-bold uppercase tracking-[0.18em]">
+              <span class="material-symbols-outlined text-[16px]">upload_file</span>
+              Export Data
+            </div>
+            <h2 class="mt-3 text-2xl font-black tracking-tight">Mercury Interface Workspace</h2>
+            <p class="mt-2 text-sm text-slate-500">Preview and export a Mercury interface workbook per project. The Infra_MI sheet is prepared with the M_I interface headers; row generation rules will be added later.</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <div id="mercuryInterfaceWorkspaceStatus" class="text-xs font-semibold text-slate-500">No project selected.</div>
+            <button id="refreshMercuryInterfaceWorkspaceBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold hover:bg-slate-100 transition-all">
+              <span class="material-symbols-outlined text-[18px]">refresh</span>
+              Refresh
+            </button>
+            <button id="closeMercuryInterfaceWorkspaceBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold hover:bg-slate-100 transition-all">
+              <span class="material-symbols-outlined text-[18px]">close</span>
+              Close
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-6 grid grid-cols-1 xl:grid-cols-[240px_minmax(0,1fr)] gap-4">
+          <aside class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div>
+              <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">Projects</h3>
+              <p class="mt-1 text-xs text-slate-500">Choose one project to preview and export its Mercury interface package.</p>
+            </div>
+            <div id="mercuryInterfaceProjectList" class="mt-4 space-y-2"></div>
+          </aside>
+
+          <div class="min-w-0 space-y-6">
+            <div id="mercuryInterfaceWorkspaceEmpty" class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-sm text-slate-500">
+              No project available yet. Configure Project Phases first.
+            </div>
+
+            <div id="mercuryInterfaceWorkspaceContent" class="hidden min-w-0 space-y-6">
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                  <div>
+                    <h3 id="mercuryInterfaceCurrentProjectTitle" class="text-xl font-black tracking-tight">Project</h3>
+                    <p id="mercuryInterfaceCurrentProjectMeta" class="mt-2 text-sm text-slate-500">Context</p>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <button id="mercuryInterfaceExportBtn" type="button" class="inline-flex items-center gap-2 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-2 text-sm font-semibold text-cyan-700 hover:bg-cyan-100 transition-all">
+                      <span class="material-symbols-outlined text-[18px]">download</span>
+                      Export Excel
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              <section class="grid grid-cols-1 2xl:grid-cols-[270px_minmax(0,1fr)] gap-4">
+                <div class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                  <h3 class="text-base font-bold">Export Explorer</h3>
+                  <p class="mt-1 text-sm text-slate-500">Virtual files are generated on demand from current project data.</p>
+                  <div id="mercuryInterfaceFileTree" class="mt-4 space-y-3"></div>
+                </div>
+
+                <div class="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                  <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                    <div>
+                      <h3 id="mercuryInterfacePreviewTitle" class="text-base font-bold">Preview</h3>
+                      <p id="mercuryInterfacePreviewMeta" class="mt-1 text-sm text-slate-500">Select a virtual file.</p>
+                    </div>
+                    <span class="inline-flex items-center rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm font-semibold text-cyan-700">Infra_MI</span>
+                  </div>
+                  <div class="mt-4 overflow-x-auto custom-scrollbar">
+                    <table class="min-w-full text-xs">
+                      <thead id="mercuryInterfacePreviewHead" class="text-[10px] uppercase tracking-wider text-slate-400"></thead>
+                      <tbody id="mercuryInterfacePreviewBody" class="divide-y divide-slate-200"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section id="projectPhasesWorkspace" class="hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
         <div class="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
           <div>
@@ -2898,7 +2979,7 @@
     </div>
   </aside>
 
-  <script src="cost_summary_mi_ui.js?v=20260531-subsystem-summary-text-mapping-v1"></script>
-  <script type="module" src="cost_summary_mi.js?v=20260531-subsystem-summary-text-mapping-v1"></script>
+  <script src="cost_summary_mi_ui.js?v=20260612-mercury-interface-workspace-v2"></script>
+  <script type="module" src="cost_summary_mi.js?v=20260612-mercury-interface-workspace-v2"></script>
 </body>
 </html>

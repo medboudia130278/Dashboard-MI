@@ -961,6 +961,7 @@
         if (!$("mandatoryTrainingWorkspace")?.classList.contains("hidden")) renderFallbackMandatoryTrainingWorkspace();
         if (!$("priceListsWorkspace")?.classList.contains("hidden")) renderFallbackPriceListsWorkspace();
         if (!$("subsystemSummaryWorkspace")?.classList.contains("hidden")) renderSubsystemSummaryWorkspace();
+        if (!$("mercuryInterfaceWorkspace")?.classList.contains("hidden")) renderMercuryInterfaceWorkspace();
       }
 
       async function importCostSummaryConfigPayload(payload) {
@@ -8553,6 +8554,193 @@
         XLSX.writeFile(workbook, file.name);
       }
 
+      const MERCURY_INTERFACE_HEADERS = [
+        "Costing Tree", "Description", "Item Code", "Comment", "Attached File", "Planning Guide", "Costs Type", "PBS/IBS", "ABS", "OBS",
+        "CARAT Unit", "Associated WP", "Tasks", "Sub-System", "Cost Drivers", "Variant", "GAP", "Instance", "Sort", "Unit Role",
+        "Responsibility", "On/Off Shore", "Sub-System Manager", "Delegated person", "Price List Code 1", "Price List Code 2", "Price List Code 3",
+        "BOQ  Alstom", "Area", "Currency", "Unit Base", "Period", "Nb Tot. of Occurency", "Quantity", "External Purchase - Fixed",
+        "External Purchase - Variable", "External Sub Contracting (Manuf.) - Fixed", "External Sub Contracting (Manuf.) - Variable",
+        "Tot. External Materials (wo Kp & wo Ki)", "Tot. External Materials (with Kp & Ki)", "Packaging Variable",
+        "Tot. External Materials  (with Kp & Ki) - Fixed", "Tot. External Materials  (with Kp & Ki) - Variable",
+        "External Services Fixed Hours", "External Services Fixed Cost", "External Services Variable Hours", "External Services Variable Cost",
+        "Tot. External Services (wo Ki)", "Tot. External Services (with Ki)", "Tot. External Services (with Ki) Fixed",
+        "Tot. External Services (with Ki) Variable", "Cost Centre", "Team", "Ratio", "Cat 1 (Hours or Months)", "Cat 2 (Hours or Months)",
+        "Cat 3 (Hours or Months)", "Cat 4 (Hours or Months)", "Cat 5 (Hours or Months)", "Cat 6 (Hours or Months)", "Cat 7 (Hours or Months)",
+        "Cat 8 (Hours or Months)", "Cat 9 (Hours or Months)", "Fixed Cat 1  (Hours or Months)", "Fixed Cat 2  (Hours or Months)",
+        "Fixed Cat 3  (Hours or Months)", "Fixed Cat 4  (Hours or Months)", "Fixed Cat 5  (Hours or Months)", "Tot. Hours (Alstom)",
+        "Tot. Hours ALSTOM +  External Services", "Tot. Labor  Cost (without ki)", "Tot. Labor  Cost (with ki)",
+        "PLANT/TOOLS &  LOGISTIC EQUIPMENT", "CAT 1", "CAT 2", "CAT 3", "CAT 4", "CAT 5",
+        "Tot. Cost PLANT/TOOLS &  LOGISTIC EQUIPMENT (without coeffs)", "Tot. Cost PLANT/TOOLS &  LOGISTIC EQUIPMENT (with coeffs)",
+        "Fixed Internal Supplies", "Variable Internal Supplies", "Tot. Fixed Internal Supplies", "Tot. Variable Internal Supplies",
+        "Firming rule", "Firming Date", "Labour and External Services Firming (wo Ki)", "Material Firming (wo Kp & Ki)", "OPDC Firming",
+        "ki", "kp", "Internal kp", "PC wo (Firming & Commercial Cost)", "PC wo ODPC", "Buy Out  -x(%)", "Work Out -x(%)",
+        "PC wo ODPC Unit Cost", "NPOH", "Freight per Unit", "Freight Cout Transport  Usine -> Port Unitaire",
+        "Freight Cout Transport  International unitaire", "Freight Cout Transport Port >> Site Unitaire", "Freight Frais  Douaniers Unitaires",
+        "Freight Frais Stockage Intermediaire unitaire", "Tot. Freight", "Travel Code", "No. of Units on site Cat 1", "No. of Units on site Cat 2",
+        "No. of Units on site Cat 3", "Deplacements & FDP", "Nb. of Travels", "Car rental: No. of Units", "Travel & Accomodation Variable",
+        "Travel & Accomodation Fixed", "Tot. travel accomodation", "Tot. fixed PC wo (Firming & Commercial Cost)",
+        "Tot. variable PC wo (Firming & Commercial Cost)", "Cost Impact - Risk: Non recurrent Cost value",
+        "Cost Impact - Risk: Recurrent  Cost value", "Cost Impact - Risk: Maximum Risk value",
+        "Cost Impact - Contingencies/Risk: Most likely value", "Fixed Contingencies/ Risk: Most likely value",
+        "Cost Impact - Risk: Effect of mitigation plan", "Cost Impact - Risk: Migitation cost", "Risk type",
+        "Cost Impact - Tot. Risk  (Residual net value)", "Cost Impact - Saving: Non recurrent Cost value",
+        "Cost Impact - Saving: Recurrent  Cost value", "Cost Impact - Maximum Saving value", "Fix. Committed Savings",
+        "Var. Committed Savings", "libre", "libre", "libre", "Total Committed Savings", "Insurances, Rates, & Taxes",
+        "Cost wo k and wo Firming", "Cost wo k inflated", "Currency", "Tot. Input Currency wo Overheads", "TCP wo (COI & Commercial Cost)",
+        "PC wo Commercial Cost", "Fixed Selling price", "Selling price", "PC", "Unit Cost Price initial", "Special coeff from PIO",
+        "PIO impact 1", "PIO impact 2", "Start", "End", "Numéro1 From", "Numéro2 To", "Numéro4  Distance", "Numéro3 Cadence",
+        "Numéro5 Style", "Numéro6 Amplitude", "Indicateur1 Tracé", "Link Cost / Price", "Initial Nb", "Item Date", "Total Cost Price",
+        "Text 1", "Text 2", "Text 3", "Text 4", "Text 5", "Text 6", "Text 7", "Text 8", "Text 9",
+      ];
+
+      function closeMercuryInterfaceWorkspace() {
+        setFallbackDetailWorkspaceActive(false);
+        $("mercuryInterfaceWorkspace")?.classList.add("hidden");
+      }
+
+      function buildMercuryInterfaceProjects() {
+        return buildCombinedProjectPhaseProjects();
+      }
+
+      function buildMercuryInterfaceVirtualFiles(project) {
+        const phases = Array.isArray(project && project.phases) ? project.phases : [];
+        const sheet = { key: "Infra_MI", sheetName: "Infra_MI", rows: [] };
+        const files = [{
+          key: "global",
+          mode: "global",
+          name: sanitizeExportFileName(project.projectName) + "_Mercury_Interface_All_Phases.xlsx",
+          label: "Project global file",
+          sheets: [sheet],
+        }];
+        phases.forEach(function (phase) {
+          const phaseLabel = phase.label || phase.key;
+          files.push({
+            key: "phase|" + phase.key,
+            mode: "phase",
+            phaseKey: phase.key,
+            name: sanitizeExportFileName(project.projectName + "_" + phaseLabel + "_Mercury_Interface") + ".xlsx",
+            label: phaseLabel,
+            sheets: [Object.assign({}, sheet, { rows: [] })],
+          });
+        });
+        return files;
+      }
+
+      function renderMercuryInterfacePreview(project, file) {
+        const previewTitle = $("mercuryInterfacePreviewTitle");
+        const previewMeta = $("mercuryInterfacePreviewMeta");
+        const previewHead = $("mercuryInterfacePreviewHead");
+        const previewBody = $("mercuryInterfacePreviewBody");
+        if (!previewTitle || !previewMeta || !previewHead || !previewBody || !file) return;
+        const sheet = file.sheets[0] || { sheetName: "Infra_MI", rows: [] };
+        previewTitle.textContent = file.name;
+        previewMeta.textContent = sheet.sheetName + " | " + sheet.rows.length + " row(s)";
+        previewHead.innerHTML = '<tr class="border-b border-slate-200">' + MERCURY_INTERFACE_HEADERS.map(function (header) {
+          return '<th class="text-left py-3 px-3 whitespace-nowrap">' + escapeHtml(header) + '</th>';
+        }).join("") + '</tr>';
+        previewBody.innerHTML = '<tr><td colspan="' + MERCURY_INTERFACE_HEADERS.length + '" class="py-8 text-center text-sm text-slate-500">No Mercury Interface rows generated yet. Headers will still be exported.</td></tr>';
+      }
+
+      function exportMercuryInterfaceFile(file) {
+        if (!file) return;
+        if (typeof XLSX === "undefined") {
+          window.alert("XLSX library is not available on this page.");
+          return;
+        }
+        const workbook = XLSX.utils.book_new();
+        const sheet = (file.sheets && file.sheets[0]) || { sheetName: "Infra_MI", rows: [] };
+        const aoa = [MERCURY_INTERFACE_HEADERS].concat((sheet.rows || []).map(function (row) {
+          return MERCURY_INTERFACE_HEADERS.map(function (header) { return row[header] ?? ""; });
+        }));
+        const worksheet = XLSX.utils.aoa_to_sheet(aoa);
+        worksheet["!cols"] = MERCURY_INTERFACE_HEADERS.map(function (header) {
+          return { wch: Math.min(Math.max(String(header).length + 2, 12), 32) };
+        });
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Infra_MI");
+        XLSX.writeFile(workbook, file.name);
+      }
+
+      function renderMercuryInterfaceWorkspace() {
+        const workspace = $("mercuryInterfaceWorkspace");
+        const list = $("mercuryInterfaceProjectList");
+        const empty = $("mercuryInterfaceWorkspaceEmpty");
+        const content = $("mercuryInterfaceWorkspaceContent");
+        const status = $("mercuryInterfaceWorkspaceStatus");
+        const title = $("mercuryInterfaceCurrentProjectTitle");
+        const meta = $("mercuryInterfaceCurrentProjectMeta");
+        const fileTree = $("mercuryInterfaceFileTree");
+        const exportBtn = $("mercuryInterfaceExportBtn");
+        if (!workspace || !list || !empty || !content || !status || !title || !meta || !fileTree || !exportBtn) return;
+
+        const projects = buildMercuryInterfaceProjects();
+        const currentKey = workspace.dataset.currentProjectKey && projects.some(function (project) { return project.projectKey === workspace.dataset.currentProjectKey; })
+          ? workspace.dataset.currentProjectKey
+          : (projects[0] ? projects[0].projectKey : "");
+        const currentProject = projects.find(function (project) { return project.projectKey === currentKey; }) || null;
+
+        setFallbackDetailWorkspaceActive(true);
+        workspace.classList.remove("hidden");
+        status.textContent = projects.length ? projects.length + " project(s) available" : "No project available.";
+        list.innerHTML = projects.map(function (project) {
+          const active = currentProject && project.projectKey === currentProject.projectKey;
+          return '<button type="button" data-mercury-interface-project-select="' + escapeHtml(project.projectKey) + '" class="w-full rounded-xl border px-3 py-3 text-left transition-all ' +
+            (active ? "border-cyan-300 bg-cyan-50 shadow-sm ring-1 ring-cyan-200" : "border-slate-200 bg-white hover:bg-slate-100") + '">' +
+              '<div class="text-sm font-semibold text-slate-900">' + escapeHtml(project.projectName) + '</div>' +
+              '<div class="mt-1 flex items-center gap-1.5">' +
+                '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ' + (project.phases && project.phases.length ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-slate-100 text-slate-400 border border-slate-200") + '">PH</span>' +
+                '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-cyan-50 text-cyan-700 border border-cyan-200">MI</span>' +
+              '</div>' +
+            '</button>';
+        }).join("");
+
+        if (!currentProject) {
+          empty.classList.remove("hidden");
+          content.classList.add("hidden");
+          return;
+        }
+
+        workspace.dataset.currentProjectKey = currentProject.projectKey;
+        empty.classList.add("hidden");
+        content.classList.remove("hidden");
+        title.textContent = currentProject.projectName;
+        meta.textContent = (currentProject.projectType || "No project type") + " | " + (currentProject.projectContext || "No context");
+
+        const files = buildMercuryInterfaceVirtualFiles(currentProject);
+        const currentFileKey = workspace.dataset.currentFileKey && files.some(function (file) { return file.key === workspace.dataset.currentFileKey; })
+          ? workspace.dataset.currentFileKey
+          : "global";
+        const currentFile = files.find(function (file) { return file.key === currentFileKey; }) || files[0] || null;
+        workspace.dataset.currentFileKey = currentFile ? currentFile.key : "";
+        exportBtn.disabled = !currentFile;
+        exportBtn.dataset.mercuryInterfaceExport = currentFile ? currentFile.key : "";
+
+        const globalFiles = files.filter(function (file) { return file.mode === "global"; });
+        const phaseFiles = files.filter(function (file) { return file.mode === "phase"; });
+        function fileButton(file) {
+          const active = currentFile && file.key === currentFile.key;
+          const rowCount = file.sheets.reduce(function (sum, sheetEntry) { return sum + sheetEntry.rows.length; }, 0);
+          return '<button type="button" data-mercury-interface-file-select="' + escapeHtml(file.key) + '" class="w-full rounded-xl border px-3 py-2.5 text-left transition-all ' +
+            (active ? "border-cyan-300 bg-cyan-50 text-cyan-900" : "border-slate-200 bg-white hover:bg-slate-100 text-slate-700") + '">' +
+              '<div class="flex items-center gap-2">' +
+                '<span class="material-symbols-outlined text-[18px] text-cyan-600">description</span>' +
+                '<span class="min-w-0 flex-1 truncate text-sm font-semibold">' + escapeHtml(file.name) + '</span>' +
+              '</div>' +
+              '<div class="mt-1 pl-7 text-xs text-slate-500">1 sheet | ' + rowCount + ' row(s)</div>' +
+            '</button>';
+        }
+        fileTree.innerHTML =
+          '<details class="rounded-xl border border-slate-200 bg-white p-3" open>' +
+            '<summary class="cursor-pointer text-sm font-bold text-slate-700">Global project export</summary>' +
+            '<div class="mt-3 space-y-2">' + globalFiles.map(fileButton).join("") + '</div>' +
+          '</details>' +
+          '<details class="rounded-xl border border-slate-200 bg-white p-3" open>' +
+            '<summary class="cursor-pointer text-sm font-bold text-slate-700">Phase exports</summary>' +
+            '<div class="mt-3 space-y-2">' + phaseFiles.map(fileButton).join("") + '</div>' +
+          '</details>';
+
+        renderMercuryInterfacePreview(currentProject, currentFile);
+      }
+
       function renderSubsystemSummaryWorkspace() {
         const workspace = $("subsystemSummaryWorkspace");
         const list = $("subsystemSummaryProjectList");
@@ -10959,6 +11147,9 @@
         if (itemKey !== "subsystem_summary") {
           closeSubsystemSummaryWorkspace();
         }
+        if (itemKey !== "mercury_interface") {
+          closeMercuryInterfaceWorkspace();
+        }
         if (itemKey !== "price_lists") {
           closePriceListsWorkspace();
         }
@@ -10984,6 +11175,31 @@
           closePriceListsWorkspace();
           closeDrawer();
           renderSubsystemSummaryWorkspace();
+          return;
+        }
+
+        if (itemKey === "mercury_interface") {
+          window.__costSummaryUseFallbackProjectPhases = false;
+          window.__costSummaryUseFallbackCostCenters = false;
+          window.__costSummaryUseFallbackPioDefinition = false;
+          window.__costSummaryUseFallbackGuidePlanning = false;
+          closeProjectPhasesWorkspace();
+          closeCostCentersWorkspace();
+          closeGuidePlanningWorkspace();
+          closeCurrencyExchangeWorkspace();
+          closeFirmingRulesWorkspace();
+          closePioDefinitionWorkspace();
+          closeWorkloadSynthesisWorkspace();
+          closeWhiteCollarDefinitionWorkspace();
+          closeWbsWorkspace();
+          closeToolsConsumablesWorkspace();
+          closeVehiclesWorkspace();
+          closeOscWorkspace();
+          closeMandatoryTrainingWorkspace();
+          closePriceListsWorkspace();
+          closeSubsystemSummaryWorkspace();
+          closeDrawer();
+          renderMercuryInterfaceWorkspace();
           return;
         }
 
@@ -11329,6 +11545,7 @@
           closeMandatoryTrainingWorkspace();
           closePriceListsWorkspace();
           closeSubsystemSummaryWorkspace();
+          closeMercuryInterfaceWorkspace();
           setFallbackDetailWorkspaceActive(false);
         },
         openProjectPhases: function () {
@@ -11439,6 +11656,7 @@
           closeMandatoryTrainingWorkspace();
           closePriceListsWorkspace();
           closeSubsystemSummaryWorkspace();
+          closeMercuryInterfaceWorkspace();
           closeDrawer();
           setFallbackDetailWorkspaceActive(true);
 
@@ -11482,6 +11700,10 @@
             renderSubsystemSummaryWorkspace();
             return true;
           }
+          if (itemKey === "mercury_interface") {
+            renderMercuryInterfaceWorkspace();
+            return true;
+          }
           return false;
         },
         openWorkloadSynthesis: function () {
@@ -11497,6 +11719,7 @@
           closePioDefinitionWorkspace();
           closeGuidePlanningWorkspace();
           closeSubsystemSummaryWorkspace();
+          closeMercuryInterfaceWorkspace();
           closeDrawer();
           renderFallbackWorkloadSynthesisWorkspace();
         },
@@ -11645,7 +11868,9 @@
       window.updateToolbarStatusDots = updateToolbarStatusDots;
       // ─────────────────────────────────────────────────────────────────────
 
-      document.addEventListener("DOMContentLoaded", function () {
+      function initializeCostSummaryFallbackUi() {
+        if (window.__costSummaryFallbackUiInitialized) return;
+        window.__costSummaryFallbackUiInitialized = true;
         updateToolbarStatusDots();
         document.addEventListener("click", function (event) {
           if (event.target.closest("#exportConfigJsonBtn")) {
@@ -12107,6 +12332,11 @@
             return;
           }
 
+          if (event.target.closest("#closeMercuryInterfaceWorkspaceBtn")) {
+            closeMercuryInterfaceWorkspace();
+            return;
+          }
+
           if (event.target.closest("#refreshWbsWorkspaceBtn")) {
             event.preventDefault();
             renderFallbackWbsWorkspace();
@@ -12116,6 +12346,12 @@
           if (event.target.closest("#refreshSubsystemSummaryWorkspaceBtn")) {
             event.preventDefault();
             renderSubsystemSummaryWorkspace();
+            return;
+          }
+
+          if (event.target.closest("#refreshMercuryInterfaceWorkspaceBtn")) {
+            event.preventDefault();
+            renderMercuryInterfaceWorkspace();
             return;
           }
 
@@ -12150,6 +12386,40 @@
             const fileKey = ws ? (ws.dataset.currentFileKey || "global") : "global";
             const file = files.find(function (entry) { return entry.key === fileKey; }) || files[0] || null;
             exportSubsystemSummaryFile(file);
+            return;
+          }
+
+          const mercuryInterfaceProjectBtn = event.target.closest("[data-mercury-interface-project-select]");
+          if (mercuryInterfaceProjectBtn) {
+            event.preventDefault();
+            const ws = $("mercuryInterfaceWorkspace");
+            if (ws) {
+              ws.dataset.currentProjectKey = mercuryInterfaceProjectBtn.getAttribute("data-mercury-interface-project-select") || "";
+              ws.dataset.currentFileKey = "global";
+            }
+            renderMercuryInterfaceWorkspace();
+            return;
+          }
+
+          const mercuryInterfaceFileBtn = event.target.closest("[data-mercury-interface-file-select]");
+          if (mercuryInterfaceFileBtn) {
+            event.preventDefault();
+            const ws = $("mercuryInterfaceWorkspace");
+            if (ws) ws.dataset.currentFileKey = mercuryInterfaceFileBtn.getAttribute("data-mercury-interface-file-select") || "";
+            renderMercuryInterfaceWorkspace();
+            return;
+          }
+
+          if (event.target.closest("#mercuryInterfaceExportBtn")) {
+            event.preventDefault();
+            const ws = $("mercuryInterfaceWorkspace");
+            const projects = buildMercuryInterfaceProjects();
+            const project = projects.find(function (entry) { return ws && entry.projectKey === ws.dataset.currentProjectKey; }) || projects[0] || null;
+            if (!project) return;
+            const files = buildMercuryInterfaceVirtualFiles(project);
+            const fileKey = ws ? (ws.dataset.currentFileKey || "global") : "global";
+            const file = files.find(function (entry) { return entry.key === fileKey; }) || files[0] || null;
+            exportMercuryInterfaceFile(file);
             return;
           }
 
@@ -12424,6 +12694,7 @@
             closeWbsWorkspace();
             closePriceListsWorkspace();
             closeSubsystemSummaryWorkspace();
+            closeMercuryInterfaceWorkspace();
           }
         });
 
@@ -13199,5 +13470,11 @@
             hourlyRateImportInput.value = "";
           }
         });
-      });
+      }
+
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", initializeCostSummaryFallbackUi);
+      } else {
+        initializeCostSummaryFallbackUi();
+      }
     })();

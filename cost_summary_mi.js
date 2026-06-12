@@ -1098,6 +1098,7 @@ const fallbackWorkspaceItems = new Set([
   "other_support_costs",
   "price_lists",
   "subsystem_summary",
+  "mercury_interface",
 ]);
 
 function closeToolbarMenus() {
