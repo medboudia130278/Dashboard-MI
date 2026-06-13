@@ -8391,7 +8391,7 @@
         previewTitle.textContent = file.name;
         previewMeta.textContent = sheet ? (sheet.sheetName + " | " + sheet.rows.length + " row(s)") : "No sheet available.";
         previewHead.innerHTML = '<tr class="border-b border-slate-200">' + SUBSYSTEM_SUMMARY_HEADERS.map(function (header) {
-          return '<th class="text-left py-3 px-3 whitespace-nowrap">' + escapeHtml(header) + '</th>';
+          return '<th class="sticky top-0 z-10 bg-white text-left py-3 px-3 whitespace-nowrap shadow-[inset_0_-1px_0_#e2e8f0]">' + escapeHtml(header) + '</th>';
         }).join("") + '</tr>';
         previewBody.innerHTML = sheet && sheet.rows.length
           ? sheet.rows.slice(0, 100).map(function (row) {
@@ -8806,6 +8806,7 @@
 
       function buildMercuryInterfaceVirtualFiles(project) {
         const phases = Array.isArray(project && project.phases) ? project.phases : [];
+        const textValidationLists = buildSubsystemSummaryTextValidationLists(project);
         const sheet = { key: "Infra_MI", sheetName: "Infra_MI", rows: buildMercuryInfraRows(project, null) };
         const files = [{
           key: "global",
@@ -8813,6 +8814,7 @@
           name: sanitizeExportFileName(project.projectName) + "_Mercury_Interface_All_Phases.xlsx",
           label: "Project global file",
           sheets: [sheet],
+          textValidationLists: textValidationLists,
         }];
         phases.forEach(function (phase) {
           const phaseLabel = phase.label || phase.key;
@@ -8823,6 +8825,7 @@
             name: sanitizeExportFileName(project.projectName + "_" + phaseLabel + "_Mercury_Interface") + ".xlsx",
             label: phaseLabel,
             sheets: [Object.assign({}, sheet, { rows: buildMercuryInfraRows(project, phase) })],
+            textValidationLists: textValidationLists,
           });
         });
         return files;
@@ -8838,7 +8841,7 @@
         previewTitle.textContent = file.name;
         previewMeta.textContent = sheet.sheetName + " | " + sheet.rows.length + " row(s)";
         previewHead.innerHTML = '<tr class="border-b border-slate-200">' + MERCURY_INTERFACE_HEADERS.map(function (header) {
-          return '<th class="text-left py-3 px-3 whitespace-nowrap">' + escapeHtml(header) + '</th>';
+          return '<th class="sticky top-0 z-10 bg-white text-left py-3 px-3 whitespace-nowrap shadow-[inset_0_-1px_0_#e2e8f0]">' + escapeHtml(header) + '</th>';
         }).join("") + '</tr>';
         previewBody.innerHTML = sheet.rows.length
           ? sheet.rows.slice(0, 100).map(function (row) {
@@ -8849,13 +8852,71 @@
           : '<tr><td colspan="' + MERCURY_INTERFACE_HEADERS.length + '" class="py-8 text-center text-sm text-slate-500">No Mercury Interface rows generated yet. Headers will still be exported.</td></tr>';
       }
 
-      function exportMercuryInterfaceFile(file) {
+      function getMercuryCostingTreeDepth(value) {
+        const parts = String(value || "").split(".").filter(function (part) { return String(part || "").trim(); });
+        return parts.length || 1;
+      }
+
+      async function exportMercuryInterfaceFileWithExcelJs(file) {
+        const workbook = new ExcelJS.Workbook();
+        workbook.creator = "Cost Summary & MI";
+        workbook.created = new Date();
+        const sheet = (file.sheets && file.sheets[0]) || { sheetName: "Infra_MI", rows: [] };
+        const worksheet = workbook.addWorksheet("Infra_MI");
+        worksheet.addRow(MERCURY_INTERFACE_HEADERS);
+        (sheet.rows || []).forEach(function (row) {
+          worksheet.addRow(MERCURY_INTERFACE_HEADERS.map(function (header) { return row[header] ?? ""; }));
+        });
+        worksheet.columns = MERCURY_INTERFACE_HEADERS.map(function (header) {
+          return { width: Math.min(Math.max(String(header).length + 2, 12), 32) };
+        });
+        worksheet.getRow(1).font = { bold: true };
+        worksheet.views = [{ state: "frozen", ySplit: 1 }];
+        worksheet.autoFilter = {
+          from: { row: 1, column: 1 },
+          to: { row: 1, column: MERCURY_INTERFACE_HEADERS.length },
+        };
+        worksheet.properties.outlineProperties = {
+          summaryBelow: false,
+          summaryRight: false,
+        };
+        (sheet.rows || []).forEach(function (row, index) {
+          const excelRow = worksheet.getRow(index + 2);
+          excelRow.outlineLevel = Math.min(Math.max(getMercuryCostingTreeDepth(row["Costing Tree"]) - 1, 0), 7);
+        });
+        const validationRanges = buildSubsystemSummaryValidationRanges(workbook, file.textValidationLists || {});
+        Object.keys(validationRanges).forEach(function (header) {
+          const colIndex = MERCURY_INTERFACE_HEADERS.indexOf(header) + 1;
+          if (colIndex <= 0) return;
+          const lastRow = Math.max(2, (sheet.rows || []).length + 1);
+          for (let rowIndex = 2; rowIndex <= lastRow; rowIndex += 1) {
+            worksheet.getCell(rowIndex, colIndex).dataValidation = {
+              type: "list",
+              allowBlank: true,
+              formulae: [validationRanges[header]],
+            };
+          }
+        });
+        const buffer = await workbook.xlsx.writeBuffer();
+        downloadSubsystemSummaryBuffer(buffer, file.name);
+      }
+
+      async function exportMercuryInterfaceFile(file) {
         if (!file) return;
+        if (typeof ExcelJS !== "undefined") {
+          try {
+            await exportMercuryInterfaceFileWithExcelJs(file);
+            return;
+          } catch (err) {
+            console.warn("ExcelJS Mercury export failed, falling back to XLSX export.", err);
+          }
+        }
         if (typeof XLSX === "undefined") {
           window.alert("XLSX library is not available on this page.");
           return;
         }
         const workbook = XLSX.utils.book_new();
+        const sourceRanges = appendSubsystemSummaryXlsxValidationSheet(workbook, file.textValidationLists || {});
         const sheet = (file.sheets && file.sheets[0]) || { sheetName: "Infra_MI", rows: [] };
         const aoa = [MERCURY_INTERFACE_HEADERS].concat((sheet.rows || []).map(function (row) {
           return MERCURY_INTERFACE_HEADERS.map(function (header) { return row[header] ?? ""; });
@@ -8864,7 +8925,36 @@
         worksheet["!cols"] = MERCURY_INTERFACE_HEADERS.map(function (header) {
           return { wch: Math.min(Math.max(String(header).length + 2, 12), 32) };
         });
+        worksheet["!autofilter"] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: 0, c: MERCURY_INTERFACE_HEADERS.length - 1 } }) };
+        const validations = [];
+        Object.keys(sourceRanges || {}).forEach(function (header) {
+          const colIndex = MERCURY_INTERFACE_HEADERS.indexOf(header);
+          if (colIndex < 0) return;
+          const colLetter = XLSX.utils.encode_col(colIndex);
+          validations.push({
+            sqref: colLetter + "2:" + colLetter + Math.max(2, (sheet.rows || []).length + 1),
+            type: "list",
+            allowBlank: true,
+            formula1: sourceRanges[header],
+            formulae: [sourceRanges[header]],
+          });
+        });
+        if (validations.length) {
+          worksheet["!dataValidation"] = validations;
+          worksheet["!dataValidations"] = validations;
+        }
         XLSX.utils.book_append_sheet(workbook, worksheet, "Infra_MI");
+        if (workbook.Workbook && Array.isArray(workbook.Workbook.Sheets)) {
+          workbook.Workbook.Sheets.forEach(function (sheetMeta) {
+            if (sheetMeta && sheetMeta.name === "_Text_Lists") sheetMeta.Hidden = 2;
+          });
+        } else if (workbook.SheetNames && workbook.SheetNames.length) {
+          workbook.Workbook = {
+            Sheets: workbook.SheetNames.map(function (name) {
+              return { name: name, Hidden: name === "_Text_Lists" ? 2 : 0 };
+            }),
+          };
+        }
         XLSX.writeFile(workbook, file.name);
       }
 
