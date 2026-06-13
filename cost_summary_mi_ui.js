@@ -8648,13 +8648,92 @@
 
       function buildMercuryInfraParentRows() {
         return MERCURY_INFRA_PARENT_ROWS.map(function (entry) {
-          return {
-            "Phase": "",
-            "Period": "",
-            "Type": "",
-            "Costing Tree": entry[0],
-            "Description": entry[1],
-          };
+          return createMercuryParentRow(entry[0], entry[1]);
+        });
+      }
+
+      function createMercuryParentRow(costingTree, description) {
+        return {
+          "Phase": "",
+          "Period": "",
+          "Type": "",
+          "Costing Tree": costingTree,
+          "Description": description,
+        };
+      }
+
+      const MERCURY_SUBSYSTEM_PARENT_TEMPLATE = [
+        ["", "{Subsystem} Maintenance"],
+        ["1", "{Subsystem} Preventive Maintenance"],
+        ["1.1", "{Subsystem} Preventive Workload"],
+        ["1.2", "{Subsystem} Preventive Materials"],
+        ["1.3", "{Subsystem} Preventive Subcontracting Activities"],
+        ["2", "{Subsystem} Corrective Maintenance"],
+        ["2.1", "{Subsystem} Corrective Workload"],
+        ["2.2", "{Subsystem} Corrective Materials"],
+        ["2.3", "{Subsystem} Corrective Subcontracting Activities"],
+        ["3", "{Subsystem} Maintenance Tools & Depot Investment"],
+        ["3.1", "{Subsystem} Consumables, Standard & Special tools"],
+        ["3.2", "{Subsystem} Specific Tools & Equipment"],
+        ["4", "{Subsystem} Common Facilities"],
+        ["4.1", "{Subsystem} Cars Fleet"],
+        ["4.2", "{Subsystem} Personal Protective Equipment (PPE)"],
+        ["4.3", "{Subsystem} Office Supplies & Other Costs"],
+        ["5", "{Subsystem} Obsolescence Management"],
+        ["5.1", "{Subsystem} Obsolescence Monitoring"],
+        ["6", "{Subsystem} Technical Support"],
+        ["6.1", "{Subsystem} Supplier Support Contract"],
+        ["7", "{Subsystem} Technical Training"],
+        ["7.1", "{Subsystem} Technical Training Delivery"],
+        ["8", "{Subsystem} Overhaul, Renewals & Repairs"],
+        ["8.1", "{Subsystem} Repairs"],
+        ["8.2", "{Subsystem} Overhaul"],
+        ["8.3", "{Subsystem} Renewals"],
+        ["9", "{Subsystem} Accident & Vandalism"],
+        ["9.1", "{Subsystem} Accident Cost"],
+        ["9.2", "{Subsystem} Vandalism Cost"],
+      ];
+
+      const MERCURY_SUBSYSTEM_ORDER = ["Track", "Feeding_System", "POS", "PSD", "DEQ", "VMI"];
+
+      function getMercurySubsystemLabelFromSheet(sheet) {
+        const raw = String((sheet && (sheet.key || sheet.label || sheet.sheetName)) || "").trim();
+        return raw.replace(/_Synthesis$/i, "") || "";
+      }
+
+      function sortMercurySubsystemSheets(sheets) {
+        const preferred = MERCURY_SUBSYSTEM_ORDER.reduce(function (acc, name, index) {
+          acc[normalizeWbsText(name)] = index;
+          return acc;
+        }, {});
+        return (sheets || []).slice().sort(function (left, right) {
+          const leftLabel = getMercurySubsystemLabelFromSheet(left);
+          const rightLabel = getMercurySubsystemLabelFromSheet(right);
+          const leftRank = Object.prototype.hasOwnProperty.call(preferred, normalizeWbsText(leftLabel)) ? preferred[normalizeWbsText(leftLabel)] : 1000;
+          const rightRank = Object.prototype.hasOwnProperty.call(preferred, normalizeWbsText(rightLabel)) ? preferred[normalizeWbsText(rightLabel)] : 1000;
+          if (leftRank !== rightRank) return leftRank - rightRank;
+          return String(leftLabel).localeCompare(String(rightLabel));
+        });
+      }
+
+      function getMercurySubsystemSheets(project) {
+        const subsystemFiles = buildSubsystemSummaryVirtualFiles(project);
+        const globalFile = subsystemFiles.find(function (file) { return file.key === "global"; }) || subsystemFiles[0] || null;
+        const sheets = globalFile && Array.isArray(globalFile.sheets) ? globalFile.sheets : [];
+        return sortMercurySubsystemSheets(sheets.filter(function (sheet) {
+          const label = getMercurySubsystemLabelFromSheet(sheet);
+          return label && normalizeWbsText(label) !== normalizeWbsText("Infra_Management");
+        }));
+      }
+
+      function buildMercurySubsystemParentRows(project) {
+        return getMercurySubsystemSheets(project).flatMap(function (sheet, subsystemIndex) {
+          const subsystem = getMercurySubsystemLabelFromSheet(sheet);
+          const baseTree = "1." + (subsystemIndex + 4);
+          return MERCURY_SUBSYSTEM_PARENT_TEMPLATE.map(function (entry) {
+            const tree = entry[0] ? baseTree + "." + entry[0] : baseTree;
+            return createMercuryParentRow(tree, entry[1].replace(/\{Subsystem\}/g, subsystem));
+          });
         });
       }
 
@@ -8792,6 +8871,9 @@
             });
           });
         });
+        buildMercurySubsystemParentRows(project).forEach(function (parentRow) {
+          outputRows.push(parentRow);
+        });
         return outputRows;
       }
 
@@ -8844,7 +8926,7 @@
           return '<th class="sticky top-0 z-10 bg-white text-left py-3 px-3 whitespace-nowrap shadow-[inset_0_-1px_0_#e2e8f0]">' + escapeHtml(header) + '</th>';
         }).join("") + '</tr>';
         previewBody.innerHTML = sheet.rows.length
-          ? sheet.rows.slice(0, 100).map(function (row) {
+          ? sheet.rows.map(function (row) {
               return '<tr>' + MERCURY_INTERFACE_HEADERS.map(function (header) {
                 return '<td class="py-2 px-3 whitespace-nowrap">' + escapeHtml(row[header] ?? "") + '</td>';
               }).join("") + '</tr>';
