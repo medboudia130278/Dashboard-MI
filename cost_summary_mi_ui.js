@@ -8555,6 +8555,7 @@
       }
 
       const MERCURY_INTERFACE_HEADERS = [
+        "Phase", "Period", "Type",
         "Costing Tree", "Description", "Item Code", "Comment", "Attached File", "Planning Guide", "Costs Type", "PBS/IBS", "ABS", "OBS",
         "CARAT Unit", "Associated WP", "Tasks", "Sub-System", "Cost Drivers", "Variant", "GAP", "Instance", "Sort", "Unit Role",
         "Responsibility", "On/Off Shore", "Sub-System Manager", "Delegated person", "Price List Code 1", "Price List Code 2", "Price List Code 3",
@@ -8593,18 +8594,219 @@
         "Text 1", "Text 2", "Text 3", "Text 4", "Text 5", "Text 6", "Text 7", "Text 8", "Text 9",
       ];
 
+      const MERCURY_INFRA_PARENT_ROWS = [
+        ["1", "INFRASTRUCTURE"],
+        ["1.1", "Infra Project Management"],
+        ["1.1.1", "Prod Activities Governance"],
+        ["1.1.1.1", "Consulting"],
+        ["1.1.1.2", "Performance Management"],
+        ["1.1.1.3", "Project Risk, Savings and Opportunity Management"],
+        ["1.1.2", "Human Ressources"],
+        ["1.1.2.1", "Outsourced services (recruiting, legal, trainings, permits, certifications, habilitations, ...)"],
+        ["1.1.3", "Quality & Safety"],
+        ["1.1.3.1", "Safety Management Workload"],
+        ["1.1.3.2", "Quality Management Workload"],
+        ["1.1.3.3", "Quality Inspection & Control"],
+        ["1.1.4", "EHS"],
+        ["1.1.4.1", "EHS Management and expenditure"],
+        ["1.2", "O&M support Function INFRA"],
+        ["1.2.1", "Maintenance Tools and Depot Plant Investment"],
+        ["1.2.1.1", "Consumables, Standard & Special tools"],
+        ["1.2.1.2", "Specific Tools & Equipment"],
+        ["1.2.2", "Operational Support"],
+        ["1.2.2.1", "Travels"],
+        ["1.2.3", "Maintenance Engineering"],
+        ["1.2.3.1", "Engineering Management Workload"],
+        ["1.2.3.2", "Configuration & documentation Management"],
+        ["1.2.4", "Maintenance Industrialization"],
+        ["1.2.4.1", "Industrial Management Workload"],
+        ["1.2.5", "Obsolescence Management"],
+        ["1.2.5.1", "Obsolescence Workload"],
+        ["1.2.6", "IT, MMIS & Cybersecurity Management"],
+        ["1.2.6.1", "IT, MMIS & Cybersecurity Workload"],
+        ["1.2.6.2", "IT, MMIS & Cybersecurity Support Contract"],
+        ["1.2.7", "Training"],
+        ["1.2.7.1", "Training Workload"],
+        ["1.2.7.2", "Training Delivery"],
+        ["1.2.8", "Supply chain & Sourcing Management"],
+        ["1.2.8.1", "Supply chain & Sourcing Workload"],
+        ["1.2.8.2", "Supply chain & Sourcing Support Contract"],
+        ["1.2.9", "Maintenance Schedule Management"],
+        ["1.2.9.1", "Planning Management"],
+        ["1.2.9.2", "On call duties"],
+        ["1.2.9.3", "Call center & help desk"],
+        ["1.3", "Routine Maintenance"],
+        ["1.3.1", "Routine Maintenance Management"],
+        ["1.3.1.1", "Routine Maintenance Management Workload"],
+        ["1.3.2", "Common Facilities"],
+        ["1.3.2.1", "Cars Fleet"],
+        ["1.3.2.2", "Personal Protective Equipment (PPE)"],
+        ["1.3.2.3", "Office Supplies & Other Costs"],
+        ["1.3.3", "Overhaul, Renewals & Repairs management"],
+        ["1.3.3.1", "Overhaul, Renewals & Repairs Workload"],
+      ];
+
+      function buildMercuryInfraParentRows() {
+        return MERCURY_INFRA_PARENT_ROWS.map(function (entry) {
+          return {
+            "Phase": "",
+            "Period": "",
+            "Type": "",
+            "Costing Tree": entry[0],
+            "Description": entry[1],
+          };
+        });
+      }
+
+      function normalizeMercuryMatchText(value) {
+        return String(value || "")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase()
+          .replace(/&/g, "and")
+          .replace(/[^a-z0-9]+/g, "");
+      }
+
+      function normalizeMercuryHeader(value) {
+        return String(value || "")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase()
+          .replace(/&/g, "and")
+          .replace(/[^a-z0-9]+/g, "");
+      }
+
+      function mercuryRowTypeIs(row, typeName) {
+        return normalizeMercuryMatchText(row && row.Type) === normalizeMercuryMatchText(typeName);
+      }
+
+      function mercuryDescriptionEquals(row, values) {
+        const text = normalizeMercuryMatchText(row && row.Description);
+        return values.some(function (value) {
+          return text === normalizeMercuryMatchText(value);
+        });
+      }
+
+      function mercuryDescriptionContains(row, values) {
+        const text = normalizeMercuryMatchText(row && row.Description);
+        return values.some(function (value) {
+          return text.indexOf(normalizeMercuryMatchText(value)) >= 0;
+        });
+      }
+
+      const MERCURY_INFRA_CHILD_RULES = [
+        { parentTree: "1.1.1.2", type: "Workload", match: function (row) { return mercuryDescriptionEquals(row, ["RAMS_Manager", "RAMS_Engineer"]); } },
+        { parentTree: "1.1.3.1", type: "Workload", match: function (row) { return mercuryDescriptionEquals(row, ["Safety Manager", "Safety Engineer"]); } },
+        { parentTree: "1.1.3.2", type: "Workload", match: function (row) { return mercuryDescriptionEquals(row, ["Quality_Manager"]); } },
+        { parentTree: "1.1.3.3", type: "Workload", match: function (row) { return mercuryDescriptionEquals(row, ["Quality_Engineer"]); } },
+        { parentTree: "1.1.4.1", type: "Workload", match: function (row) { return mercuryDescriptionEquals(row, ["EHS_Engineer", "EHS_Manager"]); } },
+        { parentTree: "1.2.1.1", type: "Materials", match: function (row) { return mercuryDescriptionEquals(row, ["Tools"]); } },
+        { parentTree: "1.2.3.1", type: "Workload", match: function (row) { return mercuryDescriptionEquals(row, ["Subsystem Engineer", "Engineering_Manager", "Engineering External Support", "Engineer"]); } },
+        { parentTree: "1.2.3.2", type: "Workload", match: function (row) { return mercuryDescriptionContains(row, ["Configuration", "Documentation"]); } },
+        { parentTree: "1.2.4.1", type: "Workload", match: function (row) { return mercuryDescriptionEquals(row, ["Industrial_Manager", "Industrial_Engineer"]); } },
+        { parentTree: "1.2.5.1", type: "Workload", match: function (row) { return mercuryDescriptionEquals(row, ["Obsolescence_Engineer", "Obsolescence_Manager"]); } },
+        { parentTree: "1.2.6.1", type: "Workload", match: function (row) { return mercuryDescriptionEquals(row, ["Cybersecurity_Engineer", "Cybersecurity_Manager", "IT_Engineer", "IT_Manager"]); } },
+        { parentTree: "1.2.7.1", type: "Workload", match: function (row) { return mercuryDescriptionEquals(row, ["Training_Engineer", "Training_Manager"]); } },
+        { parentTree: "1.2.7.2", type: "Subcontracting", match: function (row) { return mercuryDescriptionEquals(row, ["Legal_Training"]); } },
+        { parentTree: "1.2.8.1", type: "Workload", match: function (row) { return mercuryDescriptionEquals(row, ["Warehouse_Engineer", "Warehouse_Manager", "Buyer", "Storekeeper"]); } },
+        { parentTree: "1.2.9.1", type: "Workload", match: function (row) { return mercuryDescriptionEquals(row, ["Planning_Engineer", "Planning_Manager", "Planner"]); } },
+        { parentTree: "1.2.9.2", type: "Workload", match: function (row) { return mercuryDescriptionContains(row, ["On call"]); } },
+        { parentTree: "1.3.1.1", type: "Workload", match: function (row) { return mercuryDescriptionEquals(row, ["Wayside_Maintenance_Manager"]) || mercuryDescriptionContains(row, ["Operation_Project_Manager", "Project_Director"]); } },
+        { parentTree: "1.3.2.1", type: "Materials", match: function (row) { return mercuryDescriptionEquals(row, ["Vehicles"]); } },
+        { parentTree: "1.3.2.2", type: "Materials", match: function (row) { return mercuryDescriptionEquals(row, ["PPE"]); } },
+        { parentTree: "1.3.2.3", type: "Materials", match: function (row) { return mercuryDescriptionEquals(row, ["Other Support Costs"]); } },
+        { parentTree: "1.3.3.1", type: "Workload", match: function (row) { return mercuryDescriptionContains(row, ["Overhaul", "Renewal", "Renewals", "Repair", "Repairs"]); } },
+      ];
+
+      function findMercurySourceValue(sourceRow, sourceByHeader, candidates) {
+        sourceRow = sourceRow || {};
+        for (const candidate of candidates) {
+          if (Object.prototype.hasOwnProperty.call(sourceRow, candidate)) return sourceRow[candidate];
+          const normalized = normalizeMercuryHeader(candidate);
+          if (Object.prototype.hasOwnProperty.call(sourceByHeader, normalized)) return sourceRow[sourceByHeader[normalized]];
+        }
+        return "";
+      }
+
+      function mapSubsystemSummaryRowToMercury(sourceRow, costingTree) {
+        const sourceByHeader = Object.keys(sourceRow || {}).reduce(function (acc, header) {
+          acc[normalizeMercuryHeader(header)] = header;
+          return acc;
+        }, {});
+        const outputRow = { "Costing Tree": costingTree };
+        MERCURY_INTERFACE_HEADERS.forEach(function (targetHeader) {
+          if (targetHeader === "Costing Tree") return;
+          if (targetHeader === "Description") {
+            outputRow[targetHeader] = findMercurySourceValue(sourceRow, sourceByHeader, ["Long_Description"]);
+            return;
+          }
+          if (targetHeader === "Insurances, Rates, & Taxes") {
+            outputRow[targetHeader] = findMercurySourceValue(sourceRow, sourceByHeader, ["Insurances-Rates & Taxes"]);
+            return;
+          }
+          if (targetHeader === "CARAT Unit") {
+            outputRow[targetHeader] = findMercurySourceValue(sourceRow, sourceByHeader, ["Carat Unit", "CARAT Unit"]);
+            return;
+          }
+          if (targetHeader === "External Purchase - Variable") {
+            outputRow[targetHeader] = findMercurySourceValue(sourceRow, sourceByHeader, ["External Purchase - Variable", "External Purchase – Variable", "External Purchase â€“ Variable"]);
+            return;
+          }
+          outputRow[targetHeader] = findMercurySourceValue(sourceRow, sourceByHeader, [targetHeader]);
+        });
+        return outputRow;
+      }
+
+      function getMercuryInfraSourceRows(project, phaseFilter) {
+        const subsystemFiles = buildSubsystemSummaryVirtualFiles(project);
+        const globalFile = subsystemFiles.find(function (file) { return file.key === "global"; }) || subsystemFiles[0] || null;
+        const infraSheet = globalFile && globalFile.sheets
+          ? globalFile.sheets.find(function (sheet) { return sheet.key === "Infra_Management" || sheet.sheetName === "Infra_Management_Synthesis"; })
+          : null;
+        const rows = infraSheet && Array.isArray(infraSheet.rows) ? infraSheet.rows : [];
+        if (!phaseFilter) return rows;
+        const phaseLabel = phaseFilter.label || phaseFilter.key || "";
+        return rows.filter(function (row) {
+          return normalizeWbsText(row.Phase) === normalizeWbsText(phaseLabel)
+            || normalizeWbsText(row.Phase) === normalizeWbsText(phaseFilter.key);
+        });
+      }
+
+      function buildMercuryInfraRows(project, phaseFilter) {
+        const sourceRows = getMercuryInfraSourceRows(project, phaseFilter);
+        const rulesByParent = MERCURY_INFRA_CHILD_RULES.reduce(function (acc, rule) {
+          if (!acc[rule.parentTree]) acc[rule.parentTree] = [];
+          acc[rule.parentTree].push(rule);
+          return acc;
+        }, {});
+        const outputRows = [];
+        buildMercuryInfraParentRows().forEach(function (parentRow) {
+          outputRows.push(parentRow);
+          const rules = rulesByParent[parentRow["Costing Tree"]] || [];
+          let childIndex = 1;
+          rules.forEach(function (rule) {
+            sourceRows.forEach(function (sourceRow) {
+              if (!mercuryRowTypeIs(sourceRow, rule.type) || !rule.match(sourceRow)) return;
+              outputRows.push(mapSubsystemSummaryRowToMercury(sourceRow, parentRow["Costing Tree"] + "." + childIndex));
+              childIndex += 1;
+            });
+          });
+        });
+        return outputRows;
+      }
+
       function closeMercuryInterfaceWorkspace() {
         setFallbackDetailWorkspaceActive(false);
         $("mercuryInterfaceWorkspace")?.classList.add("hidden");
       }
 
       function buildMercuryInterfaceProjects() {
-        return buildCombinedProjectPhaseProjects();
+        return buildSubsystemSummaryProjects();
       }
 
       function buildMercuryInterfaceVirtualFiles(project) {
         const phases = Array.isArray(project && project.phases) ? project.phases : [];
-        const sheet = { key: "Infra_MI", sheetName: "Infra_MI", rows: [] };
+        const sheet = { key: "Infra_MI", sheetName: "Infra_MI", rows: buildMercuryInfraRows(project, null) };
         const files = [{
           key: "global",
           mode: "global",
@@ -8620,7 +8822,7 @@
             phaseKey: phase.key,
             name: sanitizeExportFileName(project.projectName + "_" + phaseLabel + "_Mercury_Interface") + ".xlsx",
             label: phaseLabel,
-            sheets: [Object.assign({}, sheet, { rows: [] })],
+            sheets: [Object.assign({}, sheet, { rows: buildMercuryInfraRows(project, phase) })],
           });
         });
         return files;
@@ -8638,7 +8840,13 @@
         previewHead.innerHTML = '<tr class="border-b border-slate-200">' + MERCURY_INTERFACE_HEADERS.map(function (header) {
           return '<th class="text-left py-3 px-3 whitespace-nowrap">' + escapeHtml(header) + '</th>';
         }).join("") + '</tr>';
-        previewBody.innerHTML = '<tr><td colspan="' + MERCURY_INTERFACE_HEADERS.length + '" class="py-8 text-center text-sm text-slate-500">No Mercury Interface rows generated yet. Headers will still be exported.</td></tr>';
+        previewBody.innerHTML = sheet.rows.length
+          ? sheet.rows.slice(0, 100).map(function (row) {
+              return '<tr>' + MERCURY_INTERFACE_HEADERS.map(function (header) {
+                return '<td class="py-2 px-3 whitespace-nowrap">' + escapeHtml(row[header] ?? "") + '</td>';
+              }).join("") + '</tr>';
+            }).join("")
+          : '<tr><td colspan="' + MERCURY_INTERFACE_HEADERS.length + '" class="py-8 text-center text-sm text-slate-500">No Mercury Interface rows generated yet. Headers will still be exported.</td></tr>';
       }
 
       function exportMercuryInterfaceFile(file) {
