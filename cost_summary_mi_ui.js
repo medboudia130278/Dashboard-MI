@@ -1005,6 +1005,27 @@
           || safeReadJson(sharedStoreWorkbookPrefix + sourceId, null);
       }
 
+      async function refreshFallbackSharedSources() {
+        if (typeof window.__costSummaryRefreshSharedSnapshot === "function") {
+          try {
+            await window.__costSummaryRefreshSharedSnapshot();
+            return;
+          } catch (error) {
+            console.warn("Unable to refresh shared Source Data from the main module. Falling back to local cache.", error);
+          }
+        }
+        const sourceIds = safeReadJson("shared-store-workbook-index-v1", []);
+        window.__costSummarySharedWorkbooks = Array.isArray(sourceIds)
+          ? sourceIds.map(function (id) { return readSharedWorkbookForWorkspace(id); }).filter(Boolean)
+          : [];
+      }
+
+      async function refreshFallbackWorkspace(renderFn) {
+        await refreshFallbackSharedSources();
+        if (typeof renderFn === "function") renderFn();
+        window.updateToolbarStatusDots?.();
+      }
+
       function formatDateInputValue(value) {
         if (!value) return "";
         const date = new Date(value);
@@ -1114,6 +1135,56 @@
       function getWorkspaceWorkbookUpdatedAtMs(workbook) {
         const timestamp = Date.parse(String(workbook && workbook.updatedAt || ""));
         return Number.isFinite(timestamp) ? timestamp : 0;
+      }
+
+      function getFallbackWorkbookLogicalSourceKey(workbook) {
+        const gp = workbook && (workbook.generalParams || (workbook.sheets && (workbook.sheets.generalParameters || workbook.sheets.general_parameters))) || {};
+        const projectName = normalizeWorkspaceKey(gp.project_name || gp.project || "");
+        const projectType = normalizeWorkspaceKey(gp.project_type || "");
+        const kind = normalizeWorkspaceKey(workbook && workbook.kind || "workbook");
+        if (projectName) return [projectName, projectType, kind].join("|");
+        const projectKey = normalizeWorkspaceKey(workbook && (workbook.projectKey || workbook.fileName || workbook.sourceId) || "");
+        const fileName = normalizeWorkspaceKey(workbook && (workbook.fileName || workbook.label) || "");
+        return [projectKey, kind, fileName || String(workbook && workbook.sourceId || "").trim()].join("|");
+      }
+
+      function getFallbackWorkbookLogicalProjectKey(workbook) {
+        const gp = workbook && (workbook.generalParams || (workbook.sheets && (workbook.sheets.generalParameters || workbook.sheets.general_parameters))) || {};
+        const projectName = normalizeWorkspaceKey(gp.project_name || gp.project || "");
+        const projectType = normalizeWorkspaceKey(gp.project_type || "");
+        if (projectName) return [projectName, projectType].join("|");
+        return normalizeWorkspaceKey(workbook && (workbook.projectKey || workbook.fileName || workbook.sourceId) || "");
+      }
+
+      function fallbackWorkbookKindIs(workbook, expectedKind) {
+        return normalizeWorkspaceKey(workbook && workbook.kind || "") === normalizeWorkspaceKey(expectedKind);
+      }
+
+      function filterFallbackOrphanHoursReports(workbooks) {
+        const projectsWithOutputPlanning = new Set(
+          (workbooks || [])
+            .filter(function (workbook) { return fallbackWorkbookKindIs(workbook, "output_planning"); })
+            .map(getFallbackWorkbookLogicalProjectKey)
+            .filter(Boolean)
+        );
+        return (workbooks || []).filter(function (workbook) {
+          if (!fallbackWorkbookKindIs(workbook, "hours_report")) return true;
+          const projectKey = getFallbackWorkbookLogicalProjectKey(workbook);
+          return projectKey && projectsWithOutputPlanning.has(projectKey);
+        });
+      }
+
+      function compactFallbackSharedWorkbooks(workbooks) {
+        const byLogicalSource = new Map();
+        (workbooks || []).filter(Boolean).forEach(function (workbook) {
+          const key = getFallbackWorkbookLogicalSourceKey(workbook);
+          if (!key) return;
+          const existing = byLogicalSource.get(key);
+          if (!existing || getWorkspaceWorkbookUpdatedAtMs(workbook) >= getWorkspaceWorkbookUpdatedAtMs(existing)) {
+            byLogicalSource.set(key, workbook);
+          }
+        });
+        return filterFallbackOrphanHoursReports(Array.from(byLogicalSource.values()));
       }
 
       function getMergedFallbackGeneralParamsByProject(workbooks) {
@@ -4682,17 +4753,17 @@
 
       function getSharedWorkbooksForWorkspace() {
         if (Array.isArray(window.__costSummarySharedWorkbooks) && window.__costSummarySharedWorkbooks.length) {
-          return window.__costSummarySharedWorkbooks.slice();
+          return compactFallbackSharedWorkbooks(window.__costSummarySharedWorkbooks.slice());
         }
         const workbookIndex = safeReadJson("shared-store-workbook-index-v1", []);
         if (!Array.isArray(workbookIndex) || !workbookIndex.length) {
           return [];
         }
-        return workbookIndex
+        return compactFallbackSharedWorkbooks(workbookIndex
           .map(function (sourceId) {
             return readSharedWorkbookForWorkspace(sourceId);
           })
-          .filter(Boolean);
+          .filter(Boolean));
       }
 
       function closeMenus() {
@@ -5059,6 +5130,60 @@
 
       // ─── Tools & Consumables ──────────────────────────────────────────────
 
+      function buildWbsBaseProjects() {
+        const phaseProjects = buildCombinedProjectPhaseProjects();
+        if (!phaseProjects.length) return [];
+
+        const whiteCollarProjects = buildWhiteCollarProjects();
+        const whiteCollarByLookup = buildProjectLookupMap(whiteCollarProjects);
+        const workloadProjects = buildFallbackWorkloadSynthesisProjects();
+        const workloadByLookup = buildProjectLookupMap(workloadProjects);
+        const subsystemByLookup = buildProjectLookupMap(buildFallbackSubsystemSourceProjects());
+        const workloadOverrides = readWorkloadOverridesFallbackState();
+
+        return phaseProjects.map(function (phaseProj) {
+          const lookupKeys = getProjectLookupKeys(phaseProj);
+          const whiteCollarProject = findProjectByLookupKeys(whiteCollarByLookup, lookupKeys);
+          if (whiteCollarProject) {
+            return whiteCollarProject;
+          }
+
+          const workloadContext = resolveFallbackWorkloadContext(
+            phaseProj,
+            workloadByLookup,
+            subsystemByLookup,
+            workloadOverrides
+          );
+          const ccProj = readCombinedCostCenterProject(phaseProj.projectKey, phaseProj.persistedKeys);
+          const selectedPositions = Array.isArray(ccProj.selectedPositions) ? ccProj.selectedPositions : [];
+          const whiteCollarPositions = selectedPositions.filter(function (pos) {
+            const lower = String(pos || "").toLowerCase();
+            return ["technician", "supervisor", "worker"].every(function (keyword) {
+              return lower.indexOf(keyword) === -1;
+            });
+          });
+
+          return {
+            projectKey: phaseProj.projectKey,
+            projectName: phaseProj.projectName,
+            projectType: phaseProj.projectType,
+            projectContext: phaseProj.projectContext,
+            persistedKeys: lookupKeys,
+            phases: Array.isArray(phaseProj.phases) ? phaseProj.phases : [],
+            mobilisationPhaseCode: phaseProj.mobilisationPhaseCode,
+            recurrentCode: phaseProj.recurrentCode,
+            demobilisationCode: phaseProj.demobilisationCode,
+            subsystems: workloadContext.subsystems,
+            hasPhases: Array.isArray(phaseProj.phases) && phaseProj.phases.length > 0,
+            hasSubsystems: workloadContext.subsystems.length > 0,
+            whiteCollarPositions: whiteCollarPositions,
+            workloadRows: workloadContext.workloadRows,
+          };
+        }).filter(function (project) {
+          return project.hasPhases;
+        });
+      }
+
       function normalizeWbsExcelKey(value) {
         return String(value || "").trim().toLowerCase()
           .replace(/[\s/\\-]+/g, "_")
@@ -5149,7 +5274,7 @@
         const guidePlanningByLookup = buildProjectLookupMap(guidePlanningProjects);
         const workloadProjects = buildFallbackWorkloadSynthesisProjects();
         const workloadByLookup = buildProjectLookupMap(workloadProjects);
-        return buildWhiteCollarProjects().map(function (project) {
+        return buildWbsBaseProjects().map(function (project) {
           const lookupKeys = getProjectLookupKeys(project);
           const current = readPersistedFallbackProjectState(persisted, lookupKeys);
           const importedRows = Array.isArray(current.importedRows) ? current.importedRows : [];
@@ -12335,7 +12460,7 @@
         if (window.__costSummaryFallbackUiInitialized) return;
         window.__costSummaryFallbackUiInitialized = true;
         updateToolbarStatusDots();
-        document.addEventListener("click", function (event) {
+        document.addEventListener("click", async function (event) {
           if (event.target.closest("#exportConfigJsonBtn")) {
             event.preventDefault();
             exportCostSummaryConfigJson();
@@ -12661,25 +12786,25 @@
 
           if (event.target.closest("#refreshCostCentersWorkspaceBtn")) {
             event.preventDefault();
-            renderFallbackCostCentersWorkspace();
+            await refreshFallbackWorkspace(renderFallbackCostCentersWorkspace);
             return;
           }
 
           if (event.target.closest("#refreshCurrencyExchangeWorkspaceBtn")) {
             event.preventDefault();
-            renderFallbackCurrencyExchangeWorkspace();
+            await refreshFallbackWorkspace(renderFallbackCurrencyExchangeWorkspace);
             return;
           }
 
           if (event.target.closest("#refreshFirmingRulesWorkspaceBtn")) {
             event.preventDefault();
-            renderFallbackFirmingRulesWorkspace();
+            await refreshFallbackWorkspace(renderFallbackFirmingRulesWorkspace);
             return;
           }
 
           if (event.target.closest("#refreshPriceListsWorkspaceBtn")) {
             event.preventDefault();
-            renderFallbackPriceListsWorkspace();
+            await refreshFallbackWorkspace(renderFallbackPriceListsWorkspace);
             return;
           }
 
@@ -12720,7 +12845,7 @@
 
           if (event.target.closest("#refreshWorkloadSynthesisWorkspaceBtn")) {
             event.preventDefault();
-            renderFallbackWorkloadSynthesisWorkspace();
+            await refreshFallbackWorkspace(renderFallbackWorkloadSynthesisWorkspace);
             return;
           }
 
@@ -12802,19 +12927,19 @@
 
           if (event.target.closest("#refreshWbsWorkspaceBtn")) {
             event.preventDefault();
-            renderFallbackWbsWorkspace();
+            await refreshFallbackWorkspace(renderFallbackWbsWorkspace);
             return;
           }
 
           if (event.target.closest("#refreshSubsystemSummaryWorkspaceBtn")) {
             event.preventDefault();
-            renderSubsystemSummaryWorkspace();
+            await refreshFallbackWorkspace(renderSubsystemSummaryWorkspace);
             return;
           }
 
           if (event.target.closest("#refreshMercuryInterfaceWorkspaceBtn")) {
             event.preventDefault();
-            renderMercuryInterfaceWorkspace();
+            await refreshFallbackWorkspace(renderMercuryInterfaceWorkspace);
             return;
           }
 
@@ -12929,7 +13054,7 @@
 
           if (event.target.closest("#refreshWhiteCollarWorkspaceBtn")) {
             event.preventDefault();
-            renderFallbackWhiteCollarWorkspace();
+            await refreshFallbackWorkspace(renderFallbackWhiteCollarWorkspace);
             return;
           }
 
@@ -12963,7 +13088,7 @@
 
           if (event.target.closest("#refreshTcWorkspaceBtn")) {
             event.preventDefault();
-            renderFallbackToolsConsumablesWorkspace();
+            await refreshFallbackWorkspace(renderFallbackToolsConsumablesWorkspace);
             return;
           }
 
@@ -12998,7 +13123,7 @@
 
           if (event.target.closest("#refreshVehiclesWorkspaceBtn")) {
             event.preventDefault();
-            renderFallbackVehiclesWorkspace();
+            await refreshFallbackWorkspace(renderFallbackVehiclesWorkspace);
             return;
           }
 
@@ -13032,7 +13157,7 @@
 
           if (event.target.closest("#refreshOscWorkspaceBtn")) {
             event.preventDefault();
-            renderFallbackOscWorkspace();
+            await refreshFallbackWorkspace(renderFallbackOscWorkspace);
             return;
           }
 
@@ -13052,7 +13177,7 @@
 
           if (event.target.closest("#refreshMtWorkspaceBtn")) {
             event.preventDefault();
-            renderFallbackMandatoryTrainingWorkspace();
+            await refreshFallbackWorkspace(renderFallbackMandatoryTrainingWorkspace);
             return;
           }
 
@@ -13115,13 +13240,13 @@
 
           if (event.target.closest("#refreshPioDefinitionWorkspaceBtn")) {
             event.preventDefault();
-            renderFallbackPioDefinitionWorkspace();
+            await refreshFallbackWorkspace(renderFallbackPioDefinitionWorkspace);
             return;
           }
 
           if (event.target.closest("#refreshGuidePlanningWorkspaceBtn")) {
             event.preventDefault();
-            renderFallbackGuidePlanningWorkspace();
+            await refreshFallbackWorkspace(renderFallbackGuidePlanningWorkspace);
             return;
           }
 

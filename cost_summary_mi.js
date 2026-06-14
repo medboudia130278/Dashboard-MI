@@ -5,6 +5,7 @@ import {
 } from "./shared/shared_models.js";
 import {
   getAllWorkbookData,
+  getWorkbookIndex,
   initSharedStore,
   loadCostSummaryDraft,
   loadSharedSettings,
@@ -185,11 +186,44 @@ function normalizeSourceDataKey(value) {
 }
 
 function getWorkbookLogicalSourceKey(workbook) {
-  const projectKey = normalizeSourceDataKey(getWorkbookProjectKey(workbook));
+  const params = getWorkbookGeneralParams(workbook);
+  const projectName = normalizeSourceDataKey(params.project_name || params.project || "");
+  const projectType = normalizeSourceDataKey(params.project_type || "");
   const kind = normalizeSourceDataKey(workbook?.kind || "workbook");
+  if (projectName) {
+    return [projectName, projectType, kind].join("|");
+  }
+
+  const projectKey = normalizeSourceDataKey(getWorkbookProjectKey(workbook));
   const fileName = normalizeSourceDataKey(workbook?.fileName || workbook?.label || "");
   if (!projectKey && !kind && !fileName) return String(workbook?.sourceId || "").trim();
   return [projectKey, kind, fileName || String(workbook?.sourceId || "").trim()].join("|");
+}
+
+function getWorkbookLogicalProjectKey(workbook) {
+  const params = getWorkbookGeneralParams(workbook);
+  const projectName = normalizeSourceDataKey(params.project_name || params.project || "");
+  const projectType = normalizeSourceDataKey(params.project_type || "");
+  if (projectName) return [projectName, projectType].join("|");
+  return normalizeSourceDataKey(getWorkbookProjectKey(workbook));
+}
+
+function isWorkbookKind(workbook, expectedKind) {
+  return normalizeSourceDataKey(workbook?.kind || "") === normalizeSourceDataKey(expectedKind);
+}
+
+function filterOrphanHoursReportWorkbooks(workbooks = []) {
+  const projectsWithOutputPlanning = new Set(
+    (workbooks || [])
+      .filter((workbook) => isWorkbookKind(workbook, "output_planning"))
+      .map((workbook) => getWorkbookLogicalProjectKey(workbook))
+      .filter(Boolean)
+  );
+  return (workbooks || []).filter((workbook) => {
+    if (!isWorkbookKind(workbook, "hours_report")) return true;
+    const projectKey = getWorkbookLogicalProjectKey(workbook);
+    return projectKey && projectsWithOutputPlanning.has(projectKey);
+  });
 }
 
 function compactWorkbooksForSourceData(workbooks = []) {
@@ -213,13 +247,13 @@ function compactWorkbooksForSourceData(workbooks = []) {
     }
   });
 
-  return Array.from(byLogicalSource.values()).map((entry) => {
+  return filterOrphanHoursReportWorkbooks(Array.from(byLogicalSource.values()).map((entry) => {
     const sourceIds = Array.from(entry.sourceIds);
     return Object.assign({}, entry.workbook, {
       mergedSourceIds: sourceIds,
       duplicateSourceCount: Math.max(0, sourceIds.length - 1),
     });
-  });
+  }));
 }
 
 function getWorkbookProjectKey(workbook) {
@@ -376,6 +410,7 @@ async function cleanupSharedWorkbookStore() {
   const sourceIds = Array.from(new Set(indexIds.concat(storedIds)));
   const workbooks = [];
   const missingIds = [];
+  const staleBridgeIds = [];
   let bridgeWorkbooks = [];
 
   sourceIds.forEach((sourceId) => {
@@ -387,7 +422,10 @@ async function cleanupSharedWorkbookStore() {
   try {
     bridgeWorkbooks = await loadIndexedDbBridgeWorkbooks();
     bridgeWorkbooks.forEach((workbook) => {
-      if (workbook?.sourceId) workbooks.push(workbook);
+      const sourceId = String(workbook?.sourceId || "").trim();
+      if (!sourceId) return;
+      if (sourceIds.includes(sourceId)) workbooks.push(workbook);
+      else staleBridgeIds.push(sourceId);
     });
   } catch {
     bridgeWorkbooks = [];
@@ -416,22 +454,26 @@ async function cleanupSharedWorkbookStore() {
   const keepWorkbooks = Array.from(byLogicalSource.values())
     .map((entry) => entry.keep)
     .filter(Boolean);
+  const activeKeepWorkbooks = filterOrphanHoursReportWorkbooks(keepWorkbooks);
   const keepIds = keepWorkbooks
     .map((workbook) => String(workbook.sourceId || "").trim())
     .filter(Boolean);
-  const keepIdSet = new Set(keepIds);
+  const activeKeepIds = activeKeepWorkbooks
+    .map((workbook) => String(workbook.sourceId || "").trim())
+    .filter(Boolean);
+  const keepIdSet = new Set(activeKeepIds);
   const duplicateIds = Array.from(new Set(workbooks
     .map((workbook) => String(workbook.sourceId || "").trim())
     .filter((sourceId) => sourceId && !keepIdSet.has(sourceId))));
-  const removeIds = Array.from(new Set(missingIds.concat(duplicateIds)));
+  const removeIds = Array.from(new Set(missingIds.concat(duplicateIds).concat(staleBridgeIds)));
 
   removeIds.forEach((sourceId) => {
     localStorage.removeItem(`${WORKSPACE_FULL_PREFIX}${sourceId}`);
     localStorage.removeItem(`${WORKSPACE_LITE_PREFIX}${sourceId}`);
   });
 
-  localStorage.setItem(SHARED_STORE_KEYS.workbookIndex, JSON.stringify(keepIds));
-  localStorage.setItem(WORKSPACE_LITE_INDEX_KEY, JSON.stringify(keepIds));
+  localStorage.setItem(SHARED_STORE_KEYS.workbookIndex, JSON.stringify(activeKeepIds));
+  localStorage.setItem(WORKSPACE_LITE_INDEX_KEY, JSON.stringify(activeKeepIds));
 
   await Promise.all(removeIds.map(async (sourceId) => {
     try {
@@ -445,7 +487,7 @@ async function cleanupSharedWorkbookStore() {
     beforeIndexCount: indexIds.length,
     beforeStoredCount: storedIds.length,
     beforeBridgeCount: bridgeWorkbooks.length,
-    keptCount: keepIds.length,
+    keptCount: activeKeepIds.length,
     removedMissingCount: missingIds.length,
     removedDuplicateCount: duplicateIds.length,
   };
@@ -458,6 +500,21 @@ async function loadIndexedDbBridgeWorkbooks() {
   } catch {
     return [];
   }
+}
+
+async function loadActiveSharedDashboardWorkbooks() {
+  await initSharedStore();
+  const activeSourceIds = await getWorkbookIndex();
+  const activeSourceIdSet = new Set(
+    (Array.isArray(activeSourceIds) ? activeSourceIds : [])
+      .map((id) => String(id || "").trim())
+      .filter(Boolean)
+  );
+  const localSharedWorkbooks = await getAllWorkbookData();
+  const indexedDbBridgeWorkbooks = activeSourceIdSet.size
+    ? (await loadIndexedDbBridgeWorkbooks()).filter((workbook) => activeSourceIdSet.has(String(workbook?.sourceId || "").trim()))
+    : [];
+  return mergeWorkbooksBySourceId(indexedDbBridgeWorkbooks, localSharedWorkbooks);
 }
 
 const toolbarModules = [
@@ -1856,6 +1913,7 @@ async function importCostSummaryConfigPayloadToStudy(payload) {
 
 window.__costSummaryBuildConfigExport = buildCostSummaryConfigExportPayload;
 window.__costSummaryImportConfigPayload = importCostSummaryConfigPayloadToStudy;
+window.__costSummaryRefreshSharedSnapshot = refreshSharedSnapshot;
 
 function isCostCenterShiftPosition(position) {
   return /team leader|supervisor|technician|worker/i.test(position || "");
@@ -2804,10 +2862,7 @@ function findMatchingHourlyRateImportRow(importRows, row) {
 }
 
 async function refreshCostCentersSource() {
-  await initSharedStore();
-  const localSharedWorkbooks = await getAllWorkbookData();
-  const indexedDbBridgeWorkbooks = await loadIndexedDbBridgeWorkbooks();
-  state.workbooks = mergeWorkbooksBySourceId(indexedDbBridgeWorkbooks, localSharedWorkbooks);
+  state.workbooks = await loadActiveSharedDashboardWorkbooks();
   syncWorkspaceLiteCache(state.workbooks);
 }
 
@@ -2831,18 +2886,12 @@ async function saveCostCentersState(mutator) {
 }
 
 async function refreshPioDefinitionSource() {
-  await initSharedStore();
-  const localSharedWorkbooks = await getAllWorkbookData();
-  const indexedDbBridgeWorkbooks = await loadIndexedDbBridgeWorkbooks();
-  state.workbooks = mergeWorkbooksBySourceId(indexedDbBridgeWorkbooks, localSharedWorkbooks);
+  state.workbooks = await loadActiveSharedDashboardWorkbooks();
   syncWorkspaceLiteCache(state.workbooks);
 }
 
 async function refreshGuidePlanningSource() {
-  await initSharedStore();
-  const localSharedWorkbooks = await getAllWorkbookData();
-  const indexedDbBridgeWorkbooks = await loadIndexedDbBridgeWorkbooks();
-  state.workbooks = mergeWorkbooksBySourceId(indexedDbBridgeWorkbooks, localSharedWorkbooks);
+  state.workbooks = await loadActiveSharedDashboardWorkbooks();
   syncWorkspaceLiteCache(state.workbooks);
 }
 
@@ -2866,10 +2915,7 @@ async function savePioDefinitionState(mutator) {
 }
 
 async function refreshCurrencyExchangeSource() {
-  await initSharedStore();
-  const localSharedWorkbooks = await getAllWorkbookData();
-  const indexedDbBridgeWorkbooks = await loadIndexedDbBridgeWorkbooks();
-  state.workbooks = mergeWorkbooksBySourceId(indexedDbBridgeWorkbooks, localSharedWorkbooks);
+  state.workbooks = await loadActiveSharedDashboardWorkbooks();
   syncWorkspaceLiteCache(state.workbooks);
   state.settings = await loadSharedSettings();
 }
@@ -3473,10 +3519,7 @@ function buildProjectPhaseProjects() {
 }
 
 async function refreshProjectPhaseProjectsSource() {
-  await initSharedStore();
-  const localSharedWorkbooks = await getAllWorkbookData();
-  const indexedDbBridgeWorkbooks = await loadIndexedDbBridgeWorkbooks();
-  state.workbooks = mergeWorkbooksBySourceId(indexedDbBridgeWorkbooks, localSharedWorkbooks);
+  state.workbooks = await loadActiveSharedDashboardWorkbooks();
   syncWorkspaceLiteCache(state.workbooks);
 }
 
@@ -5704,10 +5747,7 @@ function setupEvents() {
 
 async function hydrateSharedState() {
   try {
-    await initSharedStore();
-    const localSharedWorkbooks = await getAllWorkbookData();
-    const indexedDbBridgeWorkbooks = await loadIndexedDbBridgeWorkbooks();
-    state.workbooks = mergeWorkbooksBySourceId(indexedDbBridgeWorkbooks, localSharedWorkbooks);
+    state.workbooks = await loadActiveSharedDashboardWorkbooks();
     syncWorkspaceLiteCache(state.workbooks);
     state.settings = await loadSharedSettings();
     const legacyDraft = await loadCostSummaryDraft();

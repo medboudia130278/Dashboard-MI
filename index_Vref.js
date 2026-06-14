@@ -518,6 +518,7 @@
   }
 
   function queueSharedWorkbookRemoval(fileIds) {
+    removeSharedWorkbookDataFallback(fileIds);
     void removeSharedWorkbookDataForFiles(fileIds);
   }
 
