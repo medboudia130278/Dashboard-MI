@@ -8696,6 +8696,24 @@
 
       const MERCURY_SUBSYSTEM_ORDER = ["Track", "Feeding_System", "POS", "PSD", "DEQ", "VMI"];
 
+      const MERCURY_SUBSYSTEM_CHILD_RULES = [
+        { parentSuffix: "1.1", types: ["Workload"], descriptions: ["Preventive_Supervisor", "Preventive_Technician", "Preventive_Worker"] },
+        { parentSuffix: "1.2", types: ["Materials"], descriptions: ["Preventive spares", "Preventive spare"] },
+        { parentSuffix: "1.3", types: ["Subcontracting"], descriptions: ["Preventive_Subcontract", "Preventive Subcontract"] },
+        { parentSuffix: "2.1", types: ["Workload"], descriptions: ["Corrective_Supervisor", "Corrective_Technician", "Corrective_Worker"] },
+        { parentSuffix: "2.2", types: ["Materials"], descriptions: ["Corrective spares", "Corrective spare"] },
+        { parentSuffix: "2.3", types: ["Subcontracting"], descriptions: ["Corrective_Subcontract", "Corrective Subcontract"] },
+        { parentSuffix: "3.1", types: ["Materials"], descriptions: ["Consumables", "Consumable", "Tools", "Tool"] },
+        { parentSuffix: "4.1", types: ["Materials"], descriptions: ["Vehicles", "Vehicle"] },
+        { parentSuffix: "4.2", types: ["Materials"], descriptions: ["PPE"] },
+        { parentSuffix: "5.1", types: ["Subcontracting"], containsDescriptions: ["Obsolescence"] },
+        { parentSuffix: "6.1", types: ["Subcontracting"], descriptions: ["Technical_Support", "Technical Support"] },
+        { parentSuffix: "7.1", types: ["Subcontracting"], descriptions: ["Training", "Technical_Training", "Technical Training"] },
+        { parentSuffix: "8.1", types: ["Materials"], descriptions: ["Repair", "Repairs"] },
+        { parentSuffix: "8.2", types: ["Ovh_Workload", "Ovh_Material"], descriptions: ["Overhaul"] },
+        { parentSuffix: "8.3", types: ["Renew_Management", "Renew_T&C", "Renew_Material"], descriptions: ["Renewal", "Renewals"] },
+      ];
+
       function getMercurySubsystemLabelFromSheet(sheet) {
         const raw = String((sheet && (sheet.key || sheet.label || sheet.sheetName)) || "").trim();
         return raw.replace(/_Synthesis$/i, "") || "";
@@ -8734,6 +8752,71 @@
             const tree = entry[0] ? baseTree + "." + entry[0] : baseTree;
             return createMercuryParentRow(tree, entry[1].replace(/\{Subsystem\}/g, subsystem));
           });
+        });
+      }
+
+      function mercuryTypeMatchesAny(row, values) {
+        const type = normalizeMercuryMatchText(row && row.Type);
+        return (values || []).some(function (value) {
+          return type === normalizeMercuryMatchText(value);
+        });
+      }
+
+      function mercuryDescriptionMatchesAny(row, values) {
+        const description = normalizeMercuryMatchText(row && row.Description);
+        return (values || []).some(function (value) {
+          return description === normalizeMercuryMatchText(value);
+        });
+      }
+
+      function mercuryDescriptionContainsAny(row, values) {
+        const description = normalizeMercuryMatchText(row && row.Description);
+        return (values || []).some(function (value) {
+          const normalized = normalizeMercuryMatchText(value);
+          return normalized && description.indexOf(normalized) !== -1;
+        });
+      }
+
+      function mercurySubsystemRuleMatches(row, rule) {
+        if (!mercuryTypeMatchesAny(row, rule.types)) return false;
+        if (Array.isArray(rule.descriptions) && rule.descriptions.length && mercuryDescriptionMatchesAny(row, rule.descriptions)) return true;
+        if (Array.isArray(rule.containsDescriptions) && rule.containsDescriptions.length && mercuryDescriptionContainsAny(row, rule.containsDescriptions)) return true;
+        return false;
+      }
+
+      function filterMercuryRowsByPhase(rows, phaseFilter) {
+        if (!phaseFilter) return rows || [];
+        const phaseLabel = phaseFilter.label || phaseFilter.key || "";
+        return (rows || []).filter(function (row) {
+          return normalizeWbsText(row.Phase) === normalizeWbsText(phaseLabel)
+            || normalizeWbsText(row.Phase) === normalizeWbsText(phaseFilter.key);
+        });
+      }
+
+      function buildMercurySubsystemRows(project, phaseFilter) {
+        return getMercurySubsystemSheets(project).flatMap(function (sheet, subsystemIndex) {
+          const subsystem = getMercurySubsystemLabelFromSheet(sheet);
+          const baseTree = "1." + (subsystemIndex + 4);
+          const sourceRows = filterMercuryRowsByPhase(sheet.rows || [], phaseFilter);
+          const usedRowIndexes = new Set();
+          const outputRows = [];
+          MERCURY_SUBSYSTEM_PARENT_TEMPLATE.forEach(function (entry) {
+            const suffix = entry[0];
+            const parentTree = suffix ? baseTree + "." + suffix : baseTree;
+            outputRows.push(createMercuryParentRow(parentTree, entry[1].replace(/\{Subsystem\}/g, subsystem)));
+            const rules = MERCURY_SUBSYSTEM_CHILD_RULES.filter(function (rule) { return rule.parentSuffix === suffix; });
+            if (!rules.length) return;
+            let childIndex = 1;
+            rules.forEach(function (rule) {
+              sourceRows.forEach(function (sourceRow, rowIndex) {
+                if (usedRowIndexes.has(rowIndex) || !mercurySubsystemRuleMatches(sourceRow, rule)) return;
+                outputRows.push(mapSubsystemSummaryRowToMercury(sourceRow, parentTree + "." + childIndex));
+                usedRowIndexes.add(rowIndex);
+                childIndex += 1;
+              });
+            });
+          });
+          return outputRows;
         });
       }
 
@@ -8871,8 +8954,8 @@
             });
           });
         });
-        buildMercurySubsystemParentRows(project).forEach(function (parentRow) {
-          outputRows.push(parentRow);
+        buildMercurySubsystemRows(project, phaseFilter).forEach(function (row) {
+          outputRows.push(row);
         });
         return outputRows;
       }

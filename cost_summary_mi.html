@@ -2595,6 +2595,13 @@
           <p class="mt-2 text-cyan-800">The first subsystem block starts at <strong>1.4</strong>, the next at <strong>1.5</strong>, then <strong>1.6</strong>, etc. Each block creates the same parent arborescence: Preventive, Corrective, Tools &amp; Depot Investment, Common Facilities, Obsolescence, Technical Support, Technical Training, Overhaul/Renewals/Repairs, Accident and Vandalism.</p>
         </div>
 
+        <div class="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-4">
+          <p class="font-bold text-emerald-900 mb-2">Subsystem child rows</p>
+          <p class="text-emerald-800">For each <strong>{Subsystem}_Synthesis</strong> sheet, child rows are inserted under the matching subsystem parent by checking the source row <strong>Type</strong> and <strong>Description</strong>. Workload preventive/corrective rows go under Preventive or Corrective Workload; Preventive spares and Corrective spares go under their Materials branches; Preventive_Subcontract and Corrective_Subcontract go under their Subcontracting branches.</p>
+          <p class="mt-2 text-emerald-800">Tools and Consumables go under Consumables, Standard &amp; Special tools; Vehicles goes under Cars Fleet; PPE goes under Personal Protective Equipment; Obsolescence rows go under Obsolescence Monitoring; Technical_Support goes under Supplier Support Contract; Training and Technical_Training go under Technical Training Delivery.</p>
+          <p class="mt-2 text-emerald-800">Repair rows go under Repairs, Overhaul rows under Overhaul, and Renewal rows under Renewals. Matching accepts case differences, spaces and underscores, with the specific singular/plural variants currently defined for consumables, vehicles, repairs, renewals and obsolescence.</p>
+        </div>
+
         <div>
           <p class="font-bold text-slate-800 mb-2">Costing Tree logic</p>
           <ul class="space-y-3 pl-1">
@@ -2657,7 +2664,7 @@
 
         <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
           <p class="font-semibold text-slate-800 mb-1">Current scope</p>
-          <p class="text-slate-600">At this stage Mercury Interface fills the <strong>Infra_MI</strong> sheet with the Infra Management mapped rows and creates the subsystem parent blocks. Subsystem child rows will be connected under those parents in the next implementation steps.</p>
+          <p class="text-slate-600">At this stage Mercury Interface fills the <strong>Infra_MI</strong> sheet with the Infra Management mapped rows, creates the subsystem parent blocks, and maps subsystem child rows from each available <strong>{Subsystem}_Synthesis</strong> sheet.</p>
         </div>
       </div>
     </div>
@@ -3087,7 +3094,7 @@
     </div>
   </aside>
 
-  <script src="cost_summary_mi_ui.js?v=20260613-mercury-subsystem-parents-v2"></script>
-  <script type="module" src="cost_summary_mi.js?v=20260613-mercury-subsystem-parents-v2"></script>
+  <script src="cost_summary_mi_ui.js?v=20260614-mercury-subsystem-children-v1"></script>
+  <script type="module" src="cost_summary_mi.js?v=20260614-mercury-subsystem-children-v1"></script>
 </body>
 </html>
