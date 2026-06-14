@@ -3,7 +3,7 @@
   "rewrites": [
     {
       "source": "/",
-      "destination": "/index_Vref.html"
+      "destination": "/index.html"
     },
     {
       "source": "/dashboard",

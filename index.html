@@ -3,16 +3,179 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dashboard MI</title>
-  <meta http-equiv="refresh" content="0; url=./index_Vref.html">
-  <script>
-    window.location.replace("./index_Vref.html");
-  </script>
+  <title>Dashboard MI Access</title>
+  <script src="shared/dashboard_auth.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --primary: #137fec;
+      --ink: #0f172a;
+      --muted: #64748b;
+      --border: #dbe5f0;
+      --surface: #ffffff;
+      --soft: #f6f8fc;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at top left, rgba(19, 127, 236, .14), transparent 28rem),
+        linear-gradient(135deg, #f8fafc 0%, #eef4fb 100%);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      padding: 24px;
+    }
+
+    .access-card {
+      width: min(100%, 440px);
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, .94);
+      border-radius: 22px;
+      box-shadow: 0 24px 70px rgba(15, 23, 42, .12);
+      padding: 32px;
+    }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+
+    .brand-mark {
+      width: 48px;
+      height: 48px;
+      display: grid;
+      place-items: center;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #137fec, #4da3ff);
+      color: #fff;
+      font-weight: 900;
+      letter-spacing: .02em;
+      box-shadow: 0 14px 30px rgba(19, 127, 236, .28);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+    }
+
+    p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    label {
+      display: block;
+      margin: 20px 0 8px;
+      color: #334155;
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    input {
+      width: 100%;
+      height: 48px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 0 14px;
+      color: var(--ink);
+      background: var(--surface);
+      font: inherit;
+      outline: none;
+      transition: border-color .16s ease, box-shadow .16s ease;
+    }
+
+    input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 4px rgba(19, 127, 236, .12);
+    }
+
+    button {
+      width: 100%;
+      height: 48px;
+      margin-top: 16px;
+      border: 0;
+      border-radius: 14px;
+      background: #0f172a;
+      color: #fff;
+      font: inherit;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform .16s ease, background .16s ease;
+    }
+
+    button:hover { background: #172033; }
+    button:active { transform: translateY(1px); }
+
+    .error {
+      display: none;
+      margin-top: 12px;
+      border: 1px solid #fecaca;
+      border-radius: 12px;
+      background: #fef2f2;
+      color: #991b1b;
+      padding: 10px 12px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .error.visible { display: block; }
+  </style>
 </head>
 <body>
-  <p>
-    Opening Dashboard MI.
-    <a href="./index_Vref.html">Continue to the dashboard</a>.
-  </p>
+  <main class="access-card" aria-labelledby="accessTitle">
+    <div class="brand-row">
+      <div class="brand-mark" aria-hidden="true">MI</div>
+      <div>
+        <h1 id="accessTitle">Costing Dashboard</h1>
+        <p>Enter the access password to continue.</p>
+      </div>
+    </div>
+
+    <form id="accessForm" autocomplete="off">
+      <label for="passwordInput">Password</label>
+      <input id="passwordInput" name="password" type="password" autofocus required>
+      <button type="submit">Open dashboard</button>
+      <div id="accessError" class="error" role="alert">Incorrect password.</div>
+    </form>
+  </main>
+
+  <script>
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      var next = window.DashboardAuth.getNextUrl(params.get("next"));
+      if (window.DashboardAuth.isAuthenticated() && !params.has("force")) {
+        window.location.replace(next);
+        return;
+      }
+
+      var form = document.getElementById("accessForm");
+      var input = document.getElementById("passwordInput");
+      var error = document.getElementById("accessError");
+
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+        if (window.DashboardAuth.authenticate(input.value)) {
+          window.location.replace(next);
+          return;
+        }
+        error.classList.add("visible");
+        input.value = "";
+        input.focus();
+      });
+    })();
+  </script>
 </body>
 </html>
