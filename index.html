@@ -132,6 +132,27 @@
     }
 
     .error.visible { display: block; }
+
+    .support-note {
+      margin-top: 18px;
+      border: 1px solid #bfdbfe;
+      border-radius: 14px;
+      background: #eff6ff;
+      color: #1e3a8a;
+      padding: 13px 14px;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .signature {
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+      color: var(--primary);
+      font-size: 13px;
+      font-weight: 800;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
@@ -150,6 +171,12 @@
       <button type="submit">Open dashboard</button>
       <div id="accessError" class="error" role="alert">Incorrect password.</div>
     </form>
+
+    <p class="support-note">
+      For access requests, technical assistance, or any support related to the use of this tool, please contact the administrator, Mohamed BOUDIA, by email at mohamed.boudia@alstomgroup.com or by phone at +33 6 67 88 49 72.
+    </p>
+
+    <div class="signature">Created by Mohamed BOUDIA</div>
   </main>
 
   <script>
