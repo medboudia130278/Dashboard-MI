@@ -5921,6 +5921,7 @@ async function switchToStudy(studyId) {
   publishPioDefinitionBridge();
   applyDraftToForm(state.draft);
   renderStudyWorkspace();
+  updateToolbarStatusDots();
   refreshStatus(state.draft);
   clearRuntimeAlert();
 }
