@@ -493,6 +493,87 @@ async function cleanupSharedWorkbookStore() {
   };
 }
 
+async function removeSharedProjectSourceData(projectIdentifiers) {
+  const targetProjectKeys = new Set(
+    (Array.isArray(projectIdentifiers) ? projectIdentifiers : [projectIdentifiers])
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+      .flatMap((value) => [value, normalizeSourceDataKey(value)])
+      .filter(Boolean)
+  );
+  if (!targetProjectKeys.size) {
+    return { removedCount: 0 };
+  }
+
+  const indexedIds = readLocalJsonValue(SHARED_STORE_KEYS.workbookIndex, []);
+  const indexIds = Array.isArray(indexedIds) ? indexedIds.map((id) => String(id || "").trim()).filter(Boolean) : [];
+  const storedIds = listStoredSharedWorkbookIds();
+  const idsToRemove = new Set();
+
+  function collectWorkbook(workbook, fallbackSourceId = "") {
+    if (!workbook || typeof workbook !== "object") return;
+    const workbookProjectKeys = [
+      getWorkbookLogicalProjectKey(workbook),
+      getWorkbookProjectKey(workbook),
+      workbook.projectKey,
+    ]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+      .flatMap((value) => [value, normalizeSourceDataKey(value)]);
+    if (!workbookProjectKeys.some((key) => targetProjectKeys.has(key))) return;
+    const sourceIds = []
+      .concat(workbook.sourceId || fallbackSourceId || [])
+      .concat(Array.isArray(workbook.mergedSourceIds) ? workbook.mergedSourceIds : []);
+    sourceIds
+      .map((sourceId) => String(sourceId || "").trim())
+      .filter(Boolean)
+      .forEach((sourceId) => idsToRemove.add(sourceId));
+  }
+
+  state.workbooks.forEach((workbook) => collectWorkbook(workbook));
+  storedIds.forEach((sourceId) => collectWorkbook(readStoredSharedWorkbook(sourceId), sourceId));
+
+  try {
+    const bridgeWorkbooks = await loadIndexedDbBridgeWorkbooks();
+    bridgeWorkbooks.forEach((workbook) => collectWorkbook(workbook));
+  } catch {
+    // Bridge cleanup remains best-effort; local Source Data index is still cleaned below.
+  }
+
+  const removeIds = Array.from(idsToRemove);
+  if (!removeIds.length) {
+    return { removedCount: 0 };
+  }
+
+  removeIds.forEach((sourceId) => {
+    localStorage.removeItem(`${WORKSPACE_FULL_PREFIX}${sourceId}`);
+    localStorage.removeItem(`${WORKSPACE_LITE_PREFIX}${sourceId}`);
+  });
+
+  const removeIdSet = new Set(removeIds);
+  const nextIndexIds = indexIds.filter((sourceId) => !removeIdSet.has(sourceId));
+  const liteIndexIds = readLocalJsonValue(WORKSPACE_LITE_INDEX_KEY, []);
+  const nextLiteIndexIds = Array.isArray(liteIndexIds)
+    ? liteIndexIds.map((id) => String(id || "").trim()).filter((sourceId) => sourceId && !removeIdSet.has(sourceId))
+    : nextIndexIds;
+
+  localStorage.setItem(SHARED_STORE_KEYS.workbookIndex, JSON.stringify(nextIndexIds));
+  localStorage.setItem(WORKSPACE_LITE_INDEX_KEY, JSON.stringify(nextLiteIndexIds));
+
+  await Promise.all(removeIds.map(async (sourceId) => {
+    try {
+      await removeSource(sourceId);
+    } catch {
+      // IndexedDB cleanup is best-effort; removed local entries should no longer appear.
+    }
+  }));
+
+  return {
+    removedCount: removeIds.length,
+    removedIds: removeIds,
+  };
+}
+
 async function loadIndexedDbBridgeWorkbooks() {
   try {
     const bridgeStudy = await ensureDashboardBridgeStudy();
@@ -5686,8 +5767,39 @@ function setupEvents() {
   $("closeModuleDrawerBtn")?.addEventListener("click", closeModuleDrawer);
   $("moduleDrawerBackdrop")?.addEventListener("click", closeModuleDrawer);
 
-  document.addEventListener("click", (event) => {
+  document.addEventListener("click", async (event) => {
     if (!(event.target instanceof Node)) return;
+    const removeProjectButton = event.target.closest("[data-remove-source-project]");
+    if (removeProjectButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      const projectKey = removeProjectButton.getAttribute("data-project-key") || "";
+      const rawProjectKey = removeProjectButton.getAttribute("data-project-raw-key") || "";
+      const projectLabel = removeProjectButton.getAttribute("data-project-label") || projectKey || "this project";
+      const confirmed = window.confirm(
+        `Remove all Source Data entries for project "${projectLabel}"?\n\nThis will remove output planning, hours report and older duplicates from local storage and IndexedDB.`
+      );
+      if (!confirmed) return;
+
+      try {
+        const result = await removeSharedProjectSourceData([projectKey, rawProjectKey]);
+        await refreshSharedSnapshot();
+        renderActiveSharedWorkspace();
+        if (typeof window.__costSummaryRefreshOpenWorkspaces === "function") {
+          window.__costSummaryRefreshOpenWorkspaces();
+        }
+        const status = $("projectPreviewStatus");
+        if (status) {
+          status.textContent = result.removedCount
+            ? `Removed ${result.removedCount} Source Data entr${result.removedCount === 1 ? "y" : "ies"} for ${projectLabel}.`
+            : `No Source Data entry found for ${projectLabel}.`;
+        }
+      } catch (error) {
+        window.alert(`Unable to remove Source Data for ${projectLabel}. ${error?.message || "Unknown error."}`);
+      }
+      return;
+    }
+
     const progressCard = event.target.closest("[data-config-progress-card]");
     if (progressCard) {
       event.preventDefault();
@@ -5858,7 +5970,7 @@ function renderProjectDataPreview() {
   if (!state.workbooks.length) {
     body.innerHTML = `
       <tr>
-        <td colspan="8" class="py-6 text-center text-sm text-slate-500">No project preview available.</td>
+        <td colspan="9" class="py-6 text-center text-sm text-slate-500">No project preview available.</td>
       </tr>
     `;
     status.textContent = "No project preview available yet.";
@@ -5873,10 +5985,13 @@ function renderProjectDataPreview() {
       const bidYear = params.bid_year || "--";
       const serviceYear = params.service_year || "--";
       const contractDuration = params.contract_duration_years || "--";
+      const logicalProjectKey = getWorkbookLogicalProjectKey(item);
+      const rawProjectKey = getWorkbookProjectKey(item);
+      const projectLabel = getProjectLabel(item);
       return `
         <tr>
           <td class="py-3 pr-4">
-            <div class="font-semibold">${escapeHtml(getProjectLabel(item))}</div>
+            <div class="font-semibold">${escapeHtml(projectLabel)}</div>
             <div class="text-xs text-slate-500 mt-1">${escapeHtml(item.projectKey || "N/A")}</div>
           </td>
           <td class="py-3 px-4 text-slate-600">${escapeHtml(item.kind || "Unknown type")}</td>
@@ -5886,6 +6001,19 @@ function renderProjectDataPreview() {
           <td class="py-3 px-4 text-right font-semibold">${getRowCount(item.sheets?.subcontractingPlanning)}</td>
           <td class="py-3 px-4 text-slate-600">${escapeHtml(`${bidYear} / ${serviceYear}`)}</td>
           <td class="py-3 pl-4 text-slate-600">${escapeHtml(contractDuration)}</td>
+          <td class="py-3 pl-4 text-right">
+            <button
+              type="button"
+              class="inline-flex items-center justify-center size-8 rounded-xl border border-slate-200 bg-white text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600 transition-all"
+              title="Remove all Source Data entries for this project"
+              data-remove-source-project
+              data-project-key="${escapeHtml(logicalProjectKey)}"
+              data-project-raw-key="${escapeHtml(rawProjectKey)}"
+              data-project-label="${escapeHtml(projectLabel)}"
+            >
+              <span class="material-symbols-outlined text-[17px]">delete</span>
+            </button>
+          </td>
         </tr>
       `;
     });

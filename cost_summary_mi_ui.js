@@ -964,6 +964,8 @@
         if (!$("mercuryInterfaceWorkspace")?.classList.contains("hidden")) renderMercuryInterfaceWorkspace();
       }
 
+      window.__costSummaryRefreshOpenWorkspaces = refreshCostSummaryConfigViewsAfterImport;
+
       async function importCostSummaryConfigPayload(payload) {
         if (!payload || payload.app !== "cost-summary-mi" || Number(payload.schemaVersion) !== 1 || !payload.modules || typeof payload.modules !== "object") {
           throw new Error("Invalid Cost Summary & MI configuration file.");
