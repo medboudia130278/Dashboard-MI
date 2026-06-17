@@ -167,6 +167,29 @@
         }
       }
 
+      function renderWorkspaceBuildError(options) {
+        const workspace = options && options.workspace;
+        const statusEl = options && options.statusEl;
+        const listEl = options && options.listEl;
+        const emptyEl = options && options.emptyEl;
+        const contentEl = options && options.contentEl;
+        const label = (options && options.label) || "workspace";
+        const error = options && options.error;
+        if (workspace) workspace.classList.remove("hidden");
+        if (statusEl) statusEl.textContent = "Unable to build " + label + ".";
+        if (listEl) listEl.innerHTML = "";
+        if (contentEl) contentEl.classList.add("hidden");
+        if (emptyEl) {
+          emptyEl.classList.remove("hidden");
+          emptyEl.innerHTML =
+            '<div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">' +
+              '<p class="font-bold">Unable to build ' + escapeHtml(label) + '.</p>' +
+              '<p class="mt-1">The imported configuration contains data that could not be read for this workspace.</p>' +
+              '<p class="mt-2 font-mono text-xs break-all">' + escapeHtml(error && (error.stack || error.message) || error || "Unknown error") + '</p>' +
+            '</div>';
+        }
+      }
+
       const projectPhaseFallbackKey = "cost-summary-mi-project-phases-fallback-v1";
       const costCentersFallbackKey = "cost-summary-mi-cost-centers-fallback-v1";
       const pioDefinitionFallbackKey = "cost-summary-mi-pio-definition-fallback-v1";
@@ -428,12 +451,12 @@
           const fallbackProject = fallback[projectKey] || {};
           const primaryProject = primary[projectKey] || {};
           merged[projectKey] = Object.assign({}, fallbackProject, primaryProject, {
-            customOrigins: Array.from(new Set([])
+            customOrigins: Array.from(new Set([]
               .concat(Array.isArray(fallbackProject.customOrigins) ? fallbackProject.customOrigins : [])
-              .concat(Array.isArray(primaryProject.customOrigins) ? primaryProject.customOrigins : [])),
-            selectedOrigins: Array.from(new Set([])
+              .concat(Array.isArray(primaryProject.customOrigins) ? primaryProject.customOrigins : []))),
+            selectedOrigins: Array.from(new Set([]
               .concat(Array.isArray(fallbackProject.selectedOrigins) ? fallbackProject.selectedOrigins : [])
-              .concat(Array.isArray(primaryProject.selectedOrigins) ? primaryProject.selectedOrigins : [])),
+              .concat(Array.isArray(primaryProject.selectedOrigins) ? primaryProject.selectedOrigins : []))),
             rowOverrides: Object.assign({}, fallbackProject.rowOverrides || {}, primaryProject.rowOverrides || {}),
             customDutiesBySubsystem: Object.assign({}, fallbackProject.customDutiesBySubsystem || {}, primaryProject.customDutiesBySubsystem || {}),
           });
@@ -6472,13 +6495,28 @@
         const tableBody = $("wbsWorkloadTableBody");
         if (!workspace || !list || !emptyEl || !contentEl || !statusEl || !titleEl || !metaEl || !importMetaEl || !workloadImportMetaEl || !missingEl || !rowCountEl || !tableBody || !materialsImportMetaEl || !materialsRowCountEl || !materialsTableBody || !subcontractingImportMetaEl || !subcontractingRowCountEl || !subcontractingTableBody || !overhaulRenewalImportMetaEl || !overhaulRenewalRowCountEl || !overhaulRenewalTableBody) return;
 
-        const projects = buildWbsProjects();
+        workspace.classList.remove("hidden");
+        let projects = [];
+        try {
+          projects = buildWbsProjects();
+        } catch (error) {
+          console.error("WBS workspace build failed:", error);
+          renderWorkspaceBuildError({
+            workspace: workspace,
+            statusEl: statusEl,
+            listEl: list,
+            emptyEl: emptyEl,
+            contentEl: contentEl,
+            label: "WBS Workspace",
+            error: error,
+          });
+          return;
+        }
         const currentKey = workspace.dataset.currentProjectKey && projects.some(function (project) { return project.projectKey === workspace.dataset.currentProjectKey; })
           ? workspace.dataset.currentProjectKey
           : (projects[0] ? projects[0].projectKey : "");
         const cur = projects.find(function (project) { return project.projectKey === currentKey; }) || null;
 
-        workspace.classList.remove("hidden");
         statusEl.textContent = projects.length ? projects.length + " project(s) available" : "No project available.";
         list.innerHTML = projects.map(function (project) {
           const active = cur && project.projectKey === cur.projectKey;
@@ -9262,14 +9300,29 @@
         const exportBtn = $("mercuryInterfaceExportBtn");
         if (!workspace || !list || !empty || !content || !status || !title || !meta || !fileTree || !exportBtn) return;
 
-        const projects = buildMercuryInterfaceProjects();
+        workspace.classList.remove("hidden");
+        let projects = [];
+        try {
+          projects = buildMercuryInterfaceProjects();
+        } catch (error) {
+          console.error("Mercury Interface workspace build failed:", error);
+          renderWorkspaceBuildError({
+            workspace: workspace,
+            statusEl: status,
+            listEl: list,
+            emptyEl: empty,
+            contentEl: content,
+            label: "Mercury Interface Workspace",
+            error: error,
+          });
+          return;
+        }
         const currentKey = workspace.dataset.currentProjectKey && projects.some(function (project) { return project.projectKey === workspace.dataset.currentProjectKey; })
           ? workspace.dataset.currentProjectKey
           : (projects[0] ? projects[0].projectKey : "");
         const currentProject = projects.find(function (project) { return project.projectKey === currentKey; }) || null;
 
         setFallbackDetailWorkspaceActive(true);
-        workspace.classList.remove("hidden");
         status.textContent = projects.length ? projects.length + " project(s) available" : "No project available.";
         list.innerHTML = projects.map(function (project) {
           const active = currentProject && project.projectKey === currentProject.projectKey;
@@ -9344,14 +9397,29 @@
         const exportBtn = $("subsystemSummaryExportBtn");
         if (!workspace || !list || !empty || !content || !status || !title || !meta || !missing || !fileTree || !exportBtn) return;
 
-        const projects = buildSubsystemSummaryProjects();
+        workspace.classList.remove("hidden");
+        let projects = [];
+        try {
+          projects = buildSubsystemSummaryProjects();
+        } catch (error) {
+          console.error("Subsystem Summary workspace build failed:", error);
+          renderWorkspaceBuildError({
+            workspace: workspace,
+            statusEl: status,
+            listEl: list,
+            emptyEl: empty,
+            contentEl: content,
+            label: "Subsystem Summary Workspace",
+            error: error,
+          });
+          return;
+        }
         const currentKey = workspace.dataset.currentProjectKey && projects.some(function (project) { return project.projectKey === workspace.dataset.currentProjectKey; })
           ? workspace.dataset.currentProjectKey
           : (projects[0] ? projects[0].projectKey : "");
         const currentProject = projects.find(function (project) { return project.projectKey === currentKey; }) || null;
 
         setFallbackDetailWorkspaceActive(true);
-        workspace.classList.remove("hidden");
         status.textContent = projects.length ? projects.length + " project(s) available" : "No project available.";
         list.innerHTML = projects.map(function (project) {
           const active = currentProject && project.projectKey === currentProject.projectKey;
