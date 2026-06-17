@@ -390,6 +390,10 @@
                     <p id="subsystemSummaryCurrentProjectMeta" class="mt-2 text-sm text-slate-500">Context</p>
                   </div>
                   <div class="flex flex-wrap items-center gap-2">
+                    <button id="subsystemSummaryOvhRenewPlanningExportBtn" type="button" class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-all">
+                      <span class="material-symbols-outlined text-[18px]">calendar_view_month</span>
+                      Export Guide Planning
+                    </button>
                     <button id="subsystemSummaryExportBtn" type="button" class="inline-flex items-center gap-2 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-2 text-sm font-semibold text-cyan-700 hover:bg-cyan-100 transition-all">
                       <span class="material-symbols-outlined text-[18px]">download</span>
                       Export Excel
@@ -2346,6 +2350,39 @@
           <p class="mt-2 text-indigo-800">When a Text column is mapped to <strong>Client Price List 1..9</strong>, the web preview keeps the cells empty, but the exported Excel file creates a real dropdown list in those cells. The dropdown values come from the manual Client Price List values configured for the same project.</p>
         </div>
 
+        <div class="rounded-xl border border-blue-100 bg-blue-50 px-4 py-4">
+          <p class="font-bold text-blue-900 mb-2">Guide Planning export</p>
+          <p class="text-blue-800">The <strong>Export Guide Planning</strong> button creates a separate workbook named <strong>{ProjectName}_Guide_Planning_Export.xlsx</strong> for the selected project. It is complementary to the standard Subsystem Summary export and does not change the generated <strong>{Subsystem}_Synthesis</strong> sheets.</p>
+          <div class="mt-3 overflow-x-auto">
+            <table class="w-full text-xs border border-blue-200 rounded-xl overflow-hidden">
+              <thead class="bg-blue-100 text-blue-900">
+                <tr>
+                  <th class="px-3 py-2 text-left font-bold">Sheet</th>
+                  <th class="px-3 py-2 text-left font-bold">Purpose</th>
+                  <th class="px-3 py-2 text-left font-bold">Main rules</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-blue-100 bg-white">
+                <tr>
+                  <td class="px-3 py-2 font-semibold">Ovh_Renew_Planning</td>
+                  <td class="px-3 py-2">Shows the yearly Overhaul and Renewal costs by Type, Phase, Subsystem, Currency and Planning Guide.</td>
+                  <td class="px-3 py-2">Rows are included only when they already exist in the generated subsystem synthesis sheets. Year columns come from Year of Planning.</td>
+                </tr>
+                <tr class="bg-blue-50/40">
+                  <td class="px-3 py-2 font-semibold">Planning_Guide_Profile</td>
+                  <td class="px-3 py-2">Calculates the yearly percentage profile for each Planning Guide.</td>
+                  <td class="px-3 py-2">Costs are grouped by Phase + Subsystem + Planning Guide. Multiple renewal lines are summed together, and currencies are converted to the Currency &amp; Exchange Rates target currency before percentages are calculated.</td>
+                </tr>
+                <tr>
+                  <td class="px-3 py-2 font-semibold">Guide_Planning_Timeline</td>
+                  <td class="px-3 py-2">Lists all non Overhaul/Renewal Planning Guides used by the synthesis sheets.</td>
+                  <td class="px-3 py-2">Ovh_Workload and all Ovh/Renew types are excluded. Start date and End date come from Guide Planning Definition; Months and Years are calculated from those dates.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <div>
           <p class="font-bold text-slate-800 mb-2">Workload rows</p>
           <ul class="space-y-3 pl-1">
@@ -2566,7 +2603,7 @@
 
         <div class="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
           <p class="font-semibold text-amber-900 mb-1">Progressive scope</p>
-          <p class="text-amber-800">At this stage the modal documents the implemented Workload, Materials, Subcontracting, and Overhaul &amp; Renewals export logic.</p>
+          <p class="text-amber-800">At this stage the modal documents the implemented Workload, Materials, Subcontracting, Overhaul &amp; Renewals, and complementary Guide Planning export logic.</p>
         </div>
       </div>
     </div>
@@ -3107,7 +3144,7 @@
     </div>
   </aside>
 
-  <script src="cost_summary_mi_ui.js?v=20260617-export-workspaces-v3"></script>
-  <script type="module" src="cost_summary_mi.js?v=20260617-export-workspaces-v3"></script>
+  <script src="cost_summary_mi_ui.js?v=20260617-export-workspaces-v5"></script>
+  <script type="module" src="cost_summary_mi.js?v=20260617-export-workspaces-v5"></script>
 </body>
 </html>

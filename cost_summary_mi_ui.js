@@ -8535,6 +8535,429 @@
         return files;
       }
 
+      const SUBSYSTEM_SUMMARY_OVH_RENEW_PLANNING_TYPES = [
+        "Ovh_Material",
+        "Renew_Management",
+        "Renew_T&C",
+        "Renew_Material",
+      ];
+
+      const SUBSYSTEM_SUMMARY_OVH_RENEW_PLANNING_BASE_HEADERS = [
+        "Type",
+        "Phase",
+        "Subsystem",
+        "Currency",
+        "Planning Guide",
+      ];
+
+      function isSubsystemSummaryOvhRenewPlanningType(value) {
+        const key = normalizeWbsText(value);
+        return SUBSYSTEM_SUMMARY_OVH_RENEW_PLANNING_TYPES.some(function (type) {
+          return normalizeWbsText(type) === key;
+        });
+      }
+
+      function getSubsystemSummaryOvhRenewDescriptionForType(exportType) {
+        const key = normalizeWbsText(exportType);
+        if (key.indexOf("ovh") !== -1) return "Overhaul";
+        if (key.indexOf("renew") !== -1) return "Renewal";
+        return "";
+      }
+
+      function getSubsystemSummaryOvhRenewRowSubsystem(row, sheet) {
+        const candidates = Array.isArray(sheet && sheet.sourceSubsystems) ? sheet.sourceSubsystems : [];
+        const longDescriptionKey = normalizeWbsText(row && row.Long_Description);
+        const direct = candidates.find(function (subsystem) {
+          const key = normalizeWbsText(subsystem);
+          return key && (longDescriptionKey === key || longDescriptionKey.indexOf(key + " ") === 0);
+        });
+        if (direct) return direct;
+        if (candidates.length === 1) return candidates[0];
+        return (sheet && sheet.label) || "";
+      }
+
+      function getSubsystemSummaryOvhRenewPlanningRows(project, subsystem) {
+        const subsystemKey = normalizeWbsText(subsystem);
+        const usesDeqVmi = subsystemKey === "deq" || subsystemKey === "vmi";
+        return {
+          usesDeqVmi: usesDeqVmi,
+          rows: usesDeqVmi
+            ? (Array.isArray(project.wbsDeqVmiPlanningRows) ? project.wbsDeqVmiPlanningRows : [])
+            : (Array.isArray(project.wbsOverhaulRenewalPlanningRows) ? project.wbsOverhaulRenewalPlanningRows : []),
+        };
+      }
+
+      function getSubsystemSummaryOvhRenewAnnualRawValue(row, description, exportType, usesDeqVmi) {
+        if (usesDeqVmi) {
+          const unitCost = toNumber(getWbsRowValueByCandidates(row, ["Unit Cost", "unit_cost", "global_cost", "material_cost"])) || 0;
+          if (description === "Overhaul" && exportType === "Ovh_Material") return unitCost;
+          if (description === "Renewal" && exportType === "Renew_Material") return unitCost * 0.8;
+          if (description === "Renewal" && exportType === "Renew_T&C") return unitCost * 0.15;
+          if (description === "Renewal" && exportType === "Renew_Management") return unitCost * 0.05;
+          return 0;
+        }
+        if (description === "Overhaul" && exportType === "Ovh_Material") {
+          return toNumber(getWbsRowValueByCandidates(row, ["Global Cost", "global_cost", "Total Global Cost", "total_global_cost"])) || 0;
+        }
+        if (description === "Renewal" && exportType === "Renew_Management") {
+          return toNumber(getWbsRowValueByCandidates(row, ["Management Cost", "management_cost"])) || 0;
+        }
+        if (description === "Renewal" && exportType === "Renew_T&C") {
+          return toNumber(getWbsRowValueByCandidates(row, ["T&C Cost", "t_c_cost", "tc_cost"])) || 0;
+        }
+        if (description === "Renewal" && exportType === "Renew_Material") {
+          return toNumber(getWbsRowValueByCandidates(row, ["Material Cost", "material_cost"])) || 0;
+        }
+        return 0;
+      }
+
+      function collectSubsystemSummaryOvhRenewAnnualValues(project, phaseLabel, subsystem, exportType, currency) {
+        const description = getSubsystemSummaryOvhRenewDescriptionForType(exportType);
+        if (!description || !subsystem || !currency) return {};
+        const phase = findSubsystemSummaryPhase(project, phaseLabel);
+        const phaseYears = phase ? getSubsystemSummaryOvhPlanningYears(project, phase) : null;
+        const hasPhaseYearFilter = Array.isArray(phaseYears);
+        const yearSet = new Set((phaseYears || []).map(function (year) { return Number(year); }));
+        const planningSource = getSubsystemSummaryOvhRenewPlanningRows(project, subsystem);
+        const valuesByYear = {};
+        planningSource.rows.forEach(function (row) {
+          const year = getSubsystemSummaryOvhRowYear(row);
+          if (!year) return;
+          if (hasPhaseYearFilter && !yearSet.has(Number(year))) return;
+          if (!subsystemSummarySourceMatches([subsystem], getSubsystemSummaryOvhRowSubsystem(row))) return;
+          const rowType = getSubsystemSummaryOvhRowType(row);
+          if (description === "Overhaul" && rowType.indexOf("overhaul") === -1) return;
+          if (description === "Renewal" && rowType.indexOf("renewal") === -1) return;
+          if (getSubsystemSummaryOvhRowCurrency(row) !== currency) return;
+          const value = getSubsystemSummaryOvhRenewAnnualRawValue(row, description, exportType, planningSource.usesDeqVmi);
+          if (!(value > 0)) return;
+          const yearKey = String(Number(year));
+          valuesByYear[yearKey] = (valuesByYear[yearKey] || 0) + value;
+        });
+        Object.keys(valuesByYear).forEach(function (yearKey) {
+          valuesByYear[yearKey] = Math.round(valuesByYear[yearKey] * 100) / 100;
+        });
+        return valuesByYear;
+      }
+
+      function getSubsystemSummaryOvhRenewConversionContext(project) {
+        const currencyProjects = buildFallbackCurrencyExchangeProjects();
+        const currencyProject = findProjectByLookupKeys(buildProjectLookupMap(currencyProjects), getProjectLookupKeys(project))
+          || currencyProjects.find(function (candidate) {
+            return normalizeWorkspaceKey(candidate.projectKey) === normalizeWorkspaceKey(project.projectKey)
+              || normalizeWorkspaceKey(candidate.projectName) === normalizeWorkspaceKey(project.projectName);
+          })
+          || null;
+        return {
+          targetCurrency: String((currencyProject && currencyProject.targetCurrency) || "").trim().toUpperCase(),
+          rows: currencyProject && Array.isArray(currencyProject.rows) ? currencyProject.rows : [],
+        };
+      }
+
+      function convertSubsystemSummaryOvhRenewToTargetCurrency(conversionContext, amount, sourceCurrency) {
+        const value = toNumber(amount) || 0;
+        const source = String(sourceCurrency || "").trim().toUpperCase();
+        const target = String(conversionContext && conversionContext.targetCurrency || "").trim().toUpperCase();
+        if (!value || !source || !target || source === target) return value;
+        const row = (conversionContext.rows || []).find(function (entry) {
+          return String(entry.currency || "").trim().toUpperCase() === source;
+        }) || null;
+        const rate = row ? toNumber(row.effectiveRate) : null;
+        return rate !== null && rate > 0 ? value * rate : value;
+      }
+
+      function buildSubsystemSummaryOvhRenewPlanningProfileRows(project, costRows, yearHeaders) {
+        const conversionContext = getSubsystemSummaryOvhRenewConversionContext(project);
+        const targetCurrency = conversionContext.targetCurrency || "Target";
+        const byPlanningGuide = new Map();
+        (costRows || []).forEach(function (row) {
+          const planningGuide = String(row["Planning Guide"] || "").trim();
+          if (!planningGuide) return;
+          const key = [
+            normalizeWbsText(row.Phase),
+            normalizeWbsText(row.Subsystem),
+            normalizeWbsText(planningGuide),
+          ].join("|");
+          if (!byPlanningGuide.has(key)) {
+            byPlanningGuide.set(key, {
+              "Phase": row.Phase,
+              "Subsystem": row.Subsystem,
+              "Planning Guide": planningGuide,
+              "Target Currency": targetCurrency,
+              _yearTotals: {},
+              _total: 0,
+            });
+          }
+          const entry = byPlanningGuide.get(key);
+          (yearHeaders || []).forEach(function (year) {
+            const convertedValue = convertSubsystemSummaryOvhRenewToTargetCurrency(
+              conversionContext,
+              row[year],
+              row.Currency
+            );
+            if (!(convertedValue > 0)) return;
+            entry._yearTotals[year] = (entry._yearTotals[year] || 0) + convertedValue;
+            entry._total += convertedValue;
+          });
+        });
+
+        return Array.from(byPlanningGuide.values()).filter(function (row) {
+          return row._total > 0;
+        }).map(function (row) {
+          (yearHeaders || []).forEach(function (year) {
+            const value = row._yearTotals[year] || 0;
+            row[year] = value > 0 ? Math.round((value / row._total) * 10000) / 10000 : "";
+          });
+          delete row._yearTotals;
+          delete row._total;
+          return row;
+        }).sort(function (left, right) {
+          return String(left.Phase).localeCompare(String(right.Phase))
+            || String(left.Subsystem).localeCompare(String(right.Subsystem))
+            || String(left["Planning Guide"]).localeCompare(String(right["Planning Guide"]));
+        });
+      }
+
+      const SUBSYSTEM_SUMMARY_GUIDE_TIMELINE_HEADERS = [
+        "Planning Guide",
+        "Start date",
+        "End date",
+        "Months",
+        "Years",
+      ];
+
+      function isSubsystemSummaryOvhRenewFamilyType(value) {
+        const key = normalizeWbsText(value);
+        return key.indexOf("ovh") !== -1 || key.indexOf("renew") !== -1;
+      }
+
+      function buildSubsystemSummaryGuideTimelineIndex(project) {
+        const guide = project.subsystemSummaryGuidePlanning || {};
+        const index = new Map();
+        function addRows(rows, guideFields) {
+          (Array.isArray(rows) ? rows : []).forEach(function (row) {
+            const fields = Array.isArray(guideFields) ? guideFields : ["guidePlanningCode"];
+            fields.forEach(function (field) {
+              const code = String(row && row[field] || "").trim();
+              if (!code) return;
+              const key = normalizeWbsText(code);
+              if (index.has(key)) return;
+              index.set(key, {
+                "Planning Guide": code,
+                "Start date": String(row.startDate || "").trim(),
+                "End date": String(row.endDate || "").trim(),
+              });
+            });
+          });
+        }
+        [
+          "generatedRows",
+          "recurrentWorkloadRows",
+          "recurrentMaterialRows",
+          "recurrentSubcontractingRows",
+          "generatedMaterialRows",
+          "generatedSubcontractingRows",
+          "generatedDemobilizationRows",
+          "generatedDemobilizationMaterialRows",
+          "generatedDemobilizationSubcontractingRows",
+          "customWorkloadRows",
+          "customMaterialRows",
+          "customSubcontractingRows",
+          "customDemobilizationWorkloadRows",
+          "customDemobilizationMaterialRows",
+          "customDemobilizationSubcontractingRows",
+          "customRecurrentWorkloadRows",
+          "customRecurrentMaterialRows",
+          "customRecurrentSubcontractingRows",
+        ].forEach(function (property) {
+          addRows(guide[property], ["guidePlanningCode"]);
+        });
+        return index;
+      }
+
+      function buildSubsystemSummaryGuideTimelineRows(project, globalFile) {
+        const guideIndex = buildSubsystemSummaryGuideTimelineIndex(project);
+        const seen = new Set();
+        const rows = [];
+        (globalFile && Array.isArray(globalFile.sheets) ? globalFile.sheets : []).forEach(function (sheet) {
+          (sheet.rows || []).forEach(function (row) {
+            if (isSubsystemSummaryOvhRenewFamilyType(row.Type)) return;
+            const code = String(row["Planning Guide"] || "").trim();
+            if (!code) return;
+            const key = normalizeWbsText(code);
+            if (seen.has(key)) return;
+            seen.add(key);
+            const info = guideIndex.get(key) || {
+              "Planning Guide": code,
+              "Start date": "",
+              "End date": "",
+            };
+            const months = countInclusiveMonthsFractional(info["Start date"], info["End date"]);
+            rows.push({
+              "Planning Guide": code,
+              "Start date": info["Start date"] || "",
+              "End date": info["End date"] || "",
+              "Months": months > 0 ? months : "",
+              "Years": months > 0 ? Math.round((months / 12) * 100) / 100 : "",
+            });
+          });
+        });
+        return rows.sort(function (left, right) {
+          return String(left["Planning Guide"]).localeCompare(String(right["Planning Guide"]));
+        });
+      }
+
+      function buildSubsystemSummaryOvhRenewPlanningExport(project) {
+        const files = buildSubsystemSummaryVirtualFiles(project);
+        const globalFile = files.find(function (file) { return file.mode === "global"; }) || files[0] || null;
+        const rowsByKey = new Map();
+        const allYears = new Set();
+        if (!globalFile) {
+          return {
+            name: sanitizeExportFileName(project.projectName) + "_Guide_Planning_Export.xlsx",
+            headers: SUBSYSTEM_SUMMARY_OVH_RENEW_PLANNING_BASE_HEADERS,
+            profileHeaders: ["Phase", "Subsystem", "Planning Guide", "Target Currency"],
+            guideTimelineHeaders: SUBSYSTEM_SUMMARY_GUIDE_TIMELINE_HEADERS,
+            rows: [],
+            profileRows: [],
+            guideTimelineRows: [],
+          };
+        }
+
+        (globalFile.sheets || []).forEach(function (sheet) {
+          (sheet.rows || []).forEach(function (row) {
+            const exportType = String(row.Type || "").trim();
+            if (!isSubsystemSummaryOvhRenewPlanningType(exportType)) return;
+            const phase = String(row.Phase || "").trim();
+            const subsystem = getSubsystemSummaryOvhRenewRowSubsystem(row, sheet);
+            const currency = String(row.Currency || "").trim().toUpperCase();
+            if (!phase || !subsystem || !currency) return;
+            const planningGuide = String(row["Planning Guide"] || "").trim();
+            const key = [
+              normalizeWbsText(exportType),
+              normalizeWbsText(phase),
+              normalizeWbsText(subsystem),
+              currency,
+              normalizeWbsText(planningGuide),
+            ].join("|");
+            if (!rowsByKey.has(key)) {
+              rowsByKey.set(key, {
+                "Type": exportType,
+                "Phase": phase,
+                "Subsystem": subsystem,
+                "Currency": currency,
+                "Planning Guide": planningGuide,
+                _years: collectSubsystemSummaryOvhRenewAnnualValues(project, phase, subsystem, exportType, currency),
+              });
+            }
+          });
+        });
+
+        const rows = Array.from(rowsByKey.values()).filter(function (row) {
+          Object.keys(row._years || {}).forEach(function (year) { allYears.add(year); });
+          return Object.keys(row._years || {}).length > 0;
+        });
+        const yearHeaders = Array.from(allYears).sort(function (left, right) {
+          return Number(left) - Number(right);
+        });
+        const headers = SUBSYSTEM_SUMMARY_OVH_RENEW_PLANNING_BASE_HEADERS.concat(yearHeaders);
+        rows.sort(function (left, right) {
+          return String(left.Phase).localeCompare(String(right.Phase))
+            || String(left.Subsystem).localeCompare(String(right.Subsystem))
+            || SUBSYSTEM_SUMMARY_OVH_RENEW_PLANNING_TYPES.indexOf(left.Type) - SUBSYSTEM_SUMMARY_OVH_RENEW_PLANNING_TYPES.indexOf(right.Type)
+            || String(left.Currency).localeCompare(String(right.Currency));
+        });
+        rows.forEach(function (row) {
+          yearHeaders.forEach(function (year) {
+            row[year] = row._years[year] || "";
+          });
+          delete row._years;
+        });
+        const profileHeaders = ["Phase", "Subsystem", "Planning Guide", "Target Currency"].concat(yearHeaders);
+        return {
+          name: sanitizeExportFileName(project.projectName) + "_Guide_Planning_Export.xlsx",
+          sheetName: "Ovh_Renew_Planning",
+          profileSheetName: "Planning_Guide_Profile",
+          guideTimelineSheetName: "Guide_Planning_Timeline",
+          headers: headers,
+          profileHeaders: profileHeaders,
+          guideTimelineHeaders: SUBSYSTEM_SUMMARY_GUIDE_TIMELINE_HEADERS,
+          rows: rows,
+          profileRows: buildSubsystemSummaryOvhRenewPlanningProfileRows(project, rows, yearHeaders),
+          guideTimelineRows: buildSubsystemSummaryGuideTimelineRows(project, globalFile),
+        };
+      }
+
+      async function exportSubsystemSummaryOvhRenewPlanningWithExcelJs(exportFile) {
+        const workbook = new ExcelJS.Workbook();
+        workbook.creator = "Cost Summary & MI";
+        workbook.created = new Date();
+        function addSheet(sheetName, headers, rows, percentageYearColumns) {
+          const worksheet = workbook.addWorksheet(sheetName);
+          worksheet.addRow(headers);
+          rows.forEach(function (row) {
+            worksheet.addRow(headers.map(function (header) { return row[header] ?? ""; }));
+          });
+          worksheet.columns = headers.map(function (header) {
+            return { width: Math.min(Math.max(String(header).length + 2, 12), 24) };
+          });
+          worksheet.getRow(1).font = { bold: true };
+          worksheet.views = [{ state: "frozen", ySplit: 1 }];
+          if (percentageYearColumns) {
+            headers.forEach(function (header, index) {
+              if (!/^\d{4}$/.test(String(header))) return;
+              worksheet.getColumn(index + 1).numFmt = "0.00%";
+            });
+          }
+        }
+        addSheet(exportFile.sheetName || "Ovh_Renew_Planning", exportFile.headers, exportFile.rows, false);
+        addSheet(exportFile.profileSheetName || "Planning_Guide_Profile", exportFile.profileHeaders, exportFile.profileRows, true);
+        addSheet(exportFile.guideTimelineSheetName || "Guide_Planning_Timeline", exportFile.guideTimelineHeaders, exportFile.guideTimelineRows, false);
+        const buffer = await workbook.xlsx.writeBuffer();
+        downloadSubsystemSummaryBuffer(buffer, exportFile.name);
+      }
+
+      async function exportSubsystemSummaryOvhRenewPlanning(project) {
+        const exportFile = buildSubsystemSummaryOvhRenewPlanningExport(project);
+        if (typeof ExcelJS !== "undefined") {
+          try {
+            await exportSubsystemSummaryOvhRenewPlanningWithExcelJs(exportFile);
+            return;
+          } catch (err) {
+            console.warn("ExcelJS Ovh/Renew planning export failed, falling back to XLSX export.", err);
+          }
+        }
+        if (typeof XLSX === "undefined") {
+          window.alert("XLSX library is not available on this page.");
+          return;
+        }
+        const workbook = XLSX.utils.book_new();
+        function appendSheet(sheetName, headers, rows, percentageYearColumns) {
+          const aoa = [headers].concat(rows.map(function (row) {
+            return headers.map(function (header) { return row[header] ?? ""; });
+          }));
+          const worksheet = XLSX.utils.aoa_to_sheet(aoa);
+          worksheet["!cols"] = headers.map(function (header) {
+            return { wch: Math.min(Math.max(String(header).length + 2, 12), 24) };
+          });
+          if (percentageYearColumns) {
+            headers.forEach(function (header, headerIndex) {
+              if (!/^\d{4}$/.test(String(header))) return;
+              const colLetter = XLSX.utils.encode_col(headerIndex);
+              for (let rowIndex = 2; rowIndex <= rows.length + 1; rowIndex += 1) {
+                const cell = worksheet[colLetter + rowIndex];
+                if (cell && typeof cell.v === "number") cell.z = "0.00%";
+              }
+            });
+          }
+          XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+        }
+        appendSheet(exportFile.sheetName || "Ovh_Renew_Planning", exportFile.headers, exportFile.rows, false);
+        appendSheet(exportFile.profileSheetName || "Planning_Guide_Profile", exportFile.profileHeaders, exportFile.profileRows, true);
+        appendSheet(exportFile.guideTimelineSheetName || "Guide_Planning_Timeline", exportFile.guideTimelineHeaders, exportFile.guideTimelineRows, false);
+        XLSX.writeFile(workbook, exportFile.name);
+      }
+
       function renderSubsystemSummaryPreview(project, file) {
         const sheetSelect = $("subsystemSummarySheetSelect");
         const previewTitle = $("subsystemSummaryPreviewTitle");
@@ -9395,9 +9818,13 @@
         const missing = $("subsystemSummaryMissingData");
         const fileTree = $("subsystemSummaryFileTree");
         const exportBtn = $("subsystemSummaryExportBtn");
+        const guidePlanningExportBtn = $("subsystemSummaryOvhRenewPlanningExportBtn");
         if (!workspace || !list || !empty || !content || !status || !title || !meta || !missing || !fileTree || !exportBtn) return;
 
         workspace.classList.remove("hidden");
+        if (guidePlanningExportBtn) {
+          guidePlanningExportBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">calendar_view_month</span>Export Guide Planning';
+        }
         let projects = [];
         try {
           projects = buildSubsystemSummaryProjects();
@@ -13044,6 +13471,16 @@
             const fileKey = ws ? (ws.dataset.currentFileKey || "global") : "global";
             const file = files.find(function (entry) { return entry.key === fileKey; }) || files[0] || null;
             exportSubsystemSummaryFile(file);
+            return;
+          }
+
+          if (event.target.closest("#subsystemSummaryOvhRenewPlanningExportBtn")) {
+            event.preventDefault();
+            const ws = $("subsystemSummaryWorkspace");
+            const projects = buildSubsystemSummaryProjects();
+            const project = projects.find(function (entry) { return ws && entry.projectKey === ws.dataset.currentProjectKey; }) || projects[0] || null;
+            if (!project) return;
+            exportSubsystemSummaryOvhRenewPlanning(project);
             return;
           }
 
