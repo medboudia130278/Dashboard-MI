@@ -7931,6 +7931,13 @@
         const startDate = new Date(String(phase.startDate || ""));
         const endDate = new Date(String(phase.endDate || ""));
         if (!Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime())) return [];
+        const planningSourceYears = new Set(
+          []
+            .concat(Array.isArray(project.wbsOverhaulRenewalPlanningRows) ? project.wbsOverhaulRenewalPlanningRows : [])
+            .concat(Array.isArray(project.wbsDeqVmiPlanningRows) ? project.wbsDeqVmiPlanningRows : [])
+            .map(function (row) { return Number(getSubsystemSummaryOvhRowYear(row)); })
+            .filter(function (year) { return Number.isFinite(year) && year > 0; })
+        );
         const datedPhases = (project.phases || []).filter(function (item) {
           return item && normalizeWbsText(item.key) !== "total" && String(item.startDate || "").trim() && String(item.endDate || "").trim();
         });
@@ -7942,6 +7949,19 @@
           if ((julyFirst >= startDate && julyFirst <= endDate) || (isLastPhase && year === endDate.getFullYear())) {
             years.push(year);
           }
+        }
+        const startsOnJanuaryFirst = startDate.getMonth() === 0 && startDate.getDate() === 1;
+        const nextPlanningYear = endDate.getFullYear() + 1;
+        const nextPlanningYearJulyFirst = new Date(nextPlanningYear, 6, 1);
+        const isCoveredByAnotherPhase = datedPhases.some(function (item) {
+          if (normalizeWbsText(item.key) === normalizeWbsText(phase.key)) return false;
+          const itemStartDate = new Date(String(item.startDate || ""));
+          const itemEndDate = new Date(String(item.endDate || ""));
+          if (!Number.isFinite(itemStartDate.getTime()) || !Number.isFinite(itemEndDate.getTime())) return false;
+          return nextPlanningYearJulyFirst >= itemStartDate && nextPlanningYearJulyFirst <= itemEndDate;
+        });
+        if (startsOnJanuaryFirst && !isCoveredByAnotherPhase && planningSourceYears.has(nextPlanningYear) && years.indexOf(nextPlanningYear) === -1) {
+          years.push(nextPlanningYear);
         }
         return years;
       }
