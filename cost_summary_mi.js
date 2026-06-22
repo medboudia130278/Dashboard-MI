@@ -1094,7 +1094,12 @@ function computeModuleStatus(moduleKey) {
       if (statuses.some((status) => status === "filled" || status === "partial")) return "partial";
       return "empty";
     }
-    case "risk_register":
+    case "risk_register": {
+      const hasRows = project => project && Array.isArray(project.rows) && project.rows.length > 0;
+      if (hasPrimaryProjectConfig(state.studyConfig?.studySetup?.riskRegister, hasRows)) return "filled";
+      const s = readFallbackStudySlice("cost-summary-mi-risk-register-fallback-v1");
+      return Object.values(s).some(hasRows) ? "filled" : "empty";
+    }
     case "mercury_interface":
       return "empty";
     default:
@@ -1235,6 +1240,7 @@ const fallbackWorkspaceItems = new Set([
   "mandatory_training",
   "other_support_costs",
   "price_lists",
+  "risk_register",
   "subsystem_summary",
   "mercury_interface",
 ]);
@@ -1752,6 +1758,7 @@ const CONFIG_EXPORT_FALLBACK_STORES = {
   otherSupportCosts: "cost-summary-mi-osc-fallback-v1",
   mandatoryTraining: "cost-summary-mi-mandatory-training-fallback-v1",
   priceLists: "cost-summary-mi-price-lists-fallback-v1",
+  riskRegister: "cost-summary-mi-risk-register-fallback-v1",
 };
 
 function cloneConfigValue(value) {
@@ -1799,6 +1806,7 @@ function buildConfigExportModules() {
     firmingRules: state.studyConfig?.dataSources?.firmingRules?.projects || {},
     guidePlanning: state.studyConfig?.studySetup?.guidePlanningDefinition?.projects || {},
     priceLists: state.studyConfig?.studySetup?.priceLists?.projects || {},
+    riskRegister: state.studyConfig?.studySetup?.riskRegister?.projects || {},
     workloadSynthesis: state.studyConfig?.organizationRisks?.workloadSynthesis?.projects || {},
     whiteCollar: state.studyConfig?.organizationRisks?.whiteCollarDefinition?.projects || {},
     wbs: state.studyConfig?.organizationRisks?.wbs?.projects || state.studyConfig?.dataSources?.wbs?.projects || {},
@@ -1844,6 +1852,7 @@ function buildCostSummaryConfigExportPayload() {
     },
     pricingRisks: {
       priceLists: cloneConfigValue(modules.priceLists),
+      riskRegister: cloneConfigValue(modules.riskRegister),
     },
   };
 
@@ -1875,6 +1884,7 @@ function getImportedModule(payload, moduleName) {
     pioDefinition: studySetup.pioDefinition,
     guidePlanning: studySetup.guidePlanning,
     priceLists: studySetup.priceLists || pricingRisks.priceLists,
+    riskRegister: studySetup.riskRegister || pricingRisks.riskRegister,
     currencyExchange: dataSources.currencyExchange,
     firmingRules: dataSources.firmingRules,
     workloadSynthesis: organizationRisks.workloadSynthesis,
@@ -1915,6 +1925,11 @@ async function importCostSummaryConfigPayloadToStudy(payload) {
     priceLists: {
       ...((existing.studySetup || {}).priceLists || {}),
       projects: getImportedModule(payload, "priceLists"),
+      updatedAt: new Date().toISOString(),
+    },
+    riskRegister: {
+      ...((existing.studySetup || {}).riskRegister || {}),
+      projects: getImportedModule(payload, "riskRegister"),
       updatedAt: new Date().toISOString(),
     },
   };
