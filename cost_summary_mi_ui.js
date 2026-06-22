@@ -9780,6 +9780,51 @@
         return outputRow;
       }
 
+      function getMercuryRiskRegisterRows(project, phaseFilter) {
+        const persisted = readRiskRegisterFallbackState();
+        const config = normalizeFallbackRiskRegisterProjectConfig(
+          readMergedPersistedFallbackProjectState(persisted, getProjectLookupKeys(project))
+        );
+        const rows = config.rows.map(function (row) { return row && row.values ? row.values : {}; });
+        if (!phaseFilter) return rows;
+        const phaseKeys = [phaseFilter.label, phaseFilter.key].filter(Boolean).map(normalizeWbsText);
+        return rows.filter(function (row) {
+          return phaseKeys.indexOf(normalizeWbsText(row && row.Phase)) >= 0;
+        });
+      }
+
+      function mapRiskRegisterRowToMercury(sourceRow, costingTree) {
+        const outputRow = { "Costing Tree": costingTree };
+        MERCURY_INTERFACE_HEADERS.forEach(function (targetHeader) {
+          if (targetHeader === "Costing Tree") return;
+          switch (targetHeader) {
+            case "Description":
+              outputRow[targetHeader] = sourceRow["RISK ID"] || "";
+              break;
+            case "PBS/IBS":
+              outputRow[targetHeader] = sourceRow.PBS || "";
+              break;
+            case "Associated WP":
+              outputRow[targetHeader] = sourceRow["ASSOCIATED WP"] || "";
+              break;
+            case "Tasks":
+              outputRow[targetHeader] = sourceRow.TASKS || "";
+              break;
+            default:
+              outputRow[targetHeader] = Object.prototype.hasOwnProperty.call(sourceRow, targetHeader)
+                ? sourceRow[targetHeader]
+                : "";
+          }
+        });
+        outputRow.Period = "";
+        return outputRow;
+      }
+
+      function mapRiskRegisterRowToMercuryWithText(project, sourceRow, costingTree) {
+        const mappedRow = mapRiskRegisterRowToMercury(sourceRow, costingTree);
+        return applySubsystemSummaryTextMappings(project, [mappedRow])[0] || mappedRow;
+      }
+
       function getMercuryInfraSourceRows(project, phaseFilter) {
         const subsystemFiles = buildSubsystemSummaryVirtualFiles(project);
         const globalFile = subsystemFiles.find(function (file) { return file.key === "global"; }) || subsystemFiles[0] || null;
@@ -9797,6 +9842,7 @@
 
       function buildMercuryInfraRows(project, phaseFilter) {
         const sourceRows = getMercuryInfraSourceRows(project, phaseFilter);
+        const riskRows = getMercuryRiskRegisterRows(project, phaseFilter);
         const rulesByParent = MERCURY_INFRA_CHILD_RULES.reduce(function (acc, rule) {
           if (!acc[rule.parentTree]) acc[rule.parentTree] = [];
           acc[rule.parentTree].push(rule);
@@ -9814,6 +9860,12 @@
               childIndex += 1;
             });
           });
+          if (parentRow["Costing Tree"] === "1.1.1.3") {
+            riskRows.forEach(function (riskRow) {
+              outputRows.push(mapRiskRegisterRowToMercuryWithText(project, riskRow, parentRow["Costing Tree"] + "." + childIndex));
+              childIndex += 1;
+            });
+          }
         });
         buildMercurySubsystemRows(project, phaseFilter).forEach(function (row) {
           outputRows.push(row);

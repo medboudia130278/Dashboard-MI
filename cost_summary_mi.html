@@ -2773,9 +2773,16 @@
           </ul>
         </div>
 
+        <div class="rounded-xl border border-rose-100 bg-rose-50 px-4 py-4">
+          <p class="font-bold text-rose-900 mb-2">Risk Register rows</p>
+          <p class="text-rose-800">Risk rows come from the selected project's <strong>Risk Register Workspace</strong>. Imported rows are read from the Excel sheet <strong>Mercury_Config</strong>, then stored per project and reused by Mercury Interface.</p>
+          <p class="mt-2 text-rose-800">They are inserted under <strong>1.1.1.3 Project Risk, Savings and Opportunity Management</strong>. <strong>RISK ID</strong> is written to Mercury <strong>Description</strong>, <strong>Period</strong> stays empty, <strong>PBS</strong> maps to <strong>PBS/IBS</strong>, <strong>ASSOCIATED WP</strong> maps to <strong>Associated WP</strong>, and <strong>TASKS</strong> maps to <strong>Tasks</strong>. Both Mercury <strong>Currency</strong> columns receive the Risk Register Currency value.</p>
+          <p class="mt-2 text-rose-800">The <strong>Global project export</strong> includes risk rows from all phases. Each <strong>Phase export</strong> includes only the risk rows whose Phase matches the selected phase.</p>
+        </div>
+
         <div class="rounded-xl border border-violet-100 bg-violet-50 px-4 py-4">
           <p class="font-bold text-violet-900 mb-2">Text 1 to Text 9 columns</p>
-          <p class="text-violet-800">The Mercury export reuses the same <strong>Price Lists Workspace</strong> configuration as Subsystem Summary. Project_name, Phase, Phase code, Duration and Not applicable are applied through the generated source rows.</p>
+          <p class="text-violet-800">The Mercury export reuses the same <strong>Price Lists Workspace</strong> configuration as Subsystem Summary. Project_name, Phase, Phase code, Duration and Not applicable are applied through the generated source rows, including Risk Register rows.</p>
           <p class="mt-2 text-violet-800">When a Text column is mapped to <strong>Client Price List 1..9</strong>, the web preview stays empty for that Text column, but the exported <strong>Infra_MI</strong> Excel sheet contains a real dropdown list in the corresponding cells.</p>
         </div>
 
@@ -2786,7 +2793,7 @@
 
         <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
           <p class="font-semibold text-slate-800 mb-1">Current scope</p>
-          <p class="text-slate-600">At this stage Mercury Interface fills the <strong>Infra_MI</strong> sheet with the Infra Management mapped rows, creates the subsystem parent blocks, and maps subsystem child rows from each available <strong>{Subsystem}_Synthesis</strong> sheet.</p>
+          <p class="text-slate-600">At this stage Mercury Interface fills the <strong>Infra_MI</strong> sheet with the Infra Management mapped rows, creates the subsystem parent blocks, maps subsystem child rows from each available <strong>{Subsystem}_Synthesis</strong> sheet, and adds Risk Register rows under the Project Risk branch.</p>
         </div>
       </div>
     </div>
