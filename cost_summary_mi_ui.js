@@ -3500,7 +3500,7 @@
             '</div>';
         } else {
           workloadSelector.innerHTML =
-            '<details class=\"rounded-2xl border border-slate-200 bg-white p-4\" open>' +
+            '<details class=\"guide-planning-choice-card rounded-2xl border border-sky-200 bg-sky-50 p-4\" open>' +
               '<summary class=\"cursor-pointer text-sm font-bold text-slate-700\">Applicable Positions <span class=\"text-slate-400 font-medium\">| Applied to ' + escapeHtml(String(currentProject.eligiblePhases.length)) + ' phase(s)</span></summary>' +
               '<p class=\"mt-3 text-xs text-slate-500\">The same mobilization duration is applied to every eligible phase whose start year matches the Service Year. Phase distinction remains visible in the guide planning table below.</p>' +
               '<div class=\"mt-4 grid grid-cols-1 xl:grid-cols-2 gap-3\">' +
@@ -3682,7 +3682,7 @@
             '<div class="rounded-2xl border border-slate-200 bg-white p-4">' +
               '<h3 class="text-sm font-bold text-slate-700">Materials</h3>' +
               '<div class="mt-4 space-y-4">' +
-                '<details class="rounded-2xl border border-slate-200 bg-slate-50 p-4" open>' +
+                '<details class="guide-planning-choice-card rounded-2xl border border-sky-200 bg-sky-50 p-4" open>' +
                   '<summary class="cursor-pointer text-sm font-bold text-slate-700">Recurrent Material Types</summary>' +
                   '<label class="mt-4 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">' +
                     '<input type="checkbox" data-fallback-guide-recurrent-material-toggle-all data-project-key="' + escapeHtml(currentProject.projectKey) + '" class="rounded border-slate-300 text-primary focus:ring-primary" ' + (currentProject.recurrentMaterialCatalog.length && currentProject.selectedRecurrentMaterialTypes.length === currentProject.recurrentMaterialCatalog.length ? 'checked' : '') + '/>' +
@@ -3696,8 +3696,8 @@
                       '</label>';
                     }).join('') +
                   '</div>' +
-                '</details>' +
-                '<details class="rounded-2xl border border-slate-200 bg-slate-50 p-4" open>' +
+          '</details>' +
+          '<details class="rounded-2xl border border-slate-200 bg-slate-50 p-4" open>' +
                   '<summary class="cursor-pointer text-sm font-bold text-slate-700">Recurrent Materials Guide Planning Table <span class="text-slate-400 font-medium">| ' + escapeHtml(String(currentProject.recurrentMaterialRows.length)) + ' row(s)</span></summary>' +
                   '<div class="mt-4 flex justify-end"><button type="button" data-guide-custom-row-add="recurrent_materials" data-project-key="' + escapeHtml(currentProject.projectKey) + '" class="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-all"><span class="material-symbols-outlined text-[16px]">add</span>Add row</button></div>' +
                   '<div class="mt-4 overflow-x-auto">' +
@@ -3746,8 +3746,8 @@
             '<div class="rounded-2xl border border-slate-200 bg-white p-4">' +
               '<h3 class="text-sm font-bold text-slate-700">Subcontracting Activities</h3>' +
               '<div class="mt-4 space-y-4">' +
-                '<details class="rounded-2xl border border-slate-200 bg-slate-50 p-4" open>' +
-                  '<summary class="cursor-pointer text-sm font-bold text-slate-700">Applicable Subcontracting Types</summary>' +
+          '<details class="guide-planning-choice-card rounded-2xl border border-sky-200 bg-sky-50 p-4" open>' +
+          '<summary class="cursor-pointer text-sm font-bold text-slate-700">Applicable Subcontracting Types</summary>' +
                   '<label class="mt-4 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">' +
                     '<input type="checkbox" data-fallback-guide-recurrent-subcontracting-toggle-all data-project-key="' + escapeHtml(currentProject.projectKey) + '" class="rounded border-slate-300 text-primary focus:ring-primary" ' + (currentProject.recurrentSubcontractingCatalog.length && currentProject.selectedRecurrentSubcontractingTypes.length === currentProject.recurrentSubcontractingCatalog.length ? 'checked' : '') + '/>' +
                     '<span class="text-sm font-semibold text-slate-700">Select all</span>' +
@@ -3824,7 +3824,7 @@
                   : !currentProject.demobilizationEligiblePhases.length
                     ? '<div class="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">No phase ends in the last year of the project. Check Project Phases Workspace.</div>'
                     : (
-                        '<details class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4" open>' +
+                        '<details class="guide-planning-choice-card mt-4 rounded-2xl border border-sky-200 bg-sky-50 p-4" open>' +
                           '<summary class="cursor-pointer text-sm font-bold text-slate-700">Applicable Positions <span class="text-slate-400 font-medium">| Applied to ' + escapeHtml(String(currentProject.demobilizationEligiblePhases.length)) + ' phase(s)</span></summary>' +
                           '<div class="mt-4 grid grid-cols-1 xl:grid-cols-2 gap-3">' +
                             currentProject.positions.map(function (position) {
@@ -3898,7 +3898,7 @@
                 !currentProject.demobilizationEligiblePhases.length
                   ? '<div class="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">No phase ends in the last year of the project. Check Project Phases Workspace.</div>'
                   : '<div class="mt-4 space-y-4">' +
-                      '<details class="rounded-2xl border border-slate-200 bg-slate-50 p-4" open>' +
+                      '<details class="guide-planning-choice-card rounded-2xl border border-sky-200 bg-sky-50 p-4" open>' +
                         '<summary class="cursor-pointer text-sm font-bold text-slate-700">Demobilisation Material Types</summary>' +
                         '<div class="mt-4 grid grid-cols-1 xl:grid-cols-2 gap-3">' +
                           currentProject.demobilizationMaterialCatalog.map(function (materialType) {
@@ -3913,8 +3913,8 @@
                             );
                           }).join('') +
                         '</div>' +
-                      '</details>' +
-                      '<details class="rounded-2xl border border-slate-200 bg-slate-50 p-4" open>' +
+          '</details>' +
+          '<details class="rounded-2xl border border-slate-200 bg-slate-50 p-4" open>' +
                         '<summary class="cursor-pointer text-sm font-bold text-slate-700">Demobilization Materials Guide Planning Table <span class="text-slate-400 font-medium">| ' + escapeHtml(String(currentProject.generatedDemobilizationMaterialRows.length)) + ' row(s)</span></summary>' +
                         '<div class="mt-4 flex justify-end"><button type="button" data-guide-custom-row-add="demobilization_materials" data-project-key="' + escapeHtml(currentProject.projectKey) + '" class="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-all"><span class="material-symbols-outlined text-[16px]">add</span>Add row</button></div>' +
                         '<div class="mt-4 overflow-x-auto">' +
@@ -3972,7 +3972,7 @@
                 !currentProject.demobilizationEligiblePhases.length
                   ? '<div class="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">No phase ends in the last year of the project. Check Project Phases Workspace.</div>'
                   : '<div class="mt-4 space-y-4">' +
-                      '<details class="rounded-2xl border border-slate-200 bg-slate-50 p-4" open>' +
+                      '<details class="guide-planning-choice-card rounded-2xl border border-sky-200 bg-sky-50 p-4" open>' +
                         '<summary class="cursor-pointer text-sm font-bold text-slate-700">Applicable Subcontracting Types</summary>' +
                         '<div class="mt-4 grid grid-cols-1 xl:grid-cols-2 gap-3">' +
                           currentProject.demobilizationSubcontractingCatalog.map(function (subcontractingType) {
