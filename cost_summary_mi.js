@@ -40,6 +40,7 @@ state.currentGuidePlanningProjectKey = "";
 const WORKSPACE_LITE_INDEX_KEY = "cost-summary-mi-workbook-lite-index-v1";
 const WORKSPACE_FULL_PREFIX = SHARED_STORE_KEYS.workbookPrefix;
 const WORKSPACE_LITE_PREFIX = "shared-store-workbook-lite-v1:";
+const COST_SUMMARY_THEME_KEY = "cost-summary-mi-theme-v1";
 
 const calculationBlocks = [
   {
@@ -822,6 +823,37 @@ const moduleBuildSteps = [
 
 function $(id) {
   return document.getElementById(id);
+}
+
+function applyCostSummaryTheme(theme) {
+  const isDark = theme === "dark";
+  document.documentElement.classList.toggle("dark", isDark);
+  document.documentElement.classList.toggle("light", !isDark);
+
+  const button = $("toggleThemeBtn");
+  if (!button) return;
+  button.innerHTML = `
+    <span class="material-symbols-outlined text-[18px]">${isDark ? "light_mode" : "dark_mode"}</span>
+    ${isDark ? "Light mode" : "Dark mode"}
+  `;
+  button.setAttribute("aria-pressed", String(isDark));
+  button.setAttribute("title", isDark ? "Switch to light mode" : "Switch to dark mode");
+}
+
+function readCostSummaryTheme() {
+  try {
+    return localStorage.getItem(COST_SUMMARY_THEME_KEY) === "dark" ? "dark" : "light";
+  } catch (error) {
+    return "light";
+  }
+}
+
+function saveCostSummaryTheme(theme) {
+  try {
+    localStorage.setItem(COST_SUMMARY_THEME_KEY, theme);
+  } catch (error) {
+    // Theme persistence is optional; the visual toggle still works for this session.
+  }
 }
 
 function escapeHtml(value) {
@@ -4842,8 +4874,11 @@ function setupEvents() {
     refreshStatus(draft);
   });
 
+  applyCostSummaryTheme(readCostSummaryTheme());
   $("toggleThemeBtn")?.addEventListener("click", () => {
-    document.documentElement.classList.toggle("dark");
+    const nextTheme = document.documentElement.classList.contains("dark") ? "light" : "dark";
+    saveCostSummaryTheme(nextTheme);
+    applyCostSummaryTheme(nextTheme);
   });
 
   $("refreshSharedStoreBtn")?.addEventListener("click", async () => {
