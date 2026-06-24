@@ -12987,6 +12987,7 @@
           closeOscWorkspace();
           closeMandatoryTrainingWorkspace();
           closePriceListsWorkspace();
+          closeRiskRegisterWorkspace();
           closeSubsystemSummaryWorkspace();
           closeMercuryInterfaceWorkspace();
           setFallbackDetailWorkspaceActive(false);
@@ -13002,6 +13003,7 @@
           closeFirmingRulesWorkspace();
           closePioDefinitionWorkspace();
           closeSubsystemSummaryWorkspace();
+          closeRiskRegisterWorkspace();
           closeDrawer();
           renderFallbackProjectPhasesDrawer(moduleDefinitions.study_setup, moduleDefinitions.study_setup.items.project_phases);
         },
@@ -13017,6 +13019,7 @@
           closeFirmingRulesWorkspace();
           closePioDefinitionWorkspace();
           closeSubsystemSummaryWorkspace();
+          closeRiskRegisterWorkspace();
           closeDrawer();
           renderFallbackCostCentersWorkspace();
         },
@@ -13029,6 +13032,7 @@
           closeFirmingRulesWorkspace();
           closePioDefinitionWorkspace();
           closeSubsystemSummaryWorkspace();
+          closeRiskRegisterWorkspace();
           closeDrawer();
           renderFallbackCurrencyExchangeWorkspace();
         },
@@ -13041,6 +13045,7 @@
           closeCurrencyExchangeWorkspace();
           closePioDefinitionWorkspace();
           closeSubsystemSummaryWorkspace();
+          closeRiskRegisterWorkspace();
           closeDrawer();
           renderFallbackFirmingRulesWorkspace();
         },
@@ -13056,6 +13061,7 @@
           closeCurrencyExchangeWorkspace();
           closeFirmingRulesWorkspace();
           closeSubsystemSummaryWorkspace();
+          closeRiskRegisterWorkspace();
           closeDrawer();
           renderFallbackPioDefinitionWorkspace();
         },
@@ -13074,6 +13080,7 @@
           closePioDefinitionWorkspace();
           closeWbsWorkspace();
           closeSubsystemSummaryWorkspace();
+          closeRiskRegisterWorkspace();
           closeDrawer();
           renderFallbackGuidePlanningWorkspace();
         },

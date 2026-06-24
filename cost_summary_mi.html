@@ -529,6 +529,10 @@
           </div>
           <div class="flex items-center gap-3">
             <div id="projectPhasesWorkspaceStatus" class="text-xs font-semibold text-slate-500">No project selected.</div>
+            <button type="button" onclick="document.getElementById('projectPhasesHelpModal').classList.remove('hidden')" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-sky-50 border border-sky-200 text-sky-700 text-sm font-semibold hover:bg-sky-100 transition-all">
+              <span class="material-symbols-outlined text-[18px]">help</span>
+              How it works
+            </button>
             <button id="closeProjectPhasesWorkspaceBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold hover:bg-slate-100 transition-all">
               <span class="material-symbols-outlined text-[18px]">close</span>
               Close
@@ -644,6 +648,10 @@
           </div>
           <div class="flex items-center gap-3">
             <div id="costCentersWorkspaceStatus" class="text-xs font-semibold text-slate-500">No project selected.</div>
+            <button type="button" onclick="document.getElementById('costCentersHelpModal').classList.remove('hidden')" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-sm font-semibold hover:bg-amber-100 transition-all">
+              <span class="material-symbols-outlined text-[18px]">help</span>
+              How it works
+            </button>
             <button id="closeCostCentersWorkspaceBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold hover:bg-slate-100 transition-all">
               <span class="material-symbols-outlined text-[18px]">close</span>
               Close
@@ -1457,6 +1465,10 @@
           </div>
           <div class="flex items-center gap-3">
             <div id="workloadSynthesisWorkspaceStatus" class="text-xs font-semibold text-slate-500">No project selected.</div>
+            <button type="button" onclick="document.getElementById('workloadSynthesisHelpModal').classList.remove('hidden')" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-50 border border-violet-200 text-violet-700 text-sm font-semibold hover:bg-violet-100 transition-all">
+              <span class="material-symbols-outlined text-[18px]">help</span>
+              How it works
+            </button>
             <button id="closeWorkloadSynthesisWorkspaceBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold hover:bg-slate-100 transition-all">
               <span class="material-symbols-outlined text-[18px]">close</span>
               Close
@@ -2632,13 +2644,56 @@
             </li>
             <li class="flex gap-3">
               <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 text-[11px] font-bold">3</span>
-              <div>The <strong>Total</strong> phase uses Synthesis totals. Other phases use <strong>Overhaul and Renewal Planning</strong>, except <strong>DEQ</strong> and <strong>VMI</strong> which use <strong>DEQ_VMI_Planning</strong>.</div>
+              <div>The <strong>Total</strong> phase uses imported <strong>Synthesis</strong> totals filtered by Subsystem, Type and Currency. Other phases use yearly planning rows filtered by Phase planning years, Subsystem, Type and Currency.</div>
             </li>
             <li class="flex gap-3">
               <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 text-[11px] font-bold">4</span>
               <div>Planning years are assigned to the phase containing <strong>1 July</strong> of that year. The final project phase also includes its end year. If a phase starts exactly on <strong>1 January</strong>, the next year after its end date is also included, but only when that year exists in the imported Overhaul/Renewal planning source.</div>
             </li>
           </ul>
+        </div>
+
+        <div class="rounded-xl border border-amber-100 bg-amber-50 px-4 py-4">
+          <p class="font-bold text-amber-900 mb-2">How phase costs are filtered</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs border border-amber-200 rounded-xl overflow-hidden">
+              <thead class="bg-amber-100 text-amber-900">
+                <tr>
+                  <th class="px-3 py-2 text-left font-bold">Scope</th>
+                  <th class="px-3 py-2 text-left font-bold">Source</th>
+                  <th class="px-3 py-2 text-left font-bold">Filtering rule</th>
+                  <th class="px-3 py-2 text-left font-bold">Cost columns used</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-amber-100 bg-white">
+                <tr>
+                  <td class="px-3 py-2 font-semibold">Total phase</td>
+                  <td class="px-3 py-2">Synthesis</td>
+                  <td class="px-3 py-2">Rows are filtered by the real Subsystem, Type containing Overhaul or Renewal, and Currency. No Year of Planning filter is applied because Synthesis already contains total project values.</td>
+                  <td class="px-3 py-2">Overhaul uses Total Global Cost and Overhaul Total Replacement Time. Renewal uses the imported renewal split when available.</td>
+                </tr>
+                <tr class="bg-amber-50/40">
+                  <td class="px-3 py-2 font-semibold">Standard subsystem phases</td>
+                  <td class="px-3 py-2">Overhaul and Renewal Planning</td>
+                  <td class="px-3 py-2">Rows are kept only when Year of Planning belongs to the phase year list, Subsystem matches the sheet subsystem, Type contains Overhaul or Renewal, and Currency matches the generated row currency.</td>
+                  <td class="px-3 py-2">Overhaul uses Global Cost. Renewal uses Management Cost, T&amp;C Cost and Material Cost.</td>
+                </tr>
+                <tr>
+                  <td class="px-3 py-2 font-semibold">DEQ and VMI phases</td>
+                  <td class="px-3 py-2">DEQ_VMI_Planning</td>
+                  <td class="px-3 py-2">Same filters as standard subsystem phases: Year of Planning inside the phase, matching Subsystem, Type containing Overhaul or Renewal, and matching Currency.</td>
+                  <td class="px-3 py-2">Unit Cost is used. Renewal splits Unit Cost into Management 5%, T&amp;C 15%, and Material 80%.</td>
+                </tr>
+                <tr class="bg-amber-50/40">
+                  <td class="px-3 py-2 font-semibold">Feeding_System sheet</td>
+                  <td class="px-3 py-2">Same sources as above</td>
+                  <td class="px-3 py-2">The sheet groups 3rd_Rail and CAT, but cost filtering keeps the real source subsystem. Long_Description keeps 3rd_Rail or CAT, while Price List Code 3 uses Feeding_System.</td>
+                  <td class="px-3 py-2">Costs are calculated per real subsystem, then displayed in the shared Feeding_System_Synthesis sheet.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="mt-3 text-amber-800">When several planning rows match the same Phase, Subsystem, Type and Currency, their costs are summed before the export row is generated. If the resulting cost is 0, the corresponding cost row is not generated.</p>
         </div>
 
         <div class="rounded-xl border border-amber-100 bg-amber-50 px-4 py-4">
@@ -3067,6 +3122,344 @@
         <div class="rounded-xl border border-slate-200 bg-white px-4 py-3">
           <p class="font-semibold text-slate-800 mb-1">Displayed values</p>
           <p class="text-slate-600">Rows with the same Phase, Subsystem, Period and cost type are summed. Values are stored in EUR, displayed using the selected currency, and remain editable directly in the table.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cost Centers "How it works" modal -->
+  <div id="costCentersHelpModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm">
+    <div class="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl border border-slate-200 p-8">
+      <button type="button" onclick="document.getElementById('costCentersHelpModal').classList.add('hidden')" class="absolute top-5 right-5 inline-flex items-center justify-center size-9 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 transition-all">
+        <span class="material-symbols-outlined text-[18px]">close</span>
+      </button>
+
+      <div class="flex items-center gap-3 mb-6">
+        <span class="material-symbols-outlined text-[24px] text-amber-600">help</span>
+        <h2 class="text-xl font-black tracking-tight">How Cost Centers works</h2>
+      </div>
+
+      <div class="space-y-5 text-sm text-slate-700 leading-6">
+        <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+          <p class="font-bold text-slate-800 mb-1">Purpose</p>
+          <p>The Cost Centers workspace defines the project currency, annual working hours, applicable positions, time periods, cost centers and hourly rates. These values are reused by WBS, Subsystem Summary, Mercury Interface and several export calculations.</p>
+        </div>
+
+        <div class="grid gap-4 lg:grid-cols-2">
+          <div class="rounded-xl border border-amber-100 bg-amber-50 px-4 py-4">
+            <p class="font-bold text-amber-900 mb-2">Project-level setup</p>
+            <ul class="space-y-2 text-amber-800">
+              <li><strong>Project Currency</strong> is the reference currency used to decide Onshore versus Offshore and to populate export currency defaults.</li>
+              <li><strong>Annual Working Hours</strong> comes from General Parameters when available, otherwise from manual override.</li>
+              <li><strong>Night uplift %</strong> can be applied to night rows when night hourly rates need an uplift from day rates.</li>
+            </ul>
+          </div>
+
+          <div class="rounded-xl border border-orange-100 bg-orange-50 px-4 py-4">
+            <p class="font-bold text-orange-900 mb-2">Generated table rows</p>
+            <ul class="space-y-2 text-orange-800">
+              <li>Rows are generated from the selected <strong>Applicable Positions</strong>.</li>
+              <li><strong>Supervisor</strong>, <strong>Technician</strong> and <strong>Worker</strong> use the general Day/Night time-period selector.</li>
+              <li>Engineer and other white-collar positions use the engineer time-period selector.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div>
+          <p class="font-bold text-slate-800 mb-2">Cost Center Table columns</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+              <thead class="bg-slate-100 text-slate-700">
+                <tr>
+                  <th class="px-3 py-2 text-left font-bold">Column</th>
+                  <th class="px-3 py-2 text-left font-bold">Role</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 bg-white">
+                <tr>
+                  <td class="px-3 py-2 font-semibold">Position</td>
+                  <td class="px-3 py-2">Staffing role used later by Workload, White Collar and export generation.</td>
+                </tr>
+                <tr class="bg-slate-50/50">
+                  <td class="px-3 py-2 font-semibold">Carat Unit</td>
+                  <td class="px-3 py-2">Export CARAT unit. It can be generated or selected manually, then reused to resolve Unit Role from PIO Definition.</td>
+                </tr>
+                <tr>
+                  <td class="px-3 py-2 font-semibold">Time Period</td>
+                  <td class="px-3 py-2">Usually Day or Night. If a position exists in both periods, exports create separate rows for each period.</td>
+                </tr>
+                <tr class="bg-slate-50/50">
+                  <td class="px-3 py-2 font-semibold">Monthly Working Hours</td>
+                  <td class="px-3 py-2">Exported as Cat 1 (Hours or Months) for workload rows.</td>
+                </tr>
+                <tr>
+                  <td class="px-3 py-2 font-semibold">Currency</td>
+                  <td class="px-3 py-2">Used for export currency, firming rule lookup and Onshore/Offshore classification.</td>
+                </tr>
+                <tr class="bg-slate-50/50">
+                  <td class="px-3 py-2 font-semibold">Hourly Rate</td>
+                  <td class="px-3 py-2">Editable rate, optionally imported from an Excel file.</td>
+                </tr>
+                <tr>
+                  <td class="px-3 py-2 font-semibold">Cost Center</td>
+                  <td class="px-3 py-2">Exported as Cost Centre in Subsystem Summary and Mercury Interface workload rows.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-4">
+          <p class="font-bold text-emerald-900 mb-2">Downstream export logic</p>
+          <ul class="space-y-2 text-emerald-800">
+            <li>For subsystem workload exports, only <strong>Supervisor</strong>, <strong>Technician</strong> and <strong>Worker</strong> are used on subsystem synthesis sheets.</li>
+            <li>Other positions are exported on <strong>Infra_Management_Synthesis</strong>.</li>
+            <li>Currency equal to Project Currency is classified as <strong>Onshore</strong>. Any other currency is classified as <strong>Offshore</strong>.</li>
+            <li>The Firming Rule is retrieved from the Firming Rules table using the row currency.</li>
+          </ul>
+        </div>
+
+        <div class="rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-4">
+          <p class="font-bold text-indigo-900 mb-2">Links with other workspaces</p>
+          <ul class="space-y-2 text-indigo-800">
+            <li><strong>PIO Definition</strong> maps Carat Unit to Unit Role.</li>
+            <li><strong>Guide Planning Definition</strong> provides planning guide codes and occurrence counts per position and period.</li>
+            <li><strong>Headcount &amp; Optimization</strong> provides quantities used with Cost Center positions in export rows.</li>
+            <li><strong>Subsystem Summary</strong> and <strong>Mercury Interface</strong> reuse the resulting cost-center fields in the generated Excel files.</li>
+          </ul>
+        </div>
+
+        <div class="rounded-xl border border-slate-200 bg-white px-4 py-4">
+          <p class="font-bold text-slate-800 mb-2">Recommended workflow</p>
+          <ul class="space-y-2 text-slate-600">
+            <li>Configure Project Currency and Annual Working Hours before generating downstream exports.</li>
+            <li>Review Carat Unit, Currency, Monthly Working Hours and Cost Center for manually added or manually edited positions.</li>
+            <li>After changing Cost Center rows, refresh WBS, Subsystem Summary and Mercury Interface before exporting Excel files.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Project Phases "How it works" modal -->
+  <div id="projectPhasesHelpModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm">
+    <div class="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl border border-slate-200 p-8">
+      <button type="button" onclick="document.getElementById('projectPhasesHelpModal').classList.add('hidden')" class="absolute top-5 right-5 inline-flex items-center justify-center size-9 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 transition-all">
+        <span class="material-symbols-outlined text-[18px]">close</span>
+      </button>
+
+      <div class="flex items-center gap-3 mb-6">
+        <span class="material-symbols-outlined text-[24px] text-sky-600">help</span>
+        <h2 class="text-xl font-black tracking-tight">How Project Phases works</h2>
+      </div>
+
+      <div class="space-y-5 text-sm text-slate-700 leading-6">
+        <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+          <p class="font-bold text-slate-800 mb-1">Purpose</p>
+          <p>The Project Phases workspace defines the timeline of each project. These dates, phase names and phase codes are reused by Guide Planning, Headcount, WBS, Subsystem Summary, Mercury Interface, Price Lists text mapping and phase exports.</p>
+        </div>
+
+        <div class="grid gap-4 lg:grid-cols-2">
+          <div class="rounded-xl border border-sky-100 bg-sky-50 px-4 py-4">
+            <p class="font-bold text-sky-900 mb-2">Phase identity</p>
+            <ul class="space-y-2 text-sky-800">
+              <li><strong>Phase</strong> is the business phase name used in workspaces, WBS rows and export filters.</li>
+              <li><strong>Phase code</strong> is reused by Price Lists text mapping and export sheets.</li>
+              <li><strong>Duration</strong> is used as a phase duration reference, especially in Text mapping when Duration is selected.</li>
+            </ul>
+          </div>
+
+          <div class="rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-4">
+            <p class="font-bold text-indigo-900 mb-2">Phase dates</p>
+            <ul class="space-y-2 text-indigo-800">
+              <li><strong>Start date</strong> and <strong>End date</strong> define the phase window used by phase exports and planning year allocation.</li>
+              <li><strong>Post Warranty Start</strong> and <strong>Post Warranty End</strong> mark the post-warranty window used by MOB logic in several downstream modules.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div>
+          <p class="font-bold text-slate-800 mb-2">Main downstream rules</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+              <thead class="bg-slate-100 text-slate-700">
+                <tr>
+                  <th class="px-3 py-2 text-left font-bold">Area</th>
+                  <th class="px-3 py-2 text-left font-bold">How Project Phases is used</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 bg-white">
+                <tr>
+                  <td class="px-3 py-2 font-semibold">Guide Planning Definition</td>
+                  <td class="px-3 py-2">Generates MOB, REC and DEM guide planning rows per phase. Recurrent tables use phase dates to calculate durations in months or years.</td>
+                </tr>
+                <tr class="bg-slate-50/50">
+                  <td class="px-3 py-2 font-semibold">Headcount &amp; Optimization</td>
+                  <td class="px-3 py-2">Creates coefficient and white collar rows by Phase x Period. Each phase receives the applicable period rows.</td>
+                </tr>
+                <tr>
+                  <td class="px-3 py-2 font-semibold">WBS Workspace</td>
+                  <td class="px-3 py-2">Generates Workload, Materials, Subcontracting and Overhaul &amp; Renewals rows per phase. MOB rows depend on the phase warranty/post-warranty setup.</td>
+                </tr>
+                <tr class="bg-slate-50/50">
+                  <td class="px-3 py-2 font-semibold">Subsystem Summary</td>
+                  <td class="px-3 py-2">Builds global and phase Excel exports. Phase exports only keep rows matching the selected phase.</td>
+                </tr>
+                <tr>
+                  <td class="px-3 py-2 font-semibold">Mercury Interface</td>
+                  <td class="px-3 py-2">Builds global and phase Infra_MI exports using the same phase filtering logic as Subsystem Summary.</td>
+                </tr>
+                <tr class="bg-slate-50/50">
+                  <td class="px-3 py-2 font-semibold">Price Lists Text mapping</td>
+                  <td class="px-3 py-2">When Text mapping uses Phase, Phase code or Duration, the values are read from the configured phase timeline.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-amber-100 bg-amber-50 px-4 py-4">
+          <p class="font-bold text-amber-900 mb-2">MOB and post-warranty behavior</p>
+          <p class="text-amber-800">For modules that need a mobilization period, a phase generally needs both <strong>Post Warranty Start</strong> and <strong>Post Warranty End</strong>. If they are missing, MOB rows can be skipped or generated with default zero values depending on the target module.</p>
+        </div>
+
+        <div class="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-4">
+          <p class="font-bold text-emerald-900 mb-2">Overhaul and renewal planning years</p>
+          <p class="text-emerald-800">Planning years are assigned to phases using the current year-window rule: a year belongs to a phase when July 1 of that year falls inside the phase. The final project phase also includes its end year. A specific January 1 boundary handling avoids losing the last source planning year while preventing overlap with the next phase.</p>
+        </div>
+
+        <div class="rounded-xl border border-slate-200 bg-white px-4 py-4">
+          <p class="font-bold text-slate-800 mb-2">Recommended workflow</p>
+          <ul class="space-y-2 text-slate-600">
+            <li>Configure Project Phases before Guide Planning, WBS, Subsystem Summary and Mercury Interface.</li>
+            <li>After changing phase dates, phase codes or warranty dates, refresh and review downstream workspaces because many generated rows depend on this timeline.</li>
+            <li>Keep phase names stable when possible, because imported JSON configuration and generated WBS rows are linked to phase names.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Workload Synthesis "How it works" modal -->
+  <div id="workloadSynthesisHelpModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm">
+    <div class="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl border border-slate-200 p-8">
+      <button type="button" onclick="document.getElementById('workloadSynthesisHelpModal').classList.add('hidden')" class="absolute top-5 right-5 inline-flex items-center justify-center size-9 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 transition-all">
+        <span class="material-symbols-outlined text-[18px]">close</span>
+      </button>
+
+      <div class="flex items-center gap-3 mb-6">
+        <span class="material-symbols-outlined text-[24px] text-violet-600">help</span>
+        <h2 class="text-xl font-black tracking-tight">How Workload Synthesis works</h2>
+      </div>
+
+      <div class="space-y-5 text-sm text-slate-700 leading-6">
+        <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+          <p class="font-bold text-slate-800 mb-1">Purpose</p>
+          <p>The Workload Table converts imported <strong>Synthesis</strong> and <strong>Hours Report</strong> workbook data into one row per <strong>Subsystem x Shift</strong>. These rows are reused later by Headcount &amp; Optimization, WBS, Subsystem Summary, and Mercury Interface.</p>
+        </div>
+
+        <div class="grid gap-4 lg:grid-cols-2">
+          <div class="rounded-xl border border-violet-100 bg-violet-50 px-4 py-4">
+            <p class="font-bold text-violet-900 mb-2">Hours Report source</p>
+            <p class="text-violet-800">For each Subsystem and Shift Type, the code sums <strong>hours_worked</strong> into Preventive Hrs and sums <strong>available_days</strong> into available days. Shift names are normalized to <strong>Day</strong> or <strong>Night</strong>.</p>
+          </div>
+
+          <div class="rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-4">
+            <p class="font-bold text-indigo-900 mb-2">Synthesis source</p>
+            <p class="text-indigo-800">For each Subsystem and shift, Synthesis provides <strong>paliative_hours_corrective</strong>, <strong>day_technicians_optimized</strong> and <strong>night_technicians_optimized</strong>. Corrective Synthesis rows also provide <strong>yearly_total_hours_corrective</strong> per Subsystem.</p>
+          </div>
+        </div>
+
+        <div>
+          <p class="font-bold text-slate-800 mb-2">Generated columns and formulas</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+              <thead class="bg-slate-100 text-slate-700">
+                <tr>
+                  <th class="px-3 py-2 text-left font-bold">Column</th>
+                  <th class="px-3 py-2 text-left font-bold">Formula / rule</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 bg-white">
+                <tr>
+                  <td class="px-3 py-2 font-semibold">Subsystem</td>
+                  <td class="px-3 py-2">Unique subsystem list from Synthesis, in first appearance order. Blank subsystems are ignored.</td>
+                </tr>
+                <tr class="bg-slate-50/50">
+                  <td class="px-3 py-2 font-semibold">Shift</td>
+                  <td class="px-3 py-2">Two generated rows per subsystem: Day and Night.</td>
+                </tr>
+                <tr>
+                  <td class="px-3 py-2 font-semibold">Preventive Hrs</td>
+                  <td class="px-3 py-2">Sum of Hours Report <strong>hours_worked</strong> for the same Subsystem and Shift.</td>
+                </tr>
+                <tr class="bg-slate-50/50">
+                  <td class="px-3 py-2 font-semibold">Day/Night %</td>
+                  <td class="px-3 py-2">Preventive Hrs for this row divided by total Preventive Hrs of the subsystem across Day + Night. If total is 0, the rate is 0.</td>
+                </tr>
+                <tr>
+                  <td class="px-3 py-2 font-semibold">Remaining Hrs</td>
+                  <td class="px-3 py-2">Hours Report <strong>available_days</strong> x 8 for the same Subsystem and Shift.</td>
+                </tr>
+                <tr class="bg-slate-50/50">
+                  <td class="px-3 py-2 font-semibold">Paliative Hrs</td>
+                  <td class="px-3 py-2">Synthesis <strong>paliative_hours_corrective</strong> for the same Subsystem and Shift. The first matching value is used.</td>
+                </tr>
+                <tr>
+                  <td class="px-3 py-2 font-semibold">Corrective Hrs</td>
+                  <td class="px-3 py-2">Synthesis <strong>yearly_total_hours_corrective</strong> for the subsystem x Day/Night %.</td>
+                </tr>
+                <tr class="bg-slate-50/50">
+                  <td class="px-3 py-2 font-semibold">All Corrective Hrs</td>
+                  <td class="px-3 py-2">Paliative Hrs + Corrective Hrs.</td>
+                </tr>
+                <tr>
+                  <td class="px-3 py-2 font-semibold">Corr/Prev %</td>
+                  <td class="px-3 py-2">All Corrective Hrs divided by Preventive Hrs. If Preventive Hrs is 0, the rate is 0.</td>
+                </tr>
+                <tr class="bg-slate-50/50">
+                  <td class="px-3 py-2 font-semibold">Gap Hrs</td>
+                  <td class="px-3 py-2">Remaining Hrs - All Corrective Hrs. Negative values are highlighted and counted as gap alerts.</td>
+                </tr>
+                <tr>
+                  <td class="px-3 py-2 font-semibold">Prev. Techs</td>
+                  <td class="px-3 py-2">If Preventive Hrs + All Corrective Hrs &gt; 0: Preventive Hrs / (Preventive Hrs + All Corrective Hrs) x optimized technicians for the shift.</td>
+                </tr>
+                <tr class="bg-slate-50/50">
+                  <td class="px-3 py-2 font-semibold">Corr. Techs</td>
+                  <td class="px-3 py-2">Optimized technicians for the shift - Prev. Techs.</td>
+                </tr>
+                <tr>
+                  <td class="px-3 py-2 font-semibold">Prev. Supervisors</td>
+                  <td class="px-3 py-2">Supervisor pool is 1 when total technicians for the subsystem are <= 8, otherwise 2. Prev. Supervisors = Prev. Techs / total technicians x supervisor pool.</td>
+                </tr>
+                <tr class="bg-slate-50/50">
+                  <td class="px-3 py-2 font-semibold">Corr. Supervisors</td>
+                  <td class="px-3 py-2">Corr. Techs / total technicians x supervisor pool.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-amber-100 bg-amber-50 px-4 py-4">
+          <p class="font-bold text-amber-900 mb-2">Rounding and alerts</p>
+          <p class="text-amber-800">Most generated numeric values are rounded to two decimals. Percent columns are stored as ratios internally and displayed as percentages. A negative <strong>Gap Hrs</strong> means corrective workload exceeds remaining capacity for that Subsystem and Shift.</p>
+        </div>
+
+        <div class="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-4">
+          <p class="font-bold text-emerald-900 mb-2">Manual actions</p>
+          <ul class="space-y-2 text-emerald-800">
+            <li><strong>Import Workload Excel</strong> replaces the auto-computed rows for that project with rows from an Excel sheet whose name contains Workload. The import expects Subsystem and Shift columns, plus the displayed workload columns.</li>
+            <li><strong>Reset to auto</strong> removes imported rows and returns to the calculation from Synthesis and Hours Report.</li>
+            <li><strong>Edit</strong> lets you override individual computed cells. Those overrides are saved per project.</li>
+            <li><strong>Add row</strong> creates a manual row for additional Subsystem/Shift staffing values. Manual added rows only carry technician and supervisor counts; calculated hour columns stay blank.</li>
+          </ul>
+        </div>
+
+        <div class="rounded-xl border border-violet-100 bg-violet-50 px-4 py-4">
+          <p class="font-bold text-violet-900 mb-2">Downstream usage</p>
+          <p class="text-violet-800">The resulting Prev./Corr. Technician and Supervisor values are used by <strong>Headcount &amp; Optimization</strong>, <strong>WBS Workload</strong>, <strong>Subsystem Summary</strong>, and the <strong>Mercury Interface</strong>. Imported rows and manual rows are included in those downstream calculations.</p>
         </div>
       </div>
     </div>
