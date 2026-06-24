@@ -926,6 +926,7 @@
         { key: mandatoryTrainingFallbackKey, name: "mandatoryTraining" },
         { key: priceListsFallbackKey, name: "priceLists" },
         { key: riskRegisterFallbackKey, name: "riskRegister" },
+        { key: "cost-summary-mi-subsystem-summary-overrides-v1", name: "subsystemSummary" },
       ];
 
       function cloneJsonValue(value) {
@@ -990,6 +991,9 @@
             priceLists: cloneJsonValue(modules.priceLists),
             riskRegister: cloneJsonValue(modules.riskRegister),
           },
+          deliverables: {
+            subsystemSummary: cloneJsonValue(modules.subsystemSummary),
+          },
         };
         return {
           app: "cost-summary-mi",
@@ -997,7 +1001,7 @@
           exportedAt: new Date().toISOString(),
           sourceStudyId: studyId,
           studyName: getCurrentStudyLabel(),
-          note: "Configuration only. Excel workbook data is not included.",
+          note: "Configuration only. Excel source workbooks are not included. Imported Subsystem Summary overrides, if any, are included as study configuration.",
           modules: modules,
           groups: groups,
           sharedSettings: cloneJsonValue(safeReadJson(sharedSettingsKey, {})),
@@ -1073,7 +1077,7 @@
           try {
             const payload = JSON.parse(String(evt.target.result || ""));
             const sourceName = payload && payload.studyName ? " from \"" + payload.studyName + "\"" : "";
-            const ok = window.confirm("Import Cost Summary & MI configuration" + sourceName + " into the current study? This will replace the current local configuration for this study. Excel workbook data is not included.");
+            const ok = window.confirm("Import Cost Summary & MI configuration" + sourceName + " into the current study? This will replace the current local configuration for this study. Excel source workbooks are not included; imported Subsystem Summary overrides may be included.");
             if (!ok) return;
             await importCostSummaryConfigPayload(payload);
             window.alert("Configuration imported successfully. Re-import the Excel source files separately if they are not already loaded on this PC.");
@@ -6994,6 +6998,225 @@
         return "Text " + (index + 1);
       });
 
+      const subsystemSummaryOverrideKey = "cost-summary-mi-subsystem-summary-overrides-v1";
+
+      function normalizeSubsystemSummaryImportHeader(value) {
+        return String(value || "")
+          .replace(/â€“|–|—/g, "-")
+          .replace(/&amp;/g, "&")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "");
+      }
+
+      function readSubsystemSummaryOverrideState() {
+        const studyId = getFallbackStudyId();
+        const all = safeReadJson(subsystemSummaryOverrideKey, {});
+        return cloneJsonValue(all && typeof all === "object" ? all[studyId] || {} : {});
+      }
+
+      function writeSubsystemSummaryOverrideState(nextState) {
+        const studyId = getFallbackStudyId();
+        const all = safeReadJson(subsystemSummaryOverrideKey, {});
+        all[studyId] = cloneJsonValue(nextState || {});
+        localStorage.setItem(subsystemSummaryOverrideKey, JSON.stringify(all));
+      }
+
+      function getSubsystemSummaryProjectOverride(projectKey) {
+        const state = readSubsystemSummaryOverrideState();
+        const normalized = normalizeWorkspaceKey(projectKey);
+        return Object.keys(state || {}).reduce(function (found, key) {
+          if (found) return found;
+          return normalizeWorkspaceKey(key) === normalized ? state[key] : null;
+        }, null) || {};
+      }
+
+      function setSubsystemSummaryProjectOverride(projectKey, updater) {
+        const state = readSubsystemSummaryOverrideState();
+        const actualKey = Object.keys(state || {}).find(function (key) {
+          return normalizeWorkspaceKey(key) === normalizeWorkspaceKey(projectKey);
+        }) || projectKey;
+        const current = state[actualKey] && typeof state[actualKey] === "object" ? state[actualKey] : {};
+        const next = typeof updater === "function" ? updater(cloneJsonValue(current)) : updater;
+        if (next && typeof next === "object" && (next.global || (next.phases && Object.keys(next.phases).length))) {
+          state[actualKey] = next;
+        } else {
+          delete state[actualKey];
+        }
+        writeSubsystemSummaryOverrideState(state);
+      }
+
+      function getSubsystemSummaryFileOverride(project, file) {
+        if (!project || !file) return null;
+        const projectOverride = getSubsystemSummaryProjectOverride(project.projectKey);
+        if (file.mode === "phase") {
+          return projectOverride.phases && projectOverride.phases[file.phaseKey] || null;
+        }
+        return projectOverride.global || null;
+      }
+
+      function hasSubsystemSummaryGlobalOverride(project) {
+        return !!(project && getSubsystemSummaryProjectOverride(project.projectKey).global);
+      }
+
+      function applySubsystemSummaryImportedOverrideToFile(project, file) {
+        const projectOverride = getSubsystemSummaryProjectOverride(project && project.projectKey);
+        let override = getSubsystemSummaryFileOverride(project, file);
+        let inheritedGlobal = false;
+        if (!override && file && file.mode === "phase" && projectOverride.global) {
+          override = projectOverride.global;
+          inheritedGlobal = true;
+        }
+        if (!override || !Array.isArray(override.sheets)) return file;
+        const importedSheets = inheritedGlobal
+          ? filterSubsystemSummaryImportedSheetsForPhase(override.sheets, file)
+          : override.sheets;
+        return Object.assign({}, file, {
+          sourceMode: "imported",
+          overrideScope: inheritedGlobal ? "global" : file.mode,
+          importedAt: override.importedAt || "",
+          importedFileName: override.fileName || "",
+          sheets: importedSheets.map(function (sheet) {
+            return {
+              key: sheet.key || String(sheet.sheetName || "").replace(/_Synthesis$/i, "") || "Imported",
+              label: sheet.label || String(sheet.sheetName || "").replace(/_Synthesis$/i, "") || "Imported",
+              sheetName: sheet.sheetName || "Imported",
+              sourceSubsystems: Array.isArray(sheet.sourceSubsystems) ? sheet.sourceSubsystems : [],
+              rows: Array.isArray(sheet.rows) ? sheet.rows.map(function (row) { return Object.assign({}, row); }) : [],
+            };
+          }),
+        });
+      }
+
+      function applySubsystemSummaryImportedOverrides(project, files) {
+        return (files || []).map(function (file) {
+          return applySubsystemSummaryImportedOverrideToFile(project, file);
+        });
+      }
+
+      function parseSubsystemSummaryImportWorkbook(workbook) {
+        if (!workbook || !Array.isArray(workbook.SheetNames) || !workbook.SheetNames.length) {
+          throw new Error("The imported workbook does not contain any sheet.");
+        }
+        const expectedByKey = {};
+        SUBSYSTEM_SUMMARY_HEADERS.forEach(function (header) {
+          expectedByKey[normalizeSubsystemSummaryImportHeader(header)] = header;
+        });
+        const validationSheetKey = normalizeSubsystemSummaryImportHeader("_Text_Lists");
+        const sheets = [];
+        workbook.SheetNames.forEach(function (sheetName) {
+          if (normalizeSubsystemSummaryImportHeader(sheetName) === validationSheetKey) return;
+          const sheet = workbook.Sheets[sheetName];
+          const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false, blankrows: false });
+          const headerIndex = matrix.findIndex(function (row) {
+            return Array.isArray(row) && row.some(function (cell) { return String(cell || "").trim(); });
+          });
+          if (headerIndex < 0) return;
+          const rawHeaders = matrix[headerIndex].map(function (header) { return String(header || "").trim(); });
+          const rawByKey = {};
+          rawHeaders.forEach(function (header, index) {
+            const key = normalizeSubsystemSummaryImportHeader(header);
+            if (key) rawByKey[key] = index;
+          });
+          const missing = Object.keys(expectedByKey).filter(function (key) {
+            return rawByKey[key] === undefined;
+          }).map(function (key) {
+            return expectedByKey[key];
+          });
+          if (missing.length) {
+            throw new Error('Sheet "' + sheetName + '" is missing required column(s): ' + missing.join(", "));
+          }
+          const rows = matrix.slice(headerIndex + 1).map(function (row) {
+            const output = {};
+            let hasValue = false;
+            SUBSYSTEM_SUMMARY_HEADERS.forEach(function (header) {
+              const sourceIndex = rawByKey[normalizeSubsystemSummaryImportHeader(header)];
+              const value = Array.isArray(row) ? row[sourceIndex] : "";
+              output[header] = value == null ? "" : value;
+              if (String(output[header]).trim()) hasValue = true;
+            });
+            return hasValue ? output : null;
+          }).filter(Boolean);
+          const label = String(sheetName || "").replace(/_Synthesis$/i, "");
+          sheets.push({
+            key: label || sheetName,
+            label: label || sheetName,
+            sheetName: sheetName,
+            sourceSubsystems: [],
+            rows: rows,
+          });
+        });
+        if (!sheets.length) {
+          throw new Error("The imported workbook does not contain any valid Subsystem Summary sheet.");
+        }
+        return sheets;
+      }
+
+      function filterSubsystemSummaryImportedSheetsForPhase(sheets, targetFile) {
+        if (!targetFile || targetFile.mode !== "phase") return sheets;
+        const phaseKeys = [targetFile.phaseKey, targetFile.label]
+          .map(function (value) { return normalizeWbsText(value); })
+          .filter(Boolean);
+        return (sheets || []).map(function (sheet) {
+          return Object.assign({}, sheet, {
+            rows: (sheet.rows || []).filter(function (row) {
+              const phaseKey = normalizeWbsText(row.Phase);
+              return phaseKeys.indexOf(phaseKey) !== -1;
+            }),
+          });
+        });
+      }
+
+      async function importSubsystemSummaryOverrideFile(file, project, targetFile) {
+        if (!file || !project || !targetFile) return;
+        if (typeof XLSX === "undefined") {
+          window.alert("XLSX library is not available on this page.");
+          return;
+        }
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data, { type: "array", cellDates: true });
+        const sheets = filterSubsystemSummaryImportedSheetsForPhase(parseSubsystemSummaryImportWorkbook(workbook), targetFile);
+        const scopeLabel = targetFile.mode === "phase" ? 'phase "' + (targetFile.label || targetFile.phaseKey) + '"' : "global project export";
+        const ok = window.confirm("Import " + file.name + " as an override for the " + scopeLabel + "? This replaces the calculated Subsystem Summary data for that scope until you reset it.");
+        if (!ok) return;
+        setSubsystemSummaryProjectOverride(project.projectKey, function (current) {
+          const next = Object.assign({}, current || {});
+          const payload = {
+            mode: targetFile.mode,
+            phaseKey: targetFile.phaseKey || "",
+            fileName: file.name || "",
+            importedAt: new Date().toISOString(),
+            sheets: sheets,
+          };
+          if (targetFile.mode === "phase") {
+            next.phases = Object.assign({}, next.phases || {});
+            next.phases[targetFile.phaseKey] = payload;
+          } else {
+            next.global = payload;
+          }
+          return next;
+        });
+        window.alert("Subsystem Summary import applied. Mercury Interface will use the imported data for this scope.");
+      }
+
+      function resetSubsystemSummaryOverride(project, targetFile) {
+        if (!project || !targetFile) return;
+        const resetsGlobal = targetFile.overrideScope === "global" || targetFile.mode === "global";
+        const scopeLabel = resetsGlobal ? "global project export" : 'phase "' + (targetFile.label || targetFile.phaseKey) + '"';
+        const ok = window.confirm("Reset the " + scopeLabel + " to calculated data?");
+        if (!ok) return;
+        setSubsystemSummaryProjectOverride(project.projectKey, function (current) {
+          const next = Object.assign({}, current || {});
+          if (!resetsGlobal && targetFile.mode === "phase") {
+            next.phases = Object.assign({}, next.phases || {});
+            delete next.phases[targetFile.phaseKey];
+            if (!Object.keys(next.phases).length) delete next.phases;
+          } else {
+            delete next.global;
+          }
+          return next;
+        });
+      }
+
       function closeSubsystemSummaryWorkspace() {
         setFallbackDetailWorkspaceActive(false);
         $("subsystemSummaryWorkspace")?.classList.add("hidden");
@@ -8805,7 +9028,7 @@
             }),
           });
         });
-        return files;
+        return applySubsystemSummaryImportedOverrides(project, files);
       }
 
       const SUBSYSTEM_SUMMARY_OVH_RENEW_PLANNING_TYPES = [
@@ -10143,6 +10366,10 @@
         const missing = $("subsystemSummaryMissingData");
         const fileTree = $("subsystemSummaryFileTree");
         const exportBtn = $("subsystemSummaryExportBtn");
+        const importBtn = $("subsystemSummaryImportBtn");
+        const importInput = $("subsystemSummaryImportInput");
+        const resetOverrideBtn = $("subsystemSummaryResetOverrideBtn");
+        const sourceBadge = $("subsystemSummarySourceBadge");
         const guidePlanningExportBtn = $("subsystemSummaryOvhRenewPlanningExportBtn");
         if (!workspace || !list || !empty || !content || !status || !title || !meta || !missing || !fileTree || !exportBtn) return;
 
@@ -10209,8 +10436,6 @@
           : [];
         if (!currentCostCenterRows.length) missingParts.push('<div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">No Cost Center row was found for this project.</div>');
         if (!currentProject.subsystemSummaryGuidePlanning) missingParts.push('<div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">Configure Guide Planning to fill Planning Guide and occurrences.</div>');
-        missing.classList.toggle("hidden", missingParts.length === 0);
-        missing.innerHTML = missingParts.join("");
 
         const files = buildSubsystemSummaryVirtualFiles(currentProject);
         const currentFileKey = workspace.dataset.currentFileKey && files.some(function (file) { return file.key === workspace.dataset.currentFileKey; })
@@ -10218,19 +10443,52 @@
           : "global";
         const currentFile = files.find(function (file) { return file.key === currentFileKey; }) || files[0] || null;
         workspace.dataset.currentFileKey = currentFile ? currentFile.key : "";
+        const visibleMessages = missingParts.slice();
+        if (currentFile && currentFile.sourceMode === "imported") {
+          visibleMessages.push('<div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"><strong>Imported override active.</strong> This file is read from the imported Excel data. Upstream configuration changes are not reflected until you use <strong>Reset to calculated</strong>.</div>');
+        }
+        missing.classList.toggle("hidden", visibleMessages.length === 0);
+        missing.innerHTML = visibleMessages.join("");
         exportBtn.disabled = !currentFile;
         exportBtn.dataset.subsystemSummaryExport = currentFile ? currentFile.key : "";
+        if (importBtn) {
+          importBtn.disabled = !currentFile;
+          importBtn.dataset.subsystemSummaryImport = currentFile ? currentFile.key : "";
+        }
+        if (importInput) {
+          importInput.dataset.subsystemSummaryImport = currentFile ? currentFile.key : "";
+        }
+        const currentIsImported = currentFile && currentFile.sourceMode === "imported";
+        if (resetOverrideBtn) {
+          resetOverrideBtn.classList.toggle("hidden", !currentIsImported);
+          resetOverrideBtn.dataset.subsystemSummaryResetOverride = currentFile ? currentFile.key : "";
+        }
+        if (sourceBadge) {
+          sourceBadge.className = currentIsImported
+            ? "inline-flex items-center gap-1 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700"
+            : "inline-flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700";
+          sourceBadge.innerHTML = currentIsImported
+            ? '<span class="material-symbols-outlined text-[16px]">upload_file</span>Imported'
+            : '<span class="material-symbols-outlined text-[16px]">functions</span>Calculated';
+          sourceBadge.title = currentIsImported
+            ? "Imported override active: " + (currentFile.importedFileName || "Imported workbook")
+            : "Calculated from current configuration";
+        }
 
         const globalFiles = files.filter(function (file) { return file.mode === "global"; });
         const phaseFiles = files.filter(function (file) { return file.mode === "phase"; });
         function fileButton(file) {
           const active = currentFile && file.key === currentFile.key;
           const rowCount = file.sheets.reduce(function (sum, sheet) { return sum + sheet.rows.length; }, 0);
+          const importedBadge = file.sourceMode === "imported"
+            ? '<span class="rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">Imported</span>'
+            : "";
           return '<button type="button" data-subsystem-summary-file-select="' + escapeHtml(file.key) + '" class="w-full rounded-xl border px-3 py-2.5 text-left transition-all ' +
             (active ? "border-cyan-300 bg-cyan-50 text-cyan-900" : "border-slate-200 bg-white hover:bg-slate-100 text-slate-700") + '">' +
               '<div class="flex items-center gap-2">' +
                 '<span class="material-symbols-outlined text-[18px] text-cyan-600">description</span>' +
                 '<span class="min-w-0 flex-1 truncate text-sm font-semibold">' + escapeHtml(file.name) + '</span>' +
+                importedBadge +
               '</div>' +
               '<div class="mt-1 pl-7 text-xs text-slate-500">' + file.sheets.length + ' sheet(s) | ' + rowCount + ' row(s)</div>' +
             '</button>';
@@ -13905,6 +14163,29 @@
             return;
           }
 
+          if (event.target.closest("#subsystemSummaryImportBtn")) {
+            event.preventDefault();
+            const input = $("subsystemSummaryImportInput");
+            if (input) input.value = "";
+            input?.click();
+            return;
+          }
+
+          if (event.target.closest("#subsystemSummaryResetOverrideBtn")) {
+            event.preventDefault();
+            const ws = $("subsystemSummaryWorkspace");
+            const projects = buildSubsystemSummaryProjects();
+            const project = projects.find(function (entry) { return ws && entry.projectKey === ws.dataset.currentProjectKey; }) || projects[0] || null;
+            if (!project) return;
+            const files = buildSubsystemSummaryVirtualFiles(project);
+            const fileKey = ws ? (ws.dataset.currentFileKey || "global") : "global";
+            const file = files.find(function (entry) { return entry.key === fileKey; }) || files[0] || null;
+            resetSubsystemSummaryOverride(project, file);
+            renderSubsystemSummaryWorkspace();
+            if (!$("mercuryInterfaceWorkspace")?.classList.contains("hidden")) renderMercuryInterfaceWorkspace();
+            return;
+          }
+
           if (event.target.closest("#subsystemSummaryOvhRenewPlanningExportBtn")) {
             event.preventDefault();
             const ws = $("subsystemSummaryWorkspace");
@@ -14238,6 +14519,30 @@
             const file = fileInput.files && fileInput.files[0];
             const projectKey = fileInput.getAttribute("data-project-key") || $("riskRegisterWorkspace")?.dataset.currentProjectKey || "";
             importRiskRegisterExcelFile(projectKey, file);
+            fileInput.value = "";
+            return;
+          }
+
+          if (event.target.id === "subsystemSummaryImportInput") {
+            const fileInput = event.target;
+            const file = fileInput.files && fileInput.files[0];
+            const ws = $("subsystemSummaryWorkspace");
+            const projects = buildSubsystemSummaryProjects();
+            const project = projects.find(function (entry) { return ws && entry.projectKey === ws.dataset.currentProjectKey; }) || projects[0] || null;
+            if (file && project) {
+              const files = buildSubsystemSummaryVirtualFiles(project);
+              const fileKey = ws ? (ws.dataset.currentFileKey || "global") : "global";
+              const targetFile = files.find(function (entry) { return entry.key === fileKey; }) || files[0] || null;
+              importSubsystemSummaryOverrideFile(file, project, targetFile)
+                .then(function () {
+                  renderSubsystemSummaryWorkspace();
+                  if (!$("mercuryInterfaceWorkspace")?.classList.contains("hidden")) renderMercuryInterfaceWorkspace();
+                })
+                .catch(function (error) {
+                  console.error("Subsystem Summary import failed:", error);
+                  window.alert("Unable to import Subsystem Summary workbook: " + (error.message || error));
+                });
+            }
             fileInput.value = "";
             return;
           }

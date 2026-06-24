@@ -1791,6 +1791,7 @@ const CONFIG_EXPORT_FALLBACK_STORES = {
   mandatoryTraining: "cost-summary-mi-mandatory-training-fallback-v1",
   priceLists: "cost-summary-mi-price-lists-fallback-v1",
   riskRegister: "cost-summary-mi-risk-register-fallback-v1",
+  subsystemSummary: "cost-summary-mi-subsystem-summary-overrides-v1",
 };
 
 function cloneConfigValue(value) {
@@ -1846,6 +1847,7 @@ function buildConfigExportModules() {
     vehicles: state.studyConfig?.supportCosts?.vehicles?.projects || {},
     otherSupportCosts: state.studyConfig?.supportCosts?.otherSupportCosts?.projects || {},
     mandatoryTraining: state.studyConfig?.supportCosts?.mandatoryTraining?.projects || {},
+    subsystemSummary: state.studyConfig?.deliverables?.subsystemSummary?.projects || {},
   };
 
   return Object.keys(CONFIG_EXPORT_FALLBACK_STORES).reduce((modules, moduleName) => {
@@ -1886,6 +1888,9 @@ function buildCostSummaryConfigExportPayload() {
       priceLists: cloneConfigValue(modules.priceLists),
       riskRegister: cloneConfigValue(modules.riskRegister),
     },
+    deliverables: {
+      subsystemSummary: cloneConfigValue(modules.subsystemSummary),
+    },
   };
 
   return {
@@ -1894,7 +1899,7 @@ function buildCostSummaryConfigExportPayload() {
     exportedAt: new Date().toISOString(),
     sourceStudyId: getCurrentConfigStudyId(),
     studyName: state.currentStudy?.name || "Cost Summary & MI",
-    note: "Configuration only. Excel workbook data is not included.",
+    note: "Configuration only. Excel source workbooks are not included. Imported Subsystem Summary overrides, if any, are included as study configuration.",
     modules,
     groups,
     studyConfig: cloneConfigValue(state.studyConfig || {}),
@@ -1910,6 +1915,7 @@ function getImportedModule(payload, moduleName) {
   const organizationRisks = payload?.groups?.organizationRisks || {};
   const supportCosts = payload?.groups?.supportCosts || {};
   const pricingRisks = payload?.groups?.pricingRisks || {};
+  const deliverables = payload?.groups?.deliverables || {};
   const groupedModules = {
     projectPhases: studySetup.projectPhases,
     costCenters: studySetup.costCenters,
@@ -1926,6 +1932,7 @@ function getImportedModule(payload, moduleName) {
     vehicles: supportCosts.vehicles,
     otherSupportCosts: supportCosts.otherSupportCosts,
     mandatoryTraining: supportCosts.mandatoryTraining,
+    subsystemSummary: deliverables.subsystemSummary,
   };
   return cloneConfigValue(groupedModules[moduleName] || {});
 }
@@ -2024,12 +2031,21 @@ async function importCostSummaryConfigPayloadToStudy(payload) {
       updatedAt: new Date().toISOString(),
     },
   };
+  const nextDeliverables = {
+    ...(existing.deliverables || {}),
+    subsystemSummary: {
+      ...((existing.deliverables || {}).subsystemSummary || {}),
+      projects: getImportedModule(payload, "subsystemSummary"),
+      updatedAt: new Date().toISOString(),
+    },
+  };
 
   state.studyConfig = await savePersistedStudyConfig(state.currentStudy.studyId, {
     dataSources: nextDataSources,
     studySetup: nextStudySetup,
     organizationRisks: nextOrganizationRisks,
     supportCosts: nextSupportCosts,
+    deliverables: nextDeliverables,
   });
   publishProjectPhasesBridge();
   publishCostCentersBridge();

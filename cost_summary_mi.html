@@ -609,6 +609,19 @@
                     <p id="subsystemSummaryCurrentProjectMeta" class="mt-2 text-sm text-slate-500">Context</p>
                   </div>
                   <div class="flex flex-wrap items-center gap-2">
+                    <span id="subsystemSummarySourceBadge" class="inline-flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">
+                      <span class="material-symbols-outlined text-[16px]">functions</span>
+                      Calculated
+                    </span>
+                    <input id="subsystemSummaryImportInput" type="file" accept=".xlsx,.xls,.xlsm" class="hidden"/>
+                    <button id="subsystemSummaryImportBtn" type="button" class="inline-flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-100 transition-all">
+                      <span class="material-symbols-outlined text-[18px]">upload_file</span>
+                      Import Excel
+                    </button>
+                    <button id="subsystemSummaryResetOverrideBtn" type="button" class="hidden inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100 transition-all">
+                      <span class="material-symbols-outlined text-[18px]">restart_alt</span>
+                      Reset to calculated
+                    </button>
                     <button id="subsystemSummaryOvhRenewPlanningExportBtn" type="button" class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-all">
                       <span class="material-symbols-outlined text-[18px]">calendar_view_month</span>
                       Export Guide Planning
@@ -2635,6 +2648,16 @@
           <p>Subsystem Summary builds virtual Excel files from the current project configuration. The <strong>Global project export</strong> creates one workbook for the selected project with all phases included. The <strong>Phase exports</strong> create one workbook per phase using the same sheet structure, filtered to that phase.</p>
         </div>
 
+        <div class="rounded-xl border border-amber-100 bg-amber-50 px-4 py-4">
+          <p class="font-bold text-amber-900 mb-2">Calculated vs Imported override</p>
+          <ul class="space-y-2 text-amber-800">
+            <li><strong>Calculated</strong> means the rows are generated from the current Cost Centers, Guide Planning, WBS, Support Costs and Price Lists configuration.</li>
+            <li><strong>Import Excel</strong> can replace the selected Global project export or the selected Phase export with manually edited Excel data. The imported workbook must keep the same Subsystem Summary headers.</li>
+            <li>A Global import replaces the whole project package and is reused by Mercury Interface. A Phase import replaces only that phase.</li>
+            <li><strong>Reset to calculated</strong> removes the override and returns to the auto-generated rows.</li>
+          </ul>
+        </div>
+
         <div class="grid gap-4 lg:grid-cols-2">
           <div class="rounded-xl border border-cyan-100 bg-cyan-50 px-4 py-4">
             <p class="font-bold text-cyan-900 mb-2">Sheets</p>
@@ -3835,7 +3858,7 @@
     </div>
   </aside>
 
-  <script src="cost_summary_mi_ui.js?v=20260624-param-card-palette-v1"></script>
-  <script type="module" src="cost_summary_mi.js?v=20260624-param-card-palette-v1"></script>
+  <script src="cost_summary_mi_ui.js?v=20260624-subsystem-import-overrides-v1"></script>
+  <script type="module" src="cost_summary_mi.js?v=20260624-subsystem-import-overrides-v1"></script>
 </body>
 </html>
