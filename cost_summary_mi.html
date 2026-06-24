@@ -2651,10 +2651,13 @@
         <div class="rounded-xl border border-amber-100 bg-amber-50 px-4 py-4">
           <p class="font-bold text-amber-900 mb-2">Calculated vs Imported override</p>
           <ul class="space-y-2 text-amber-800">
-            <li><strong>Calculated</strong> means the rows are generated from the current Cost Centers, Guide Planning, WBS, Support Costs and Price Lists configuration.</li>
-            <li><strong>Import Excel</strong> can replace the selected Global project export or the selected Phase export with manually edited Excel data. The imported workbook must keep the same Subsystem Summary headers.</li>
-            <li>A Global import replaces the whole project package and is reused by Mercury Interface. A Phase import replaces only that phase.</li>
-            <li><strong>Reset to calculated</strong> removes the override and returns to the auto-generated rows.</li>
+            <li><strong>Calculated</strong> means the rows are generated live from the current project setup: Project Phases, Cost Centers, Guide Planning, PIO/Freight/Customs, WBS, Support Costs, Price Lists, Currency &amp; Exchange Rates, and Firming Rules.</li>
+            <li><strong>Import Excel</strong> lets you replace the currently selected Subsystem Summary file with manually edited Excel data. The imported workbook must keep the same headers as the exported Subsystem Summary workbook so the preview, re-export and Mercury Interface can read it correctly.</li>
+            <li>If the selected file is the <strong>Global project export</strong>, the import replaces the full project package. If the selected file is a <strong>Phase export</strong>, the import replaces only that phase. Other phase exports remain calculated unless they are imported separately.</li>
+            <li>When an override is active, an <strong>Imported</strong> badge is shown. Upstream configuration changes are not reflected in that overridden file until you reset it.</li>
+            <li><strong>Reset to calculated</strong> removes the imported override and rebuilds the rows from the current configuration.</li>
+            <li><strong>Mercury Interface</strong> reads the active Subsystem Summary data exactly as displayed here. If a file is imported, Mercury uses the imported rows; if it is reset, Mercury uses the calculated rows again.</li>
+            <li>Imported Subsystem Summary overrides are included in the Cost Summary &amp; MI JSON export/import. Excel source workbooks are still not included and must be imported separately through Data Sources.</li>
           </ul>
         </div>
 
