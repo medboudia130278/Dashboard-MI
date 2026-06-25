@@ -9639,7 +9639,7 @@
       }
 
       const MERCURY_INTERFACE_HEADERS = [
-        "Phase", "Period", "Type",
+        "Phase", "Period", "Type", "Total Cost",
         "Costing Tree", "Description", "Item Code", "Comment", "Attached File", "Planning Guide", "Costs Type", "PBS/IBS", "ABS", "OBS",
         "CARAT Unit", "Associated WP", "Tasks", "Sub-System", "Cost Drivers", "Variant", "GAP", "Instance", "Sort", "Unit Role",
         "Responsibility", "On/Off Shore", "Sub-System Manager", "Delegated person", "Price List Code 1", "Price List Code 2", "Price List Code 3",
@@ -9894,7 +9894,7 @@
             rules.forEach(function (rule) {
               sourceRows.forEach(function (sourceRow, rowIndex) {
                 if (usedRowIndexes.has(rowIndex) || !mercurySubsystemRuleMatches(sourceRow, rule)) return;
-                outputRows.push(mapSubsystemSummaryRowToMercury(sourceRow, parentTree + "." + childIndex));
+                outputRows.push(mapSubsystemSummaryRowToMercury(project, sourceRow, parentTree + "." + childIndex));
                 usedRowIndexes.add(rowIndex);
                 childIndex += 1;
               });
@@ -9974,7 +9974,77 @@
         return "";
       }
 
-      function mapSubsystemSummaryRowToMercury(sourceRow, costingTree) {
+      function normalizeMercuryCostCenterKey(value) {
+        return String(value || "")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, " ");
+      }
+
+      function buildMercuryHourlyRateByCostCenter(project) {
+        const rows = project && project.subsystemSummaryCostCenters && Array.isArray(project.subsystemSummaryCostCenters.rows)
+          ? project.subsystemSummaryCostCenters.rows
+          : [];
+        return rows.reduce(function (acc, row) {
+          const costCenter = normalizeMercuryCostCenterKey(row && row.costCenter);
+          if (!costCenter) return acc;
+          const hourlyRate = toNumber(row && row.hourlyRate);
+          if (hourlyRate === null) return acc;
+          acc[costCenter] = hourlyRate;
+          return acc;
+        }, {});
+      }
+
+      function getMercuryNumeric(row, headers) {
+        for (const header of headers) {
+          if (!Object.prototype.hasOwnProperty.call(row || {}, header)) continue;
+          const numeric = toNumber(row[header]);
+          if (numeric !== null) return numeric;
+        }
+        return 0;
+      }
+
+      function calculateMercuryTotalCost(project, outputRow) {
+        const type = normalizeMercuryMatchText(outputRow && outputRow.Type);
+        if (!type) return "";
+        const occurrence = getMercuryNumeric(outputRow, ["Nb Tot. of Occurency"]);
+        const quantity = getMercuryNumeric(outputRow, ["Quantity"]);
+        if (type === normalizeMercuryMatchText("Workload")) {
+          const costCenter = normalizeMercuryCostCenterKey(outputRow["Cost Centre"]);
+          if (!costCenter) return "";
+          const hourlyRates = buildMercuryHourlyRateByCostCenter(project);
+          if (!Object.prototype.hasOwnProperty.call(hourlyRates, costCenter)) return "";
+          const cat1 = getMercuryNumeric(outputRow, ["Cat 1 (Hours or Months)"]);
+          return occurrence * quantity * cat1 * hourlyRates[costCenter];
+        }
+        if (
+          type === normalizeMercuryMatchText("Materials")
+          || type === normalizeMercuryMatchText("Ovh_Material")
+          || type === normalizeMercuryMatchText("Renew_Management")
+          || type === normalizeMercuryMatchText("Renew_T&C")
+          || type === normalizeMercuryMatchText("Renew_Material")
+        ) {
+          const externalPurchase = getMercuryNumeric(outputRow, ["External Purchase - Variable"]);
+          const freight = getMercuryNumeric(outputRow, ["Freight per Unit"]);
+          const taxes = getMercuryNumeric(outputRow, ["Insurances, Rates, & Taxes"]);
+          return occurrence * quantity * (externalPurchase + freight + taxes);
+        }
+        if (type === normalizeMercuryMatchText("Subcontracting")) {
+          const externalServices = getMercuryNumeric(outputRow, ["External Services Variable Cost"]);
+          const freight = getMercuryNumeric(outputRow, ["Freight per Unit"]);
+          const taxes = getMercuryNumeric(outputRow, ["Insurances, Rates, & Taxes"]);
+          return occurrence * quantity * (externalServices + freight + taxes);
+        }
+        if (type === normalizeMercuryMatchText("RISK")) {
+          const mostLikely = getMercuryNumeric(outputRow, ["Fixed Contingencies/ Risk: Most likely value"]);
+          return occurrence * quantity * mostLikely;
+        }
+        return "";
+      }
+
+      function mapSubsystemSummaryRowToMercury(project, sourceRow, costingTree) {
         const sourceByHeader = Object.keys(sourceRow || {}).reduce(function (acc, header) {
           acc[normalizeMercuryHeader(header)] = header;
           return acc;
@@ -10000,6 +10070,7 @@
           }
           outputRow[targetHeader] = findMercurySourceValue(sourceRow, sourceByHeader, [targetHeader]);
         });
+        outputRow["Total Cost"] = calculateMercuryTotalCost(project, outputRow);
         return outputRow;
       }
 
@@ -10040,6 +10111,7 @@
           }
         });
         outputRow.Period = "";
+        outputRow["Total Cost"] = calculateMercuryTotalCost(null, outputRow);
         return outputRow;
       }
 
@@ -10079,7 +10151,7 @@
           rules.forEach(function (rule) {
             sourceRows.forEach(function (sourceRow) {
               if (!mercuryRowTypeIs(sourceRow, rule.type) || !rule.match(sourceRow)) return;
-              outputRows.push(mapSubsystemSummaryRowToMercury(sourceRow, parentRow["Costing Tree"] + "." + childIndex));
+              outputRows.push(mapSubsystemSummaryRowToMercury(project, sourceRow, parentRow["Costing Tree"] + "." + childIndex));
               childIndex += 1;
             });
           });

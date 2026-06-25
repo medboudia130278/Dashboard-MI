@@ -3002,7 +3002,7 @@
         <div class="grid gap-4 lg:grid-cols-2">
           <div class="rounded-xl border border-cyan-100 bg-cyan-50 px-4 py-4">
             <p class="font-bold text-cyan-900 mb-2">Infra_MI headers</p>
-            <p class="text-cyan-800">The sheet uses the Mercury <strong>M_I</strong> interface headers, with <strong>Phase</strong>, <strong>Period</strong> and <strong>Type</strong> added before <strong>Costing Tree</strong>. The export keeps one single sheet rather than one sheet per subsystem.</p>
+            <p class="text-cyan-800">The sheet uses the Mercury <strong>M_I</strong> interface headers, with <strong>Phase</strong>, <strong>Period</strong>, <strong>Type</strong> and <strong>Total Cost</strong> added before <strong>Costing Tree</strong>. The export keeps one single sheet rather than one sheet per subsystem.</p>
           </div>
 
           <div class="rounded-xl border border-sky-100 bg-sky-50 px-4 py-4">
@@ -3049,6 +3049,17 @@
         <div class="rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-4">
           <p class="font-bold text-indigo-900 mb-2">Mapped values</p>
           <p class="text-indigo-800">Most columns are copied by matching the Mercury header with the source Subsystem Summary header. Specific aliases are handled where names differ, such as <strong>Long_Description</strong> to <strong>Description</strong>, <strong>Carat Unit</strong> to <strong>CARAT Unit</strong>, <strong>Insurances-Rates &amp; Taxes</strong> to <strong>Insurances, Rates, &amp; Taxes</strong>, and <strong>External Purchase - Variable</strong>.</p>
+        </div>
+
+        <div class="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-4">
+          <p class="font-bold text-emerald-900 mb-2">Total Cost</p>
+          <div class="grid gap-3 text-emerald-800">
+            <div><strong>Workload</strong>: Nb Tot. of Occurency x Quantity x Cat 1 (Hours or Months) x Hourly rate. The Hourly rate is read from Cost Centers by matching the row Cost Centre.</div>
+            <div><strong>Materials</strong>, <strong>Ovh_Material</strong>, <strong>Renew_Management</strong>, <strong>Renew_T&amp;C</strong> and <strong>Renew_Material</strong>: Nb Tot. of Occurency x Quantity x (External Purchase - Variable + Freight per Unit + Insurances, Rates, &amp; Taxes).</div>
+            <div><strong>Subcontracting</strong>: Nb Tot. of Occurency x Quantity x (External Services Variable Cost + Freight per Unit + Insurances, Rates, &amp; Taxes).</div>
+            <div><strong>RISK</strong>: Nb Tot. of Occurency x Quantity x Fixed Contingencies/ Risk: Most likely value.</div>
+            <div><strong>Ovh_Workload</strong>, parent rows and unknown types stay blank for now.</div>
+          </div>
         </div>
 
         <div>
@@ -3861,7 +3872,7 @@
     </div>
   </aside>
 
-  <script src="cost_summary_mi_ui.js?v=20260624-subsystem-import-overrides-v1"></script>
+  <script src="cost_summary_mi_ui.js?v=20260625-mercury-total-cost-v1"></script>
   <script type="module" src="cost_summary_mi.js?v=20260624-subsystem-import-overrides-v1"></script>
 </body>
 </html>

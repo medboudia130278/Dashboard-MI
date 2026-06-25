@@ -1,5 +1,5 @@
 <!doctype html>
-<html class="light" lang="en">
+<html class="dark" lang="en">
 <head>
   <meta charset="utf-8"/>
   <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
@@ -20,6 +20,16 @@
       --app-shadow:0 14px 36px rgba(15,23,42,.08);
       --app-shadow-soft:0 8px 22px rgba(15,23,42,.06);
     }
+    html.dark{
+      --app-bg:#07111f;
+      --app-surface:#0f1b2d;
+      --app-surface-soft:#132238;
+      --app-border:#26384f;
+      --app-text:#f8fafc;
+      --app-muted:#9fb0c8;
+      --app-shadow:0 18px 42px rgba(0,0,0,.30);
+      --app-shadow-soft:0 12px 28px rgba(0,0,0,.22);
+    }
         html, body { height: 100%; }
     body { margin: 0; }
 .bar-fill{ background: var(--primary); }
@@ -29,6 +39,19 @@
 }
   </style>
 
+  <script>
+    (function () {
+      var key = "dashboard-theme-preference-v2";
+      var theme = "dark";
+      try {
+        var saved = localStorage.getItem(key);
+        if (saved === "light" || saved === "dark") theme = saved;
+      } catch (error) {}
+      document.documentElement.classList.toggle("dark", theme === "dark");
+      document.documentElement.classList.toggle("light", theme !== "dark");
+      document.documentElement.dataset.theme = theme;
+    })();
+  </script>
 
 <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
   <script>
@@ -187,6 +210,12 @@
       box-shadow: 0 8px 24px rgba(15,23,42,.06);
     }
 
+    .dark .app-header {
+      background: rgba(7,17,31,.86) !important;
+      border-color: rgba(38,56,79,.92) !important;
+      box-shadow: 0 10px 30px rgba(0,0,0,.20);
+    }
+
     .app-header > div:first-child {
       flex-wrap: wrap;
       row-gap: .75rem;
@@ -227,14 +256,47 @@
       border-radius: 18px !important;
     }
 
+    .dark #summarySticky.dashboard-hero > div > div:first-child > div:last-child {
+      background: rgba(15, 27, 45, .94) !important;
+      border-color: rgba(72, 95, 126, .82) !important;
+      color: #f8fafc !important;
+      box-shadow: 0 18px 42px rgba(0,0,0,.28);
+    }
+
     #summarySticky.dashboard-hero > div > div:first-child > div:last-child .text-slate-400 {
       color: #64748b !important;
+    }
+
+    .dark #summarySticky.dashboard-hero > div > div:first-child > div:last-child .text-slate-400 {
+      color: #9fb0c8 !important;
+    }
+
+    .dark #summarySticky.dashboard-hero > div > div:first-child > div:last-child .bg-primary {
+      background: rgba(19, 127, 236, .18) !important;
+      color: #93c5fd !important;
+    }
+
+    .dark #summarySticky.dashboard-hero > div > div:first-child > div:last-child .bg-slate-100,
+    .dark #summarySticky.dashboard-hero > div > div:first-child > div:last-child .dark\:bg-slate-800 {
+      background-color: rgba(38, 56, 79, .78) !important;
     }
 
     #summarySticky.dashboard-hero select,
     #summarySticky.dashboard-hero select option {
       background-color: #ffffff !important;
       color: #0f172a !important;
+    }
+
+    .dark #summarySticky.dashboard-hero select,
+    .dark #summarySticky.dashboard-hero select option {
+      background-color: #0b1627 !important;
+      color: #f8fafc !important;
+      border-color: rgba(72, 95, 126, .86) !important;
+    }
+
+    .dark #summarySticky.dashboard-hero select:focus {
+      border-color: #60a5fa !important;
+      box-shadow: 0 0 0 3px rgba(96, 165, 250, .18) !important;
     }
 
     #summarySticky.dashboard-hero select:disabled {
@@ -408,6 +470,10 @@
       color: #0f172a;
     }
 
+    .dark .overview-section h3 {
+      color: #f8fafc;
+    }
+
     .overview-open-detail {
       flex: none;
       border: 1px solid var(--app-border);
@@ -417,6 +483,11 @@
       padding: .55rem .75rem;
       font-size: .75rem;
       font-weight: 800;
+    }
+
+    .dark .overview-open-detail {
+      background: #132238;
+      color: #dbeafe;
     }
 
     .overview-open-detail:hover {
@@ -477,6 +548,13 @@
       font-size: .875rem;
     }
 
+    .dark .overview-filter-grid select,
+    .dark .overview-filter-grid input,
+    .dark .overview-filter-grid select option {
+      background: #0b1627 !important;
+      color: #f8fafc !important;
+    }
+
     #view-materials > section > div:first-child h2,
     #view-overhaul > section > div:first-child h2,
     #view-subcontracting > section > div:first-child h2,
@@ -510,6 +588,19 @@
       box-shadow: var(--app-shadow-soft);
     }
 
+    .dark #view-materials > section > div:first-child .bg-white,
+    .dark #view-materials > section > div:first-child .bg-slate-50,
+    .dark #view-overhaul > section > div:first-child .bg-white,
+    .dark #view-overhaul > section > div:first-child .bg-slate-50,
+    .dark #view-subcontracting > section > div:first-child .bg-white,
+    .dark #view-subcontracting > section > div:first-child .bg-slate-50,
+    .dark #view-benchmark > section > div:first-child .bg-white,
+    .dark #view-benchmark > section > div:first-child .bg-slate-50 {
+      background: rgba(15, 27, 45, .94) !important;
+      border-color: rgba(72, 95, 126, .82) !important;
+      color: #f8fafc !important;
+    }
+
     #view-materials > section > div:first-child .bg-white .text-slate-400,
     #view-materials > section > div:first-child .bg-slate-50 .text-slate-400,
     #view-overhaul > section > div:first-child .bg-white .text-slate-400,
@@ -519,6 +610,17 @@
     #view-benchmark > section > div:first-child .bg-white .text-slate-400,
     #view-benchmark > section > div:first-child .bg-slate-50 .text-slate-400 {
       color: #64748b !important;
+    }
+
+    .dark #view-materials > section > div:first-child .bg-white .text-slate-400,
+    .dark #view-materials > section > div:first-child .bg-slate-50 .text-slate-400,
+    .dark #view-overhaul > section > div:first-child .bg-white .text-slate-400,
+    .dark #view-overhaul > section > div:first-child .bg-slate-50 .text-slate-400,
+    .dark #view-subcontracting > section > div:first-child .bg-white .text-slate-400,
+    .dark #view-subcontracting > section > div:first-child .bg-slate-50 .text-slate-400,
+    .dark #view-benchmark > section > div:first-child .bg-white .text-slate-400,
+    .dark #view-benchmark > section > div:first-child .bg-slate-50 .text-slate-400 {
+      color: #9fb0c8 !important;
     }
 
     #view-materials > section > div:first-child select,
@@ -612,6 +714,10 @@
       letter-spacing: -.01em;
     }
 
+    .dark #scrollArea .view h3 {
+      color: #f8fafc;
+    }
+
     #scrollArea .view table {
       border-collapse: separate;
       border-spacing: 0;
@@ -630,12 +736,51 @@
       background: #f8fbff;
     }
 
+    .dark #scrollArea .view tbody tr:hover td {
+      background: rgba(30, 58, 95, .34);
+    }
+
+    .dark #scrollArea .bg-white,
+    .dark #scrollArea .bg-slate-50,
+    .dark #scrollArea .bg-white\/70 {
+      background-color: var(--app-surface) !important;
+    }
+
+    .dark #scrollArea .text-slate-950,
+    .dark #scrollArea .text-slate-900,
+    .dark #scrollArea .text-slate-800,
+    .dark #scrollArea .text-slate-700 {
+      color: #f8fafc !important;
+    }
+
+    .dark #scrollArea .text-slate-600,
+    .dark #scrollArea .text-slate-500 {
+      color: #c6d3e5 !important;
+    }
+
+    .dark #lineGrid line,
+    .dark #durationGrid line,
+    .dark #barsGrid line,
+    .dark #materialsLineGrid line,
+    .dark #overhaulLineGrid line,
+    .dark #benchmarkLineGrid line {
+      stroke: #26384f !important;
+    }
+
     select,
     input[type="text"],
     input[type="url"],
     input[type="number"] {
       border-color: var(--app-border) !important;
       border-radius: 10px !important;
+    }
+
+    .dark select,
+    .dark input[type="text"],
+    .dark input[type="url"],
+    .dark input[type="number"] {
+      background-color: #0b1627 !important;
+      color: #f8fafc !important;
     }
 
     button {
@@ -720,8 +865,8 @@
   <main class="app-main flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-50 dark:bg-background-dark">
 
     <!-- HEADER -->
-    <header class="app-header sticky top-0 z-20 flex items-center justify-between px-8 py-4 bg-white/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
-      <div class="flex items-center gap-6">
+    <header class="app-header sticky top-0 z-20 flex flex-wrap items-center justify-between gap-4 px-8 py-4 bg-white/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
+      <div class="flex flex-1 min-w-0 items-center gap-6">
         <nav class="flex text-sm text-slate-500 dark:text-slate-400">
           <span class="hover:text-primary cursor-pointer">Analytics</span>
           <span class="mx-2">/</span>
@@ -963,7 +1108,11 @@
         </div>
       </div>
 
-      <div class="flex items-center gap-4">
+      <div class="flex shrink-0 items-center gap-4">
+        <button id="themeToggleBtn" class="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-100 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all border border-slate-200 dark:border-slate-700 shadow-sm" type="button" aria-label="Toggle theme">
+          <span id="themeToggleIcon" class="material-symbols-outlined text-[18px]">dark_mode</span>
+          <span id="themeToggleLabel" class="whitespace-nowrap">Theme</span>
+        </button>
         <button id="exportBtn" class="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary opacity-90 transition-all shadow-sm" type="button" aria-label="Export Report">
           <span class="material-symbols-outlined text-[18px]">download</span>
           <span class="export-label whitespace-nowrap">Export Report</span>
@@ -1390,7 +1539,7 @@
     </div>
   </main>
 
-<script src="index_Vref.js?v=20260614-active-source-refresh-v2"></script>
+<script src="index_Vref.js?v=20260625-dashboard-theme-v2"></script>
 
 </body>
 </html>

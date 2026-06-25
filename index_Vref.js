@@ -136,6 +136,44 @@
   const PROJECT_SERIES_PALETTE = dashboardConfig.PROJECT_SERIES_PALETTE || ['#137fec', '#14b8a6', '#a855f7', '#f59e0b', '#ef4444', '#22c55e', '#06b6d4', '#f97316', '#64748b'];
 
   const dashboardUtils = window.PasserelleDashboardUtils || {};
+  const DASHBOARD_THEME_STORAGE_KEY = "dashboard-theme-preference-v2";
+
+  function getDashboardTheme() {
+    const rootTheme = document.documentElement.dataset.theme;
+    if (rootTheme === "light" || rootTheme === "dark") return rootTheme;
+    return document.documentElement.classList.contains("dark") ? "dark" : "light";
+  }
+
+  function updateDashboardThemeButton(theme) {
+    const icon = $('themeToggleIcon');
+    const label = $('themeToggleLabel');
+    const button = $('themeToggleBtn');
+    const isDark = theme === "dark";
+    if (icon) icon.textContent = isDark ? "light_mode" : "dark_mode";
+    if (label) label.textContent = isDark ? "Light mode" : "Dark mode";
+    if (button) button.setAttribute("aria-label", isDark ? "Switch to light mode" : "Switch to dark mode");
+  }
+
+  function applyDashboardTheme(theme, persist = true) {
+    const normalized = theme === "light" ? "light" : "dark";
+    document.documentElement.classList.toggle("dark", normalized === "dark");
+    document.documentElement.classList.toggle("light", normalized !== "dark");
+    document.documentElement.dataset.theme = normalized;
+    if (persist) {
+      try { localStorage.setItem(DASHBOARD_THEME_STORAGE_KEY, normalized); } catch (error) {}
+    }
+    updateDashboardThemeButton(normalized);
+  }
+
+  function initDashboardThemeToggle() {
+    updateDashboardThemeButton(getDashboardTheme());
+    const button = $('themeToggleBtn');
+    if (!button || button.dataset.bound === "1") return;
+    button.dataset.bound = "1";
+    button.addEventListener("click", () => {
+      applyDashboardTheme(getDashboardTheme() === "dark" ? "light" : "dark");
+    });
+  }
 
   const normalizeKey = dashboardUtils.normalizeKey || function (value) {
     return String(value || "")
@@ -12008,6 +12046,7 @@
     });
   });
 
+  initDashboardThemeToggle();
   ensureSecondaryViewsMounted();
   initMaterialsView();
   initOverhaulView();
