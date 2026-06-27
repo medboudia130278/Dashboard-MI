@@ -9639,7 +9639,7 @@
       }
 
       const MERCURY_INTERFACE_HEADERS = [
-        "Phase", "Period", "Type", "Total Cost",
+        "Phase", "Period", "Type", "Short Description", "Total Cost",
         "Costing Tree", "Description", "Item Code", "Comment", "Attached File", "Planning Guide", "Costs Type", "PBS/IBS", "ABS", "OBS",
         "CARAT Unit", "Associated WP", "Tasks", "Sub-System", "Cost Drivers", "Variant", "GAP", "Instance", "Sort", "Unit Role",
         "Responsibility", "On/Off Shore", "Sub-System Manager", "Delegated person", "Price List Code 1", "Price List Code 2", "Price List Code 3",
@@ -9818,10 +9818,13 @@
         });
       }
 
-      function getMercurySubsystemSheets(project) {
-        const subsystemFiles = buildSubsystemSummaryVirtualFiles(project);
-        const globalFile = subsystemFiles.find(function (file) { return file.key === "global"; }) || subsystemFiles[0] || null;
-        const sheets = globalFile && Array.isArray(globalFile.sheets) ? globalFile.sheets : [];
+      function getMercurySubsystemSheets(project, preparedSheets) {
+        let sheets = Array.isArray(preparedSheets) ? preparedSheets : null;
+        if (!sheets) {
+          const subsystemFiles = buildSubsystemSummaryVirtualFiles(project);
+          const globalFile = subsystemFiles.find(function (file) { return file.key === "global"; }) || subsystemFiles[0] || null;
+          sheets = globalFile && Array.isArray(globalFile.sheets) ? globalFile.sheets : [];
+        }
         return sortMercurySubsystemSheets(sheets.filter(function (sheet) {
           const label = getMercurySubsystemLabelFromSheet(sheet);
           return label && normalizeWbsText(label) !== normalizeWbsText("Infra_Management");
@@ -9877,8 +9880,8 @@
         });
       }
 
-      function buildMercurySubsystemRows(project, phaseFilter) {
-        return getMercurySubsystemSheets(project).flatMap(function (sheet, subsystemIndex) {
+      function buildMercurySubsystemRows(project, phaseFilter, preparedSheets) {
+        return getMercurySubsystemSheets(project, preparedSheets).flatMap(function (sheet, subsystemIndex) {
           const subsystem = getMercurySubsystemLabelFromSheet(sheet);
           const baseTree = "1." + (subsystemIndex + 4);
           const sourceRows = filterMercuryRowsByPhase(sheet.rows || [], phaseFilter);
@@ -10056,6 +10059,10 @@
             outputRow[targetHeader] = findMercurySourceValue(sourceRow, sourceByHeader, ["Long_Description"]);
             return;
           }
+          if (targetHeader === "Short Description") {
+            outputRow[targetHeader] = findMercurySourceValue(sourceRow, sourceByHeader, ["Description"]);
+            return;
+          }
           if (targetHeader === "Insurances, Rates, & Taxes") {
             outputRow[targetHeader] = findMercurySourceValue(sourceRow, sourceByHeader, ["Insurances-Rates & Taxes"]);
             return;
@@ -10095,6 +10102,9 @@
             case "Description":
               outputRow[targetHeader] = sourceRow["RISK ID"] || "";
               break;
+            case "Short Description":
+              outputRow[targetHeader] = sourceRow["RISK ID"] || "";
+              break;
             case "PBS/IBS":
               outputRow[targetHeader] = sourceRow.PBS || "";
               break;
@@ -10111,6 +10121,9 @@
           }
         });
         outputRow.Period = "";
+        if (normalizeMercuryMatchText(outputRow["Price List Code 2"]) === normalizeMercuryMatchText("Tools & Equipment")) {
+          outputRow["Price List Code 2"] = "Tools and Equipment";
+        }
         outputRow["Total Cost"] = calculateMercuryTotalCost(null, outputRow);
         return outputRow;
       }
@@ -10120,11 +10133,15 @@
         return applySubsystemSummaryTextMappings(project, [mappedRow])[0] || mappedRow;
       }
 
-      function getMercuryInfraSourceRows(project, phaseFilter) {
-        const subsystemFiles = buildSubsystemSummaryVirtualFiles(project);
-        const globalFile = subsystemFiles.find(function (file) { return file.key === "global"; }) || subsystemFiles[0] || null;
-        const infraSheet = globalFile && globalFile.sheets
-          ? globalFile.sheets.find(function (sheet) { return sheet.key === "Infra_Management" || sheet.sheetName === "Infra_Management_Synthesis"; })
+      function getMercuryInfraSourceRows(project, phaseFilter, preparedSheets) {
+        let sheets = Array.isArray(preparedSheets) ? preparedSheets : null;
+        if (!sheets) {
+          const subsystemFiles = buildSubsystemSummaryVirtualFiles(project);
+          const globalFile = subsystemFiles.find(function (file) { return file.key === "global"; }) || subsystemFiles[0] || null;
+          sheets = globalFile && Array.isArray(globalFile.sheets) ? globalFile.sheets : [];
+        }
+        const infraSheet = sheets
+          ? sheets.find(function (sheet) { return sheet.key === "Infra_Management" || sheet.sheetName === "Infra_Management_Synthesis"; })
           : null;
         const rows = infraSheet && Array.isArray(infraSheet.rows) ? infraSheet.rows : [];
         if (!phaseFilter) return rows;
@@ -10135,8 +10152,8 @@
         });
       }
 
-      function buildMercuryInfraRows(project, phaseFilter) {
-        const sourceRows = getMercuryInfraSourceRows(project, phaseFilter);
+      function buildMercuryInfraRows(project, phaseFilter, preparedSheets) {
+        const sourceRows = getMercuryInfraSourceRows(project, phaseFilter, preparedSheets);
         const riskRows = getMercuryRiskRegisterRows(project, phaseFilter);
         const rulesByParent = MERCURY_INFRA_CHILD_RULES.reduce(function (acc, rule) {
           if (!acc[rule.parentTree]) acc[rule.parentTree] = [];
@@ -10162,7 +10179,7 @@
             });
           }
         });
-        buildMercurySubsystemRows(project, phaseFilter).forEach(function (row) {
+        buildMercurySubsystemRows(project, phaseFilter, preparedSheets).forEach(function (row) {
           outputRows.push(row);
         });
         return outputRows;
@@ -10203,6 +10220,98 @@
         });
         return files;
       }
+
+      async function publishMercuryDataForDashboard() {
+        if (publishMercuryDataForDashboard.inFlight) {
+          publishMercuryDataForDashboard.rerunRequested = true;
+          return null;
+        }
+        publishMercuryDataForDashboard.inFlight = true;
+        try {
+          const bridgeModule = await import("./shared/mercury_dashboard_bridge.js");
+          const mercuryProjects = buildMercuryInterfaceProjects();
+          const currencyProjects = buildFallbackCurrencyExchangeProjects();
+          const currencyByLookup = buildProjectLookupMap(currencyProjects);
+          const sharedWorkbooks = getSharedWorkbooksForWorkspace();
+          const rows = [];
+          const projects = mercuryProjects.map(function (project) {
+            const lookupKeys = getProjectLookupKeys(project);
+            const currencyProject = findProjectByLookupKeys(currencyByLookup, lookupKeys) || null;
+            const sourceWorkbook = sharedWorkbooks.find(function (workbook) {
+              const gp = workbook && (workbook.generalParams || (workbook.sheets && workbook.sheets.generalParameters)) || {};
+              return normalizeWorkspaceKey(gp.project_name || workbook.projectKey || "") === normalizeWorkspaceKey(project.projectName);
+            }) || null;
+            const gp = sourceWorkbook && (sourceWorkbook.generalParams || (sourceWorkbook.sheets && sourceWorkbook.sheets.generalParameters)) || {};
+            const priceListConfig = getSubsystemSummaryPriceListsConfig(project);
+            const subsystemFiles = buildSubsystemSummaryVirtualFiles(project);
+            const globalSubsystemFile = subsystemFiles.find(function (file) { return file.key === "global"; }) || subsystemFiles[0] || null;
+            const preparedSheets = globalSubsystemFile && Array.isArray(globalSubsystemFile.sheets) ? globalSubsystemFile.sheets : [];
+
+            (Array.isArray(project.phases) ? project.phases : [])
+              .forEach(function (phase) {
+                const phaseLabel = phase.label || phase.key || "";
+                buildMercuryInfraRows(project, phase, preparedSheets).forEach(function (row) {
+                  if (!String(row && row.Type || "").trim()) return;
+                  const publishedRow = Object.assign({}, row);
+                  if (normalizeMercuryMatchText(publishedRow["Price List Code 2"]) === normalizeMercuryMatchText("Tools & Equipment")) {
+                    publishedRow["Price List Code 2"] = "Tools and Equipment";
+                  }
+                  publishedRow._project = project.projectName || "";
+                  publishedRow._projectKey = project.projectKey || "";
+                  publishedRow._projectType = project.projectType || "";
+                  publishedRow._phaseFileLabel = phaseLabel;
+                  rows.push(publishedRow);
+                });
+              });
+
+            return {
+              projectKey: project.projectKey || "",
+              projectName: project.projectName || "",
+              projectType: project.projectType || "",
+              projectContext: project.projectContext || "",
+              lineLength: gp.line_length || gp.line_length_km || gp.route_length || "",
+              bidYear: gp.bid_year || "",
+              serviceYear: gp.service_year || "",
+              contractDuration: gp.contract_duration_years || "",
+              textMappings: (priceListConfig.textMappings || []).slice(0, 9),
+              conversion: currencyProject ? {
+                configuredTargetCurrency: currencyProject.targetCurrency || "",
+                baseCurrency: currencyProject.baseCurrency || "",
+                provider: currencyProject.provider || "",
+                lastUpdated: currencyProject.lastUpdated || "",
+                targetCurrencyOptions: (currencyProject.targetCurrencyOptions || []).slice(),
+                rows: (currencyProject.rows || []).map(function (entry) {
+                  return {
+                    currency: entry.currency || "",
+                    effectiveRate: entry.effectiveRate,
+                    source: entry.source || "",
+                  };
+                }),
+              } : null,
+            };
+          });
+
+          return await bridgeModule.publishMercuryBridge({
+            studyId: getFallbackStudyId(),
+            studyName: document.querySelector("#studySelector option:checked")?.textContent?.trim() || "Cost Summary & MI",
+            rows: rows,
+            projects: projects,
+          });
+        } catch (error) {
+          console.warn("Unable to publish Mercury data for the Dashboard.", error);
+          return null;
+        } finally {
+          publishMercuryDataForDashboard.inFlight = false;
+          if (publishMercuryDataForDashboard.rerunRequested) {
+            publishMercuryDataForDashboard.rerunRequested = false;
+            setTimeout(function () {
+              void publishMercuryDataForDashboard();
+            }, 0);
+          }
+        }
+      }
+
+      window.publishMercuryDataForDashboard = publishMercuryDataForDashboard;
 
       function renderMercuryInterfacePreview(project, file) {
         const previewTitle = $("mercuryInterfacePreviewTitle");
@@ -10425,6 +10534,7 @@
           '</details>';
 
         renderMercuryInterfacePreview(currentProject, currentFile);
+        void publishMercuryDataForDashboard();
       }
 
       function renderSubsystemSummaryWorkspace() {
@@ -10576,6 +10686,7 @@
           '</details>';
 
         renderSubsystemSummaryPreview(currentProject, currentFile);
+        void publishMercuryDataForDashboard();
       }
 
       function buildToolsConsumablesProjects() {

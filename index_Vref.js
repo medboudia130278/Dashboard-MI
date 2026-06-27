@@ -52,6 +52,15 @@
     currentBenchmarkCostTrackDriver: "turnout",
     currentBenchmarkGlobalCostActivityType: "__ALL__",
     currentBenchmarkGlobalCostTrackDriver: "km_single_track",
+    totalCostTargetCurrency: "USD",
+    totalCostLevels: ["Phase"],
+    totalCostDescFilter: [],
+    totalCostPhaseFilter: [],
+    tcExplorerLevels: ["Phase", "Type", "Price List Code 3"],
+    tcExplorerSelections: {},
+    totalCostBridge: null,
+    totalCostBridgeLoading: false,
+    totalCostDescSearch: "",
     manualContractDurationByProject: {},
     exchangeRates: {},
     exchangeLastUpdated: "",
@@ -2626,6 +2635,12 @@
         .concat(scopedRows(state.overhaulRows).map((r) => (overhaulSubCol ? r[overhaulSubCol] : r.subsystem)))
         .concat(scopedRows(state.subcontractingRows).map((r) => (subcontractSubCol ? r[subcontractSubCol] : r.subsystem)))
     );
+    if (
+      typeof getTotalCostMercuryRows === "function"
+      && getTotalCostMercuryRows().some((row) => normalizeKey(row?.["Price List Code 3"]) === "infra_management")
+    ) {
+      state.subsystems = uniqueSorted(state.subsystems.concat(["Infra_Management"]));
+    }
 
     const validSelectedSubsystems = getSelectedSubsystems().filter((value) => state.subsystems.includes(value));
     state.currentSubsystem = shouldFilterBySubsystem()
@@ -3401,6 +3416,7 @@
     if (activeView === 'overhaul') { renderOverhaulDashboard(); return; }
     if (activeView === 'subcontracting') { renderSubcontractingDashboard(); return; }
     if (activeView === 'benchmark') { renderBenchmarkDashboard(); return; }
+    if (activeView === 'totalcost') { renderTotalCostDashboard(); return; }
 
     const rows = getFilteredPlanningRows();
     const durationAndBarsRows = getFilteredDurationAndBarsRows();
@@ -11979,6 +11995,7 @@
         </div>
       `
     );
+    ensureView('view-totalcost');
   }
 
   function setActiveView(viewKey) {
@@ -12035,6 +12052,9 @@
     } else if (viewKey === 'benchmark') {
       initBenchmarkView();
       renderBenchmarkDashboard();
+    } else if (viewKey === 'totalcost') {
+      initTotalCostView();
+      deferVisibleRender(renderTotalCostDashboard);
     }
   }
 
@@ -12052,6 +12072,7 @@
   initOverhaulView();
   initSubcontractingView();
   initBenchmarkView();
+  initTotalCostBridge();
   // Default view
   setActiveView('workload');
   // Initial render (placeholders)

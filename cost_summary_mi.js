@@ -6126,12 +6126,18 @@ function renderSharedCoverageTable() {
     .join("");
 }
 
+async function publishMercuryDataForDashboard() {
+  if (typeof window.publishMercuryDataForDashboard !== "function") return null;
+  return window.publishMercuryDataForDashboard();
+}
+
 async function refreshSharedSnapshot() {
   await hydrateSharedState();
   publishProjectPhasesBridge();
   publishCostCentersBridge();
   publishGuidePlanningBridge();
   publishPioDefinitionBridge();
+  void publishMercuryDataForDashboard();
   renderStudyWorkspace();
   renderSharedStoreSummary();
   renderProjectDataPreview();
@@ -6153,6 +6159,7 @@ async function switchToStudy(studyId) {
   publishCostCentersBridge();
   publishGuidePlanningBridge();
   publishPioDefinitionBridge();
+  void publishMercuryDataForDashboard();
   applyDraftToForm(state.draft);
   renderStudyWorkspace();
   updateToolbarStatusDots();
@@ -6172,6 +6179,7 @@ async function initCostSummaryMIPage() {
     publishCostCentersBridge();
     publishGuidePlanningBridge();
     publishPioDefinitionBridge();
+    void publishMercuryDataForDashboard();
     updateToolbarStatusDots();
     renderCalculationBlocks();
     renderWorkbookOutline();
