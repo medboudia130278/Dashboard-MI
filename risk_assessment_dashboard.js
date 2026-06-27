@@ -8,6 +8,23 @@ const RISK_ASSESSMENT_FINANCIAL_FIELDS = {
   after: "Total Value After Mitigation (kEUR)",
   provision: "Total Provision Approved (kEUR)",
 };
+const RISK_ASSESSMENT_DEFAULT_COLUMN_KEYS = [
+  "phase",
+  "riskId",
+  "riskDescription",
+  "owner",
+  "category",
+  "riskProfile",
+  "before",
+  "actionDescription",
+  "effect",
+  "mitigationCost",
+  "after",
+  "provisionPct",
+  "provision",
+  "localCurrency",
+  "comments",
+];
 
 function normalizeRaText(value) {
   return String(value ?? "")
@@ -43,6 +60,9 @@ function loadRiskAssessmentUiState() {
   if (saved.explorerSelections && typeof saved.explorerSelections === "object") {
     state.riskAssessmentExplorerSelections = saved.explorerSelections;
   }
+  if (Array.isArray(saved.visibleColumns) && saved.visibleColumns.length) {
+    state.riskAssessmentVisibleColumns = saved.visibleColumns.slice();
+  }
 }
 
 function saveRiskAssessmentUiState() {
@@ -51,6 +71,7 @@ function saveRiskAssessmentUiState() {
     phaseFilter: state.riskAssessmentPhaseFilter,
     explorerLevels: state.riskAssessmentExplorerLevels,
     explorerSelections: state.riskAssessmentExplorerSelections,
+    visibleColumns: state.riskAssessmentVisibleColumns,
   });
 }
 
@@ -296,40 +317,90 @@ function renderRaKpis(convertedRows) {
   `;
 }
 
+function getRaTableColumns() {
+  return [
+    { key: "phase", label: "Phase", field: "Phase" },
+    { key: "riskId", label: "RISK ID", field: "RISK ID" },
+    { key: "riskDescription", label: "Risk Description", field: "Risk Description", wide: true },
+    { key: "owner", label: "Owner / Sub System", field: "Owner / Sub System" },
+    { key: "category", label: "Category", field: "Category" },
+    { key: "riskProfile", label: "Risk Profile", field: "Risk Profile" },
+    { key: "before", label: `Value Before Mitigation (k${state.riskAssessmentTargetCurrency})`, converted: "before" },
+    { key: "actionDescription", label: "Action Description", field: "Action Description", wide: true },
+    { key: "effect", label: `Effect of Mitigation (k${state.riskAssessmentTargetCurrency})`, converted: "effect" },
+    { key: "mitigationCost", label: `Cost of Mitigation (k${state.riskAssessmentTargetCurrency})`, converted: "mitigationCost" },
+    { key: "after", label: `Value After Mitigation (k${state.riskAssessmentTargetCurrency})`, converted: "after" },
+    { key: "provisionPct", label: "Provision %", field: "Provision %" },
+    { key: "provision", label: `Provision Approved (k${state.riskAssessmentTargetCurrency})`, converted: "provision" },
+    { key: "localCurrency", label: "Local Currency", field: "Local Currency" },
+    { key: "comments", label: "Comments", field: "Comments", wide: true },
+  ];
+}
+
+function getRaVisibleColumnKeys() {
+  const validKeys = new Set(RISK_ASSESSMENT_DEFAULT_COLUMN_KEYS);
+  const configured = Array.isArray(state.riskAssessmentVisibleColumns)
+    ? state.riskAssessmentVisibleColumns.filter((key) => validKeys.has(key))
+    : [];
+  if (!configured.length) {
+    state.riskAssessmentVisibleColumns = RISK_ASSESSMENT_DEFAULT_COLUMN_KEYS.slice();
+  } else if (configured.length !== state.riskAssessmentVisibleColumns.length) {
+    state.riskAssessmentVisibleColumns = configured;
+  }
+  return state.riskAssessmentVisibleColumns;
+}
+
+function getRaRiskProfileKey(value) {
+  const profile = normalizeRaText(value);
+  if (profile === "acceptable") return "acceptable";
+  if (profile === "moderate") return "moderate";
+  if (profile === "undesirable") return "undesirable";
+  if (profile === "intolerable") return "intolerable";
+  return "neutral";
+}
+
+function renderRaColumnSelector() {
+  const list = document.getElementById("raColumnsList");
+  const summary = document.getElementById("raColumnsSummary");
+  if (!list || !summary) return;
+  const columns = getRaTableColumns();
+  const visibleKeys = getRaVisibleColumnKeys();
+  summary.textContent = `${visibleKeys.length}/${columns.length} columns`;
+  list.innerHTML = columns.map((column) => `
+    <label class="flex items-center gap-3 px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer">
+      <input type="checkbox" data-ra-column-key="${escapeHtml(column.key)}"${visibleKeys.includes(column.key) ? " checked" : ""}>
+      <span class="text-sm">${escapeHtml(column.label)}</span>
+    </label>
+  `).join("");
+}
+
 function renderRaTable(convertedRows) {
   const table = document.getElementById("raRegisterTable");
   const subtitle = document.getElementById("raTableSubtitle");
   if (!table || !subtitle) return;
   subtitle.textContent = `${convertedRows.length} risk row(s) - financial values in k${state.riskAssessmentTargetCurrency}`;
-  const columns = [
-    { label: "Phase", field: "Phase" },
-    { label: "RISK ID", field: "RISK ID" },
-    { label: "Risk Description", field: "Risk Description", wide: true },
-    { label: "Owner / Sub System", field: "Owner / Sub System" },
-    { label: "Category", field: "Category" },
-    { label: "Risk Profile", field: "Risk Profile" },
-    { label: `Value Before Mitigation (k${state.riskAssessmentTargetCurrency})`, converted: "before" },
-    { label: "Action Description", field: "Action Description", wide: true },
-    { label: `Effect of Mitigation (k${state.riskAssessmentTargetCurrency})`, converted: "effect" },
-    { label: `Cost of Mitigation (k${state.riskAssessmentTargetCurrency})`, converted: "mitigationCost" },
-    { label: `Value After Mitigation (k${state.riskAssessmentTargetCurrency})`, converted: "after" },
-    { label: "Provision %", field: "Provision %" },
-    { label: `Provision Approved (k${state.riskAssessmentTargetCurrency})`, converted: "provision" },
-    { label: "Local Currency", field: "Local Currency" },
-    { label: "Comments", field: "Comments", wide: true },
-  ];
+  const visibleKeys = getRaVisibleColumnKeys();
+  const columns = getRaTableColumns().filter((column) => visibleKeys.includes(column.key));
+  table.style.minWidth = `${Math.max(720, columns.reduce((sum, column) => sum + (column.wide ? 300 : 140), 0))}px`;
   table.innerHTML = `
     <thead><tr>${columns.map((column) => `<th class="px-3 py-3 text-left ${column.wide ? "min-w-[300px]" : "min-w-[130px]"}">${escapeHtml(column.label)}</th>`).join("")}</tr></thead>
-    <tbody>${convertedRows.length ? convertedRows.map((row) => `
-      <tr class="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+    <tbody>${convertedRows.length ? convertedRows.map((row) => {
+      const profileValue = String(raFieldValue(row, "Risk Profile") ?? "");
+      const profileKey = getRaRiskProfileKey(profileValue);
+      return `
+      <tr class="ra-risk-row ra-risk-${profileKey} border-t border-slate-100 dark:border-slate-800" data-risk-profile="${escapeHtml(profileKey)}">
         ${columns.map((column) => {
           const value = column.converted
             ? (row._conversionMissing && row._convertedFinancials[column.converted] === null ? "N/A" : formatRiskKAmount(row._convertedFinancials[column.converted]))
             : String(raFieldValue(row, column.field) ?? "");
-          return `<td class="px-3 py-3 align-top ${column.converted ? "text-right tabular-nums font-semibold" : ""}" title="${escapeHtml(value)}">${escapeHtml(value)}</td>`;
+          const content = column.key === "riskProfile"
+            ? `<span class="ra-profile-badge ra-profile-${profileKey}">${escapeHtml(value || "Unspecified")}</span>`
+            : escapeHtml(value);
+          return `<td class="px-3 py-3 align-top ${column.converted ? "text-right tabular-nums font-semibold" : ""}" title="${escapeHtml(value)}">${content}</td>`;
         }).join("")}
       </tr>
-    `).join("") : `<tr><td colspan="${columns.length}" class="px-4 py-10 text-center text-sm text-slate-500">No Risk Assessment row matches the selected filters.</td></tr>`}</tbody>
+    `;
+    }).join("") : `<tr><td colspan="${columns.length}" class="px-4 py-10 text-center text-sm text-slate-500">No Risk Assessment row matches the selected filters.</td></tr>`}</tbody>
   `;
 }
 
@@ -518,6 +589,7 @@ function renderRiskAssessmentDashboard() {
   const filteredRows = getFilteredRiskAssessmentRows();
   const converted = getConvertedRiskAssessmentRows(filteredRows);
   renderRaKpis(converted.rows);
+  renderRaColumnSelector();
   renderRaTable(converted.rows);
   renderRaExplorer(converted.rows.filter((row) => !row._conversionMissing && (row._convertedFinancials.provision || 0) > 0));
 
@@ -589,9 +661,35 @@ function initRiskAssessmentView() {
         </section>
 
         <section class="tc-panel min-w-0">
-          <h3 class="text-lg font-bold">Risk Assessment Register</h3>
-          <p id="raTableSubtitle" class="mt-1 text-xs text-slate-500"></p>
-          <div class="ra-table-scroll mt-4"><table id="raRegisterTable" class="min-w-[2600px] text-xs"></table></div>
+          <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h3 class="text-lg font-bold">Risk Assessment Register</h3>
+              <p id="raTableSubtitle" class="mt-1 text-xs text-slate-500"></p>
+              <div class="ra-profile-legend mt-3" aria-label="Risk Profile color legend">
+                <span><i class="ra-legend-dot ra-legend-acceptable"></i>Acceptable</span>
+                <span><i class="ra-legend-dot ra-legend-moderate"></i>Moderate</span>
+                <span><i class="ra-legend-dot ra-legend-undesirable"></i>Undesirable</span>
+                <span><i class="ra-legend-dot ra-legend-intolerable"></i>Intolerable</span>
+              </div>
+            </div>
+            <div class="tc-filter-control">
+              <button id="raColumnsButton" type="button" class="tc-filter-button min-w-[210px]">
+                <span class="flex items-center gap-2"><span class="material-symbols-outlined text-[18px]">view_column</span><span id="raColumnsSummary">15/15 columns</span></span>
+                <span class="material-symbols-outlined text-[18px]">expand_more</span>
+              </button>
+              <div id="raColumnsPopover" class="tc-popover right-0 left-auto hidden">
+                <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 px-4 py-3">
+                  <strong class="text-sm">Displayed columns</strong>
+                  <div class="flex gap-3">
+                    <button type="button" data-ra-columns-action="all" class="text-xs font-bold text-blue-600">Show all</button>
+                    <button type="button" data-ra-columns-action="reset" class="text-xs font-bold text-rose-600">Reset</button>
+                  </div>
+                </div>
+                <div id="raColumnsList" class="max-h-80 overflow-y-auto"></div>
+              </div>
+            </div>
+          </div>
+          <div class="ra-table-scroll mt-4"><table id="raRegisterTable" class="w-full text-xs"></table></div>
         </section>
 
         <section class="tc-panel min-w-0">
@@ -613,12 +711,24 @@ function initRiskAssessmentView() {
   view.addEventListener("click", (event) => {
     if (event.target.closest("#raPhaseButton")) {
       document.getElementById("raPhasePopover")?.classList.toggle("hidden");
+      document.getElementById("raColumnsPopover")?.classList.add("hidden");
+      return;
+    }
+    if (event.target.closest("#raColumnsButton")) {
+      document.getElementById("raColumnsPopover")?.classList.toggle("hidden");
+      document.getElementById("raPhasePopover")?.classList.add("hidden");
       return;
     }
     const phaseAction = event.target.closest("[data-ra-phase-action]")?.getAttribute("data-ra-phase-action");
     if (phaseAction) {
       state.riskAssessmentPhaseFilter = phaseAction === "all" ? null : [];
       state.riskAssessmentExplorerSelections = {};
+      renderRiskAssessmentDashboard();
+      return;
+    }
+    const columnsAction = event.target.closest("[data-ra-columns-action]")?.getAttribute("data-ra-columns-action");
+    if (columnsAction) {
+      state.riskAssessmentVisibleColumns = RISK_ASSESSMENT_DEFAULT_COLUMN_KEYS.slice();
       renderRiskAssessmentDashboard();
       return;
     }
@@ -663,6 +773,22 @@ function initRiskAssessmentView() {
       state.riskAssessmentPhaseFilter = selected.length === allPhases.length ? null : selected;
       state.riskAssessmentExplorerSelections = {};
       renderRiskAssessmentDashboard();
+      return;
+    }
+    if (event.target.matches("[data-ra-column-key]")) {
+      const selected = Array.from(view.querySelectorAll("[data-ra-column-key]:checked"))
+        .map((input) => input.getAttribute("data-ra-column-key"))
+        .filter(Boolean);
+      if (!selected.length) {
+        event.target.checked = true;
+        return;
+      }
+      state.riskAssessmentVisibleColumns = RISK_ASSESSMENT_DEFAULT_COLUMN_KEYS.filter((key) => selected.includes(key));
+      const filteredRows = getFilteredRiskAssessmentRows();
+      renderRaTable(getConvertedRiskAssessmentRows(filteredRows).rows);
+      const summary = document.getElementById("raColumnsSummary");
+      if (summary) summary.textContent = `${state.riskAssessmentVisibleColumns.length}/${RISK_ASSESSMENT_DEFAULT_COLUMN_KEYS.length} columns`;
+      saveRiskAssessmentUiState();
       return;
     }
     if (event.target.matches("[data-ra-level-select]")) {

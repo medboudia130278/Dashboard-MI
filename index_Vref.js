@@ -65,6 +65,7 @@
     riskAssessmentPhaseFilter: null,
     riskAssessmentExplorerLevels: ["Phase", "Owner / Sub System", "Category"],
     riskAssessmentExplorerSelections: {},
+    riskAssessmentVisibleColumns: [],
     riskAssessmentBridge: null,
     riskAssessmentBridgeLoading: false,
     manualContractDurationByProject: {},

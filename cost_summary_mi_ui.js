@@ -7948,6 +7948,13 @@
         return "";
       }
 
+      function getSubsystemSummaryMaterialPriceListCode2(description) {
+        const normalized = normalizeSubsystemSummaryMaterialDescription(description);
+        return normalized === "Tools" || normalized === "PPE" || normalized === "Vehicles"
+          ? "Tools and Equipment"
+          : "Spares and Material";
+      }
+
       function normalizeSubsystemSummarySubcontractingDescription(value) {
         const normalized = normalizeWbsText(value);
         if (normalized === "preventive subcontract" || normalized === "preventive subcontracts") return "Preventive_Subcontract";
@@ -8847,7 +8854,7 @@
                 "Freight per Unit": freightValue,
                 "Insurances-Rates & Taxes": dutyValue,
                 "Price List Code 1": guideRow.periodLabel,
-                "Price List Code 2": "Spares and Material",
+                "Price List Code 2": getSubsystemSummaryMaterialPriceListCode2(description),
                 "Price List Code 3": sheet.label,
               };
               const uniqueKey = SUBSYSTEM_SUMMARY_HEADERS.map(function (header) {
@@ -8904,7 +8911,7 @@
               "Freight per Unit": freightValue,
               "Insurances-Rates & Taxes": "",
               "Price List Code 1": guideRow.periodLabel,
-              "Price List Code 2": "Spares and Material",
+              "Price List Code 2": getSubsystemSummaryMaterialPriceListCode2(description),
               "Price List Code 3": "Infra_Management",
             };
             const uniqueKey = SUBSYSTEM_SUMMARY_HEADERS.map(function (header) {

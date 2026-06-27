@@ -1075,6 +1075,84 @@
       text-transform: uppercase;
     }
 
+    .ra-profile-legend {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: .65rem 1rem;
+      color: #64748b;
+      font-size: 11px;
+    }
+
+    .ra-profile-legend > span {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+    }
+
+    .ra-legend-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+    }
+
+    .ra-legend-acceptable { background: #22c55e; }
+    .ra-legend-moderate { background: #fbbf24; }
+    .ra-legend-undesirable { background: #fb923c; }
+    .ra-legend-intolerable { background: #ef4444; }
+
+    .ra-risk-row {
+      transition: background-color .15s ease;
+    }
+
+    .ra-risk-row td:first-child {
+      box-shadow: inset 4px 0 0 var(--ra-profile-color, transparent);
+    }
+
+    .ra-risk-acceptable {
+      --ra-profile-color: #22c55e;
+      background: rgba(34, 197, 94, .08);
+    }
+
+    .ra-risk-moderate {
+      --ra-profile-color: #fbbf24;
+      background: rgba(251, 191, 36, .10);
+    }
+
+    .ra-risk-undesirable {
+      --ra-profile-color: #fb923c;
+      background: rgba(251, 146, 60, .10);
+    }
+
+    .ra-risk-intolerable {
+      --ra-profile-color: #ef4444;
+      background: rgba(239, 68, 68, .10);
+    }
+
+    .ra-risk-acceptable:hover { background: rgba(34, 197, 94, .14); }
+    .ra-risk-moderate:hover { background: rgba(251, 191, 36, .17); }
+    .ra-risk-undesirable:hover { background: rgba(251, 146, 60, .17); }
+    .ra-risk-intolerable:hover { background: rgba(239, 68, 68, .17); }
+
+    .ra-profile-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      padding: .2rem .6rem;
+      font-size: 11px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .ra-profile-acceptable { border-color: #86efac; background: #dcfce7; color: #166534; }
+    .ra-profile-moderate { border-color: #fde68a; background: #fef9c3; color: #854d0e; }
+    .ra-profile-undesirable { border-color: #fdba74; background: #ffedd5; color: #9a3412; }
+    .ra-profile-intolerable { border-color: #fca5a5; background: #fee2e2; color: #991b1b; }
+    .ra-profile-neutral { border-color: #cbd5e1; background: #f1f5f9; color: #475569; }
+
     .dark .tc-page {
       color: #f8fafc;
     }
@@ -1108,6 +1186,25 @@
     .dark .ra-table-scroll thead {
       background: #142239;
     }
+
+    .dark .ra-profile-legend {
+      color: #a8b6ca;
+    }
+
+    .dark .ra-risk-acceptable { background: rgba(34, 197, 94, .13); }
+    .dark .ra-risk-moderate { background: rgba(251, 191, 36, .14); }
+    .dark .ra-risk-undesirable { background: rgba(251, 146, 60, .15); }
+    .dark .ra-risk-intolerable { background: rgba(239, 68, 68, .15); }
+    .dark .ra-risk-acceptable:hover { background: rgba(34, 197, 94, .20); }
+    .dark .ra-risk-moderate:hover { background: rgba(251, 191, 36, .21); }
+    .dark .ra-risk-undesirable:hover { background: rgba(251, 146, 60, .22); }
+    .dark .ra-risk-intolerable:hover { background: rgba(239, 68, 68, .22); }
+
+    .dark .ra-profile-acceptable { border-color: #15803d; background: rgba(34, 197, 94, .18); color: #bbf7d0; }
+    .dark .ra-profile-moderate { border-color: #a16207; background: rgba(251, 191, 36, .18); color: #fef08a; }
+    .dark .ra-profile-undesirable { border-color: #c2410c; background: rgba(251, 146, 60, .18); color: #fed7aa; }
+    .dark .ra-profile-intolerable { border-color: #b91c1c; background: rgba(239, 68, 68, .18); color: #fecaca; }
+    .dark .ra-profile-neutral { border-color: #475569; background: #1e293b; color: #cbd5e1; }
 
     @media (max-width: 1280px) {
       .tc-hero-grid {
@@ -1909,9 +2006,9 @@
     </div>
   </main>
 
-<script src="risk_assessment_dashboard.js?v=20260627-risk-assessment-v1"></script>
+<script src="risk_assessment_dashboard.js?v=20260627-risk-profile-columns-v1"></script>
 <script src="total_cost_dashboard.js?v=20260627-risk-assessment-v1"></script>
-<script src="index_Vref.js?v=20260627-risk-assessment-v1"></script>
+<script src="index_Vref.js?v=20260627-risk-profile-columns-v1"></script>
 
 </body>
 </html>

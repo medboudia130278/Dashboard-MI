@@ -2774,7 +2774,7 @@
             </li>
             <li class="flex gap-3">
               <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-bold">3</span>
-              <div>For subsystem sheets, <strong>Tools</strong>, <strong>Consumables</strong>, <strong>PPE</strong> and <strong>Vehicles</strong> use their dedicated support-cost workspaces. Stored values are treated as EUR values and converted to the Project Currency through Currency &amp; Exchange Rates.</div>
+              <div>For subsystem sheets, <strong>Tools</strong>, <strong>Consumables</strong>, <strong>PPE</strong> and <strong>Vehicles</strong> use their dedicated support-cost workspaces. Stored values are treated as EUR values and converted to the Project Currency through Currency &amp; Exchange Rates. Price List Code 2 is <strong>Tools and Equipment</strong> for Tools, PPE and Vehicles; other Materials descriptions use <strong>Spares and Material</strong>.</div>
             </li>
             <li class="flex gap-3">
               <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-bold">4</span>
@@ -2819,7 +2819,7 @@
                 <tr class="bg-emerald-50/40">
                   <td class="px-3 py-2 font-semibold">Tools</td>
                   <td class="px-3 py-2">Individual tools + Collective tools + Special tools from Shared / Depot Pool and MANAGEMENT.</td>
-                  <td class="px-3 py-2">Currency = Project Currency, Type = Materials, Unit empty, Price List Code 3 = Infra_Management.</td>
+                  <td class="px-3 py-2">Currency = Project Currency, Type = Materials, Unit empty, Price List Code 2 = Tools and Equipment, Price List Code 3 = Infra_Management.</td>
                 </tr>
                 <tr>
                   <td class="px-3 py-2 font-semibold">Consumables</td>
@@ -2829,12 +2829,12 @@
                 <tr class="bg-emerald-50/40">
                   <td class="px-3 py-2 font-semibold">PPE</td>
                   <td class="px-3 py-2">PPE column from Shared / Depot Pool and MANAGEMENT.</td>
-                  <td class="px-3 py-2">Long_Description = Infra_Management_{Description}_{Period}.</td>
+                  <td class="px-3 py-2">Long_Description = Infra_Management_{Description}_{Period}, Price List Code 2 = Tools and Equipment.</td>
                 </tr>
                 <tr>
                   <td class="px-3 py-2 font-semibold">Vehicles</td>
                   <td class="px-3 py-2">MOB uses Capex, REC uses Fuel + Operating, DEM uses Capex from Project / Management.</td>
-                  <td class="px-3 py-2">Delegated person = INFRA, Price List Code 2 = Spares and Material.</td>
+                  <td class="px-3 py-2">Delegated person = INFRA, Price List Code 2 = Tools and Equipment.</td>
                 </tr>
               </tbody>
             </table>
@@ -3899,7 +3899,7 @@
     </div>
   </aside>
 
-  <script src="cost_summary_mi_ui.js?v=20260627-risk-assessment-analytics-v1"></script>
-  <script type="module" src="cost_summary_mi.js?v=20260627-risk-assessment-analytics-v1"></script>
+  <script src="cost_summary_mi_ui.js?v=20260628-subsystem-tools-plc2-v1"></script>
+  <script type="module" src="cost_summary_mi.js?v=20260628-subsystem-tools-plc2-v1"></script>
 </body>
 </html>
