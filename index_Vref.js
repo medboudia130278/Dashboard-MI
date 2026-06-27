@@ -61,6 +61,12 @@
     totalCostBridge: null,
     totalCostBridgeLoading: false,
     totalCostDescSearch: "",
+    riskAssessmentTargetCurrency: "USD",
+    riskAssessmentPhaseFilter: null,
+    riskAssessmentExplorerLevels: ["Phase", "Owner / Sub System", "Category"],
+    riskAssessmentExplorerSelections: {},
+    riskAssessmentBridge: null,
+    riskAssessmentBridgeLoading: false,
     manualContractDurationByProject: {},
     exchangeRates: {},
     exchangeLastUpdated: "",
@@ -1229,6 +1235,14 @@
       const t = String(gp.project_type ?? "").trim();
       if (n) names.add(n);
       if (t) types.add(t);
+    }
+    if (typeof getRiskAssessmentProjects === "function") {
+      getRiskAssessmentProjects().forEach((project) => {
+        const name = String(project?.projectName || "").trim();
+        const type = String(project?.projectType || "").trim();
+        if (name) names.add(name);
+        if (type) types.add(type);
+      });
     }
 
     const nameList = Array.from(names).sort((a,b)=>a.localeCompare(b));
@@ -2634,6 +2648,11 @@
         .concat(scopedRows(state.correctiveRows).map((r) => (correctiveSubCol ? r[correctiveSubCol] : null)))
         .concat(scopedRows(state.overhaulRows).map((r) => (overhaulSubCol ? r[overhaulSubCol] : r.subsystem)))
         .concat(scopedRows(state.subcontractingRows).map((r) => (subcontractSubCol ? r[subcontractSubCol] : r.subsystem)))
+        .concat(
+          typeof getRiskAssessmentRows === "function"
+            ? getRiskAssessmentRows().map((row) => raFieldValue(row, "Owner / Sub System"))
+            : []
+        )
     );
     if (
       typeof getTotalCostMercuryRows === "function"
@@ -3416,6 +3435,7 @@
     if (activeView === 'overhaul') { renderOverhaulDashboard(); return; }
     if (activeView === 'subcontracting') { renderSubcontractingDashboard(); return; }
     if (activeView === 'benchmark') { renderBenchmarkDashboard(); return; }
+    if (activeView === 'riskassessment') { renderRiskAssessmentDashboard(); return; }
     if (activeView === 'totalcost') { renderTotalCostDashboard(); return; }
 
     const rows = getFilteredPlanningRows();
@@ -11995,6 +12015,7 @@
         </div>
       `
     );
+    ensureView('view-riskassessment');
     ensureView('view-totalcost');
   }
 
@@ -12052,6 +12073,9 @@
     } else if (viewKey === 'benchmark') {
       initBenchmarkView();
       renderBenchmarkDashboard();
+    } else if (viewKey === 'riskassessment') {
+      initRiskAssessmentView();
+      deferVisibleRender(renderRiskAssessmentDashboard);
     } else if (viewKey === 'totalcost') {
       initTotalCostView();
       deferVisibleRender(renderTotalCostDashboard);
@@ -12072,6 +12096,7 @@
   initOverhaulView();
   initSubcontractingView();
   initBenchmarkView();
+  initRiskAssessmentBridge();
   initTotalCostBridge();
   // Default view
   setActiveView('workload');

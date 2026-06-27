@@ -796,11 +796,23 @@
       color: #0f172a;
     }
 
+    .ra-page {
+      color: #0f172a;
+    }
+
     .tc-hero {
       margin-inline: -2rem;
       padding: 2rem;
       background: #0b1f33;
       border-bottom: 1px solid #1f3a55;
+      color: #f8fafc;
+    }
+
+    .ra-hero {
+      margin-inline: -2rem;
+      padding: 2rem;
+      background: #25171d;
+      border-bottom: 1px solid #57303d;
       color: #f8fafc;
     }
 
@@ -853,6 +865,12 @@
       gap: 1rem;
     }
 
+    .ra-filter-grid {
+      display: grid;
+      grid-template-columns: minmax(220px, .7fr) minmax(280px, 1.3fr);
+      gap: 1rem;
+    }
+
     .tc-filter-control {
       position: relative;
     }
@@ -893,6 +911,12 @@
     .tc-kpis {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1rem;
+    }
+
+    .ra-kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 1rem;
     }
 
@@ -1036,7 +1060,26 @@
       background: #f8fafc;
     }
 
+    .ra-table-scroll {
+      max-height: 560px;
+      overflow: auto;
+    }
+
+    .ra-table-scroll thead {
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      background: #f8fafc;
+      color: #718198;
+      font-size: 10px;
+      text-transform: uppercase;
+    }
+
     .dark .tc-page {
+      color: #f8fafc;
+    }
+
+    .dark .ra-page {
       color: #f8fafc;
     }
 
@@ -1062,6 +1105,10 @@
       background: #142239;
     }
 
+    .dark .ra-table-scroll thead {
+      background: #142239;
+    }
+
     @media (max-width: 1280px) {
       .tc-hero-grid {
         grid-template-columns: 1fr;
@@ -1075,7 +1122,9 @@
 
     @media (max-width: 900px) {
       .tc-filter-grid,
-      .tc-kpis {
+      .tc-kpis,
+      .ra-filter-grid,
+      .ra-kpis {
         grid-template-columns: 1fr;
       }
 
@@ -1150,6 +1199,12 @@
         href="cost_summary_mi.html" target="_blank" rel="noopener noreferrer">
         <span class="material-symbols-outlined">table_view</span>
         <span class="hidden lg:block">Cost Summary &amp; MI</span>
+      </a>
+      <a data-view="riskassessment"
+        class="nav-item flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        href="#">
+        <span class="material-symbols-outlined">policy</span>
+        <span class="hidden lg:block">Risk Assessment</span>
       </a>
       <a data-view="totalcost"
         class="nav-item flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
@@ -1845,6 +1900,8 @@
         </div>
       </div>
 
+      <div id="view-riskassessment" class="view hidden px-8 pb-8 space-y-6 max-w-full"></div>
+
       <div id="view-totalcost" class="view hidden px-8 pb-8 space-y-6 max-w-full"></div>
 
     </div>
@@ -1852,8 +1909,9 @@
     </div>
   </main>
 
-<script src="total_cost_dashboard.js?v=20260627-mercury-short-description-v1"></script>
-<script src="index_Vref.js?v=20260627-mercury-short-description-v1"></script>
+<script src="risk_assessment_dashboard.js?v=20260627-risk-assessment-v1"></script>
+<script src="total_cost_dashboard.js?v=20260627-risk-assessment-v1"></script>
+<script src="index_Vref.js?v=20260627-risk-assessment-v1"></script>
 
 </body>
 </html>

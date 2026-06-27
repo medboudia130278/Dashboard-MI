@@ -1404,7 +1404,7 @@
               Pricing &amp; Risks
             </div>
             <h2 class="mt-3 text-2xl font-black tracking-tight">Risk Register Workspace</h2>
-            <p class="mt-2 text-sm text-slate-500">Import or edit Mercury risk register rows per project from the Mercury_Config Excel sheet.</p>
+            <p class="mt-2 text-sm text-slate-500">Import or edit the Mercury risk register and the project Risk Assessment Register.</p>
           </div>
           <div class="flex items-center gap-3">
             <div id="riskRegisterWorkspaceStatus" class="text-xs font-semibold text-slate-500">No project selected.</div>
@@ -1456,10 +1456,37 @@
               </section>
 
               <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div class="mb-4">
+                  <h3 class="text-lg font-bold">Mercury Risk Register</h3>
+                  <p class="mt-1 text-xs text-slate-500">Imported from the <span class="font-semibold">Mercury_Config</span> sheet.</p>
+                </div>
                 <div class="max-h-[560px] overflow-auto custom-scrollbar">
                   <table class="min-w-[2400px] text-sm">
                     <thead id="riskRegisterTableHead" class="sticky top-0 z-10 bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400"></thead>
                     <tbody id="riskRegisterTableBody" class="divide-y divide-slate-200"></tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div class="mb-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  <div>
+                    <h3 class="text-lg font-bold">Risk Assessment Register</h3>
+                    <p class="mt-1 text-xs text-slate-500">Imported from <span class="font-semibold">Risk_Register</span> (headers row 4) and enriched with <span class="font-semibold">Action Description</span> from <span class="font-semibold">Action_Plan_Register</span> (headers row 3).</p>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <input id="riskAssessmentImportInput" class="hidden" type="file" accept=".xlsx,.xls" />
+                    <button id="riskAssessmentImportBtn" type="button" class="inline-flex items-center gap-2 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-2 text-sm font-semibold text-cyan-700 hover:bg-cyan-100 transition-all">
+                      <span class="material-symbols-outlined text-[18px]">upload_file</span>
+                      Import Excel
+                    </button>
+                    <span id="riskAssessmentRowCount" class="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600">0 row(s)</span>
+                  </div>
+                </div>
+                <div class="max-h-[560px] overflow-auto custom-scrollbar">
+                  <table class="min-w-[4200px] text-sm">
+                    <thead id="riskAssessmentTableHead" class="sticky top-0 z-10 bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400"></thead>
+                    <tbody id="riskAssessmentTableBody" class="divide-y divide-slate-200"></tbody>
                   </table>
                 </div>
               </section>
@@ -3872,7 +3899,7 @@
     </div>
   </aside>
 
-  <script src="cost_summary_mi_ui.js?v=20260627-mercury-short-description-v1"></script>
-  <script type="module" src="cost_summary_mi.js?v=20260627-mercury-short-description-v1"></script>
+  <script src="cost_summary_mi_ui.js?v=20260627-risk-assessment-analytics-v1"></script>
+  <script type="module" src="cost_summary_mi.js?v=20260627-risk-assessment-analytics-v1"></script>
 </body>
 </html>

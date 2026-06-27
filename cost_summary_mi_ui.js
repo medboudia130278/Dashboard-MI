@@ -279,6 +279,60 @@
         "Fixed Contingencies/ Risk: Most likely value": "min-w-[210px] max-w-[260px]",
         "Risk type": "min-w-[140px] max-w-[190px]"
       };
+      const riskAssessmentHeaders = [
+        "Risk Number",
+        "Phase",
+        "RISK ID",
+        "Unit Name",
+        "WP / Function",
+        "Risk Description",
+        "Action Description",
+        "Owner / Sub System",
+        "Category",
+        "Status",
+        "Risk Application",
+        "Occurrences",
+        "Impact",
+        "Likelihood",
+        "Risk Profile",
+        "Score",
+        "Total Value Before Mitigation (kEUR)",
+        "Total Effect of Mitigation (kEUR)",
+        "Total Cost of Mitigation (kEUR)",
+        "Total Value After Mitigation (kEUR)",
+        "Provision %",
+        "Total Provision Approved (kEUR)",
+        "Local Currency",
+        "Value Before Mitigation per Occurrence (kLocal)",
+        "Comments"
+      ];
+      const riskAssessmentColumnWidths = {
+        "Risk Number": "min-w-[110px] max-w-[140px]",
+        "Phase": "min-w-[110px] max-w-[140px]",
+        "RISK ID": "min-w-[180px] max-w-[240px]",
+        "Unit Name": "min-w-[130px] max-w-[170px]",
+        "WP / Function": "min-w-[150px] max-w-[210px]",
+        "Risk Description": "min-w-[320px] max-w-[420px]",
+        "Action Description": "min-w-[320px] max-w-[420px]",
+        "Owner / Sub System": "min-w-[170px] max-w-[230px]",
+        "Category": "min-w-[150px] max-w-[210px]",
+        "Status": "min-w-[120px] max-w-[160px]",
+        "Risk Application": "min-w-[260px] max-w-[360px]",
+        "Occurrences": "min-w-[120px] max-w-[150px]",
+        "Impact": "min-w-[140px] max-w-[180px]",
+        "Likelihood": "min-w-[140px] max-w-[180px]",
+        "Risk Profile": "min-w-[140px] max-w-[180px]",
+        "Score": "min-w-[100px] max-w-[130px]",
+        "Total Value Before Mitigation (kEUR)": "min-w-[220px] max-w-[280px]",
+        "Total Effect of Mitigation (kEUR)": "min-w-[220px] max-w-[280px]",
+        "Total Cost of Mitigation (kEUR)": "min-w-[220px] max-w-[280px]",
+        "Total Value After Mitigation (kEUR)": "min-w-[220px] max-w-[280px]",
+        "Provision %": "min-w-[120px] max-w-[150px]",
+        "Total Provision Approved (kEUR)": "min-w-[220px] max-w-[280px]",
+        "Local Currency": "min-w-[130px] max-w-[170px]",
+        "Value Before Mitigation per Occurrence (kLocal)": "min-w-[260px] max-w-[330px]",
+        "Comments": "min-w-[220px] max-w-[320px]"
+      };
 
       function normalizeProjectContext(value) {
         return String(value || "")
@@ -800,6 +854,9 @@
         all[getFallbackStudyId()] = nextState;
         localStorage.setItem(riskRegisterFallbackKey, JSON.stringify(all));
         window.updateToolbarStatusDots?.();
+        setTimeout(function () {
+          void publishRiskAssessmentDataForDashboard();
+        }, 0);
       }
 
       function buildMtCurrencyOptions(projectKey) {
@@ -4777,6 +4834,42 @@
         return key ? row[key] : "";
       }
 
+      function getRiskAssessmentActionJoinKey(phase, riskId) {
+        function normalizePart(value) {
+          return String(value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+        }
+        const normalizedPhase = normalizePart(phase);
+        const normalizedRiskId = normalizePart(riskId);
+        return normalizedPhase && normalizedRiskId ? normalizedPhase + "|" + normalizedRiskId : "";
+      }
+
+      function readRiskAssessmentActionDescriptions(workbook) {
+        if (!workbook || !workbook.Sheets || !workbook.Sheets.Action_Plan_Register) return new Map();
+        const actionRows = XLSX.utils.sheet_to_json(workbook.Sheets.Action_Plan_Register, {
+          range: 2,
+          defval: "",
+          raw: false,
+          blankrows: false,
+        });
+        const descriptionsByRisk = new Map();
+        actionRows.forEach(function (row) {
+          const key = getRiskAssessmentActionJoinKey(
+            getRiskRegisterImportValue(row, "Phase"),
+            getRiskRegisterImportValue(row, "RISK ID")
+          );
+          const description = String(getRiskRegisterImportValue(row, "Action Description") ?? "").trim();
+          if (!key || !description) return;
+          const descriptions = descriptionsByRisk.get(key) || [];
+          const normalizedDescription = description.toLowerCase().replace(/\s+/g, " ");
+          const alreadyIncluded = descriptions.some(function (item) {
+            return item.toLowerCase().replace(/\s+/g, " ") === normalizedDescription;
+          });
+          if (!alreadyIncluded) descriptions.push(description);
+          descriptionsByRisk.set(key, descriptions);
+        });
+        return descriptionsByRisk;
+      }
+
       function createFallbackRiskRegisterRow(values) {
         const source = values && typeof values === "object" ? values : {};
         const row = {
@@ -4793,13 +4886,32 @@
         return row;
       }
 
+      function createFallbackRiskAssessmentRow(values) {
+        const source = values && typeof values === "object" ? values : {};
+        const row = {
+          id: source.id ? String(source.id) : "ra_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+          values: {},
+        };
+        riskAssessmentHeaders.forEach(function (header) {
+          const value = Object.prototype.hasOwnProperty.call(source, header)
+            ? source[header]
+            : (source.values && Object.prototype.hasOwnProperty.call(source.values, header) ? source.values[header] : "");
+          row.values[header] = String(value ?? "");
+        });
+        return row;
+      }
+
       function normalizeFallbackRiskRegisterProjectConfig(projectConfig) {
         const config = projectConfig && typeof projectConfig === "object" ? projectConfig : {};
         const rawRows = Array.isArray(config.rows) ? config.rows : [];
+        const rawAssessmentRows = Array.isArray(config.assessmentRows) ? config.assessmentRows : [];
         return {
           rows: rawRows.map(function (row) { return createFallbackRiskRegisterRow(row); }),
           importedFileName: String(config.importedFileName || ""),
           importedAt: String(config.importedAt || ""),
+          assessmentRows: rawAssessmentRows.map(function (row) { return createFallbackRiskAssessmentRow(row); }),
+          assessmentImportedFileName: String(config.assessmentImportedFileName || ""),
+          assessmentImportedAt: String(config.assessmentImportedAt || ""),
         };
       }
 
@@ -4846,24 +4958,73 @@
         });
       }
 
+      function parseRiskAssessmentWorkbookRows(workbook) {
+        if (!workbook || !workbook.Sheets || !workbook.Sheets.Risk_Register) {
+          throw new Error('The imported workbook must contain a "Risk_Register" sheet.');
+        }
+        const actionDescriptionsByRisk = readRiskAssessmentActionDescriptions(workbook);
+        const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets.Risk_Register, {
+          range: 3,
+          defval: "",
+          raw: false,
+          blankrows: false,
+        });
+        return rawRows.map(function (rawRow) {
+          const values = {};
+          riskAssessmentHeaders.forEach(function (header) {
+            values[header] = String(getRiskRegisterImportValue(rawRow, header) ?? "");
+          });
+          const actionKey = getRiskAssessmentActionJoinKey(values.Phase, values["RISK ID"]);
+          values["Action Description"] = actionKey && actionDescriptionsByRisk.has(actionKey)
+            ? actionDescriptionsByRisk.get(actionKey).join(" | ")
+            : "";
+          return createFallbackRiskAssessmentRow(values);
+        }).filter(function (row) {
+          return riskAssessmentHeaders.some(function (header) {
+            return String(row.values[header] || "").trim();
+          });
+        });
+      }
+
       async function importRiskRegisterExcelFile(projectKey, file) {
         if (!projectKey || !file) return;
         try {
           const data = await file.arrayBuffer();
           const workbook = XLSX.read(data, { type: "array" });
           const rows = parseRiskRegisterWorkbookRows(workbook);
-          saveFallbackRiskRegisterProjectConfig(projectKey, function () {
-            return {
+          saveFallbackRiskRegisterProjectConfig(projectKey, function (config) {
+            return Object.assign({}, config, {
               rows: rows,
               importedFileName: file.name || "",
               importedAt: new Date().toISOString(),
-            };
+            });
           });
           $("riskRegisterWorkspace").dataset.currentProjectKey = projectKey;
           renderFallbackRiskRegisterWorkspace();
         } catch (error) {
           console.error("Risk Register import error:", error);
           window.alert("Unable to import Risk Register Excel: " + (error.message || error));
+        }
+      }
+
+      async function importRiskAssessmentExcelFile(projectKey, file) {
+        if (!projectKey || !file) return;
+        try {
+          const data = await file.arrayBuffer();
+          const workbook = XLSX.read(data, { type: "array" });
+          const rows = parseRiskAssessmentWorkbookRows(workbook);
+          saveFallbackRiskRegisterProjectConfig(projectKey, function (config) {
+            return Object.assign({}, config, {
+              assessmentRows: rows,
+              assessmentImportedFileName: file.name || "",
+              assessmentImportedAt: new Date().toISOString(),
+            });
+          });
+          $("riskRegisterWorkspace").dataset.currentProjectKey = projectKey;
+          renderFallbackRiskRegisterWorkspace();
+        } catch (error) {
+          console.error("Risk Assessment Register import error:", error);
+          window.alert("Unable to import Risk Assessment Register Excel: " + (error.message || error));
         }
       }
 
@@ -4880,7 +5041,11 @@
         const rowCount = $("riskRegisterRowCount");
         const tableHead = $("riskRegisterTableHead");
         const tableBody = $("riskRegisterTableBody");
-        if (!workspace || !list || !empty || !content || !status || !title || !meta || !importBtn || !addRowBtn || !rowCount || !tableHead || !tableBody) return;
+        const assessmentImportBtn = $("riskAssessmentImportBtn");
+        const assessmentRowCount = $("riskAssessmentRowCount");
+        const assessmentTableHead = $("riskAssessmentTableHead");
+        const assessmentTableBody = $("riskAssessmentTableBody");
+        if (!workspace || !list || !empty || !content || !status || !title || !meta || !importBtn || !addRowBtn || !rowCount || !tableHead || !tableBody || !assessmentImportBtn || !assessmentRowCount || !assessmentTableHead || !assessmentTableBody) return;
 
         const projects = buildFallbackRiskRegisterProjects();
         const currentKey = workspace.dataset.currentProjectKey && projects.some(function (project) {
@@ -4897,7 +5062,8 @@
           const config = project.riskRegisterConfig || normalizeFallbackRiskRegisterProjectConfig(null);
           const badges = [
             '<span class="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700">' + config.rows.length + ' RISK</span>',
-            config.importedFileName ? '<span class="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Imported</span>' : '<span class="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">Manual</span>',
+            '<span class="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">' + config.assessmentRows.length + ' ASSESS</span>',
+            (config.importedFileName || config.assessmentImportedFileName) ? '<span class="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Imported</span>' : '<span class="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">Manual</span>',
           ].join("");
           return (
             '<button type="button" data-fallback-risk-register-project-select="' + escapeHtml(project.projectKey) + '" class="w-full rounded-xl border px-3 py-3 text-left transition-all ' + (active ? "border-rose-300 bg-rose-50 shadow-sm ring-1 ring-rose-200" : "border-slate-200 bg-white hover:bg-slate-100") + '">' +
@@ -4921,10 +5087,12 @@
         meta.textContent = [
           currentProject.projectType || "No project type",
           currentProject.projectContext || "No context",
-          currentProject.riskRegisterConfig.importedFileName ? ("Imported: " + currentProject.riskRegisterConfig.importedFileName) : "",
+          currentProject.riskRegisterConfig.importedFileName ? ("Mercury: " + currentProject.riskRegisterConfig.importedFileName) : "",
+          currentProject.riskRegisterConfig.assessmentImportedFileName ? ("Assessment: " + currentProject.riskRegisterConfig.assessmentImportedFileName) : "",
         ].filter(Boolean).join(" | ");
         importBtn.setAttribute("data-project-key", currentProject.projectKey);
         addRowBtn.setAttribute("data-project-key", currentProject.projectKey);
+        assessmentImportBtn.setAttribute("data-project-key", currentProject.projectKey);
 
         const config = currentProject.riskRegisterConfig || normalizeFallbackRiskRegisterProjectConfig(null);
         rowCount.textContent = config.rows.length + " row(s)";
@@ -4935,17 +5103,35 @@
 
         if (!config.rows.length) {
           tableBody.innerHTML = '<tr><td colspan="' + (riskRegisterHeaders.length + 1) + '" class="py-8 text-center text-sm text-slate-500">No risk register row yet. Import Mercury_Config or use Add row.</td></tr>';
-          return;
+        } else {
+          tableBody.innerHTML = config.rows.map(function (row) {
+            return '<tr>' + riskRegisterHeaders.map(function (header) {
+              const widthClass = riskRegisterColumnWidths[header] || "min-w-[150px] max-w-[220px]";
+              return '<td class="py-2 px-3 ' + widthClass + '"><input type="text" data-fallback-risk-register-cell data-project-key="' + escapeHtml(currentProject.projectKey) + '" data-row-id="' + escapeHtml(row.id) + '" data-field="' + escapeHtml(header) + '" class="w-full rounded-xl border-slate-200 px-3 py-2 text-sm truncate" title="' + escapeHtml((row.values || {})[header] || "") + '" value="' + escapeHtml((row.values || {})[header] || "") + '"/></td>';
+            }).join("") +
+            '<td class="py-2 pl-3 text-right"><button type="button" data-fallback-risk-register-row-remove data-project-key="' + escapeHtml(currentProject.projectKey) + '" data-row-id="' + escapeHtml(row.id) + '" class="inline-flex items-center justify-center size-9 rounded-xl border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 transition-all" title="Remove row"><span class="material-symbols-outlined text-[18px]">delete</span></button></td>' +
+            '</tr>';
+          }).join("");
         }
 
-        tableBody.innerHTML = config.rows.map(function (row) {
-          return '<tr>' + riskRegisterHeaders.map(function (header) {
-            const widthClass = riskRegisterColumnWidths[header] || "min-w-[150px] max-w-[220px]";
-            return '<td class="py-2 px-3 ' + widthClass + '"><input type="text" data-fallback-risk-register-cell data-project-key="' + escapeHtml(currentProject.projectKey) + '" data-row-id="' + escapeHtml(row.id) + '" data-field="' + escapeHtml(header) + '" class="w-full rounded-xl border-slate-200 px-3 py-2 text-sm truncate" title="' + escapeHtml((row.values || {})[header] || "") + '" value="' + escapeHtml((row.values || {})[header] || "") + '"/></td>';
-          }).join("") +
-          '<td class="py-2 pl-3 text-right"><button type="button" data-fallback-risk-register-row-remove data-project-key="' + escapeHtml(currentProject.projectKey) + '" data-row-id="' + escapeHtml(row.id) + '" class="inline-flex items-center justify-center size-9 rounded-xl border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 transition-all" title="Remove row"><span class="material-symbols-outlined text-[18px]">delete</span></button></td>' +
-          '</tr>';
-        }).join("");
+        assessmentRowCount.textContent = config.assessmentRows.length + " row(s)";
+        assessmentTableHead.innerHTML = '<tr class="border-b border-slate-200">' + riskAssessmentHeaders.map(function (header) {
+          const widthClass = riskAssessmentColumnWidths[header] || "min-w-[150px] max-w-[220px]";
+          return '<th class="text-left py-3 px-3 whitespace-normal leading-snug ' + widthClass + '">' + escapeHtml(header) + '</th>';
+        }).join("") + '<th class="text-right py-3 pl-3 w-16">Actions</th></tr>';
+
+        if (!config.assessmentRows.length) {
+          assessmentTableBody.innerHTML = '<tr><td colspan="' + (riskAssessmentHeaders.length + 1) + '" class="py-8 text-center text-sm text-slate-500">No Risk Assessment Register row yet. Import an Excel file containing the Risk_Register sheet.</td></tr>';
+        } else {
+          assessmentTableBody.innerHTML = config.assessmentRows.map(function (row) {
+            return '<tr>' + riskAssessmentHeaders.map(function (header) {
+              const widthClass = riskAssessmentColumnWidths[header] || "min-w-[150px] max-w-[220px]";
+              return '<td class="py-2 px-3 ' + widthClass + '"><input type="text" data-fallback-risk-assessment-cell data-project-key="' + escapeHtml(currentProject.projectKey) + '" data-row-id="' + escapeHtml(row.id) + '" data-field="' + escapeHtml(header) + '" class="w-full rounded-xl border-slate-200 px-3 py-2 text-sm truncate" title="' + escapeHtml((row.values || {})[header] || "") + '" value="' + escapeHtml((row.values || {})[header] || "") + '"/></td>';
+            }).join("") +
+            '<td class="py-2 pl-3 text-right"><button type="button" data-fallback-risk-assessment-row-remove data-project-key="' + escapeHtml(currentProject.projectKey) + '" data-row-id="' + escapeHtml(row.id) + '" class="inline-flex items-center justify-center size-9 rounded-xl border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 transition-all" title="Remove row"><span class="material-symbols-outlined text-[18px]">delete</span></button></td>' +
+            '</tr>';
+          }).join("");
+        }
       }
 
       function saveFallbackProjectField(projectKey, field, value) {
@@ -10313,6 +10499,86 @@
 
       window.publishMercuryDataForDashboard = publishMercuryDataForDashboard;
 
+      async function publishRiskAssessmentDataForDashboard() {
+        if (publishRiskAssessmentDataForDashboard.inFlight) {
+          publishRiskAssessmentDataForDashboard.rerunRequested = true;
+          return null;
+        }
+        publishRiskAssessmentDataForDashboard.inFlight = true;
+        try {
+          const bridgeModule = await import("./shared/risk_assessment_dashboard_bridge.js");
+          const riskProjects = buildFallbackRiskRegisterProjects();
+          const currencyProjects = buildFallbackCurrencyExchangeProjects();
+          const currencyByLookup = buildProjectLookupMap(currencyProjects);
+          const sharedWorkbooks = getSharedWorkbooksForWorkspace();
+          const rows = [];
+          const projects = riskProjects.map(function (project) {
+            const lookupKeys = getProjectLookupKeys(project);
+            const currencyProject = findProjectByLookupKeys(currencyByLookup, lookupKeys) || null;
+            const sourceWorkbook = sharedWorkbooks.find(function (workbook) {
+              const gp = workbook && (workbook.generalParams || (workbook.sheets && workbook.sheets.generalParameters)) || {};
+              return normalizeWorkspaceKey(gp.project_name || workbook.projectKey || "") === normalizeWorkspaceKey(project.projectName);
+            }) || null;
+            const gp = sourceWorkbook && (sourceWorkbook.generalParams || (sourceWorkbook.sheets && sourceWorkbook.sheets.generalParameters)) || {};
+            const config = project.riskRegisterConfig || normalizeFallbackRiskRegisterProjectConfig(null);
+
+            (Array.isArray(config.assessmentRows) ? config.assessmentRows : []).forEach(function (entry) {
+              const publishedRow = Object.assign({}, entry && entry.values || {});
+              publishedRow._project = project.projectName || "";
+              publishedRow._projectKey = project.projectKey || "";
+              publishedRow._projectType = project.projectType || "";
+              publishedRow._projectContext = project.projectContext || "";
+              rows.push(publishedRow);
+            });
+
+            return {
+              projectKey: project.projectKey || "",
+              projectName: project.projectName || "",
+              projectType: project.projectType || "",
+              projectContext: project.projectContext || "",
+              lineLength: gp.line_length || gp.line_length_km || gp.route_length || "",
+              bidYear: gp.bid_year || "",
+              serviceYear: gp.service_year || "",
+              contractDuration: gp.contract_duration_years || "",
+              conversion: currencyProject ? {
+                configuredTargetCurrency: currencyProject.targetCurrency || "",
+                baseCurrency: currencyProject.baseCurrency || "",
+                provider: currencyProject.provider || "",
+                lastUpdated: currencyProject.lastUpdated || "",
+                targetCurrencyOptions: (currencyProject.targetCurrencyOptions || []).slice(),
+                rows: (currencyProject.rows || []).map(function (entry) {
+                  return {
+                    currency: entry.currency || "",
+                    effectiveRate: entry.effectiveRate,
+                    source: entry.source || "",
+                  };
+                }),
+              } : null,
+            };
+          });
+
+          return await bridgeModule.publishRiskAssessmentBridge({
+            studyId: getFallbackStudyId(),
+            studyName: document.querySelector("#studySelector option:checked")?.textContent?.trim() || "Cost Summary & MI",
+            rows: rows,
+            projects: projects,
+          });
+        } catch (error) {
+          console.warn("Unable to publish Risk Assessment data for the Dashboard.", error);
+          return null;
+        } finally {
+          publishRiskAssessmentDataForDashboard.inFlight = false;
+          if (publishRiskAssessmentDataForDashboard.rerunRequested) {
+            publishRiskAssessmentDataForDashboard.rerunRequested = false;
+            setTimeout(function () {
+              void publishRiskAssessmentDataForDashboard();
+            }, 0);
+          }
+        }
+      }
+
+      window.publishRiskAssessmentDataForDashboard = publishRiskAssessmentDataForDashboard;
+
       function renderMercuryInterfacePreview(project, file) {
         const previewTitle = $("mercuryInterfacePreviewTitle");
         const previewMeta = $("mercuryInterfacePreviewMeta");
@@ -13730,7 +13996,10 @@
           case "risk_register": {
             var s = _readStatusSlice("cost-summary-mi-risk-register-fallback-v1");
             return Object.values(s).some(function(p) {
-              return p && Array.isArray(p.rows) && p.rows.length > 0;
+              return p && (
+                (Array.isArray(p.rows) && p.rows.length > 0)
+                || (Array.isArray(p.assessmentRows) && p.assessmentRows.length > 0)
+              );
             }) ? "filled" : "empty";
           }
           default: return "na";
@@ -14178,6 +14447,15 @@
             return;
           }
 
+          if (event.target.closest("#riskAssessmentImportBtn")) {
+            event.preventDefault();
+            const projectKey = event.target.closest("#riskAssessmentImportBtn").getAttribute("data-project-key") || "";
+            const input = $("riskAssessmentImportInput");
+            if (input) input.setAttribute("data-project-key", projectKey);
+            input?.click();
+            return;
+          }
+
           const addRiskRegisterRowBtn = event.target.closest("#riskRegisterAddRowBtn");
           if (addRiskRegisterRowBtn) {
             event.preventDefault();
@@ -14198,6 +14476,21 @@
             saveFallbackRiskRegisterProjectConfig(projectKey, function (config) {
               return Object.assign({}, config, {
                 rows: config.rows.filter(function (row) { return row.id !== rowId; }),
+              });
+            });
+            $("riskRegisterWorkspace").dataset.currentProjectKey = projectKey;
+            renderFallbackRiskRegisterWorkspace();
+            return;
+          }
+
+          const removeRiskAssessmentRowBtn = event.target.closest("[data-fallback-risk-assessment-row-remove]");
+          if (removeRiskAssessmentRowBtn) {
+            event.preventDefault();
+            const projectKey = removeRiskAssessmentRowBtn.getAttribute("data-project-key") || "";
+            const rowId = removeRiskAssessmentRowBtn.getAttribute("data-row-id") || "";
+            saveFallbackRiskRegisterProjectConfig(projectKey, function (config) {
+              return Object.assign({}, config, {
+                assessmentRows: config.assessmentRows.filter(function (row) { return row.id !== rowId; }),
               });
             });
             $("riskRegisterWorkspace").dataset.currentProjectKey = projectKey;
@@ -14706,6 +14999,15 @@
             return;
           }
 
+          if (event.target.id === "riskAssessmentImportInput") {
+            const fileInput = event.target;
+            const file = fileInput.files && fileInput.files[0];
+            const projectKey = fileInput.getAttribute("data-project-key") || $("riskRegisterWorkspace")?.dataset.currentProjectKey || "";
+            importRiskAssessmentExcelFile(projectKey, file);
+            fileInput.value = "";
+            return;
+          }
+
           if (event.target.id === "subsystemSummaryImportInput") {
             const fileInput = event.target;
             const file = fileInput.files && fileInput.files[0];
@@ -14800,6 +15102,24 @@
                   if (row.id !== rowId) return row;
                   const values = Object.assign({}, row.values || {});
                   values[field] = riskRegisterCell.value || "";
+                  return Object.assign({}, row, { values: values });
+                }),
+              });
+            });
+            return;
+          }
+
+          const riskAssessmentCell = event.target.closest("[data-fallback-risk-assessment-cell]");
+          if (riskAssessmentCell) {
+            const projectKey = riskAssessmentCell.getAttribute("data-project-key") || "";
+            const rowId = riskAssessmentCell.getAttribute("data-row-id") || "";
+            const field = riskAssessmentCell.getAttribute("data-field") || "";
+            saveFallbackRiskRegisterProjectConfig(projectKey, function (config) {
+              return Object.assign({}, config, {
+                assessmentRows: config.assessmentRows.map(function (row) {
+                  if (row.id !== rowId) return row;
+                  const values = Object.assign({}, row.values || {});
+                  values[field] = riskAssessmentCell.value || "";
                   return Object.assign({}, row, { values: values });
                 }),
               });

@@ -1127,7 +1127,10 @@ function computeModuleStatus(moduleKey) {
       return "empty";
     }
     case "risk_register": {
-      const hasRows = project => project && Array.isArray(project.rows) && project.rows.length > 0;
+      const hasRows = project => project && (
+        (Array.isArray(project.rows) && project.rows.length > 0)
+        || (Array.isArray(project.assessmentRows) && project.assessmentRows.length > 0)
+      );
       if (hasPrimaryProjectConfig(state.studyConfig?.studySetup?.riskRegister, hasRows)) return "filled";
       const s = readFallbackStudySlice("cost-summary-mi-risk-register-fallback-v1");
       return Object.values(s).some(hasRows) ? "filled" : "empty";
@@ -6131,6 +6134,11 @@ async function publishMercuryDataForDashboard() {
   return window.publishMercuryDataForDashboard();
 }
 
+async function publishRiskAssessmentDataForDashboard() {
+  if (typeof window.publishRiskAssessmentDataForDashboard !== "function") return null;
+  return window.publishRiskAssessmentDataForDashboard();
+}
+
 async function refreshSharedSnapshot() {
   await hydrateSharedState();
   publishProjectPhasesBridge();
@@ -6138,6 +6146,7 @@ async function refreshSharedSnapshot() {
   publishGuidePlanningBridge();
   publishPioDefinitionBridge();
   void publishMercuryDataForDashboard();
+  void publishRiskAssessmentDataForDashboard();
   renderStudyWorkspace();
   renderSharedStoreSummary();
   renderProjectDataPreview();
@@ -6160,6 +6169,7 @@ async function switchToStudy(studyId) {
   publishGuidePlanningBridge();
   publishPioDefinitionBridge();
   void publishMercuryDataForDashboard();
+  void publishRiskAssessmentDataForDashboard();
   applyDraftToForm(state.draft);
   renderStudyWorkspace();
   updateToolbarStatusDots();
@@ -6180,6 +6190,7 @@ async function initCostSummaryMIPage() {
     publishGuidePlanningBridge();
     publishPioDefinitionBridge();
     void publishMercuryDataForDashboard();
+    void publishRiskAssessmentDataForDashboard();
     updateToolbarStatusDots();
     renderCalculationBlocks();
     renderWorkbookOutline();
