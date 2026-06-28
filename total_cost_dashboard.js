@@ -588,12 +588,15 @@ function renderTcProjectInfo(globalRows) {
   const represented = new Set(globalRows.map((row) => row._projectKey || row._project));
   const projects = getTotalCostProjects().filter((project) => !represented.size || represented.has(project.projectKey) || represented.has(project.projectName));
   const single = projects.length === 1 ? projects[0] : null;
+  const contractDuration = single
+    ? (window.getBridgeProjectContractDurationInfo?.(single)?.label || single.contractDuration || "--")
+    : "--";
   const values = [
     ["Project Name", single ? single.projectName : `${projects.length} projects selected`],
     ["Project Type", single ? (single.projectType || "--") : "Multiple"],
     ["Line Length", single ? (single.lineLength || "--") : "--"],
     ["Bid / Service Year", single ? `${single.bidYear || "--"} / ${single.serviceYear || "--"}` : "-- / --"],
-    ["Contract Duration", single ? (single.contractDuration || "--") : "--"],
+    ["Contract Duration", contractDuration],
   ];
   container.innerHTML = values.map(([label, value]) => `
     <div><p class="tc-label">${escapeHtml(label)}</p><p class="mt-1 truncate text-sm font-bold" title="${escapeHtml(value)}">${escapeHtml(value)}</p></div>

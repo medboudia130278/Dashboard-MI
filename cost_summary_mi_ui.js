@@ -10466,6 +10466,9 @@
               bidYear: gp.bid_year || "",
               serviceYear: gp.service_year || "",
               contractDuration: gp.contract_duration_years || "",
+              correcOvhStartYear: gp.correc_ovh_start_year || "",
+              correcOvhEndYear: gp.correc_ovh_end_year || "",
+              planningYear: gp.planning_year || "",
               textMappings: (priceListConfig.textMappings || []).slice(0, 9),
               conversion: currencyProject ? {
                 configuredTargetCurrency: currencyProject.targetCurrency || "",
@@ -10547,6 +10550,9 @@
               bidYear: gp.bid_year || "",
               serviceYear: gp.service_year || "",
               contractDuration: gp.contract_duration_years || "",
+              correcOvhStartYear: gp.correc_ovh_start_year || "",
+              correcOvhEndYear: gp.correc_ovh_end_year || "",
+              planningYear: gp.planning_year || "",
               conversion: currencyProject ? {
                 configuredTargetCurrency: currencyProject.targetCurrency || "",
                 baseCurrency: currencyProject.baseCurrency || "",

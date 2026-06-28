@@ -824,6 +824,28 @@
     };
   }
 
+  function getBridgeProjectContractDurationInfo(project = {}) {
+    const projectNameKey = normalizeKey(project.projectName || "");
+    const dashboardProject = getRepresentativeProjectEntries(getEffectiveFileIds()).find((entry) => (
+      (project.projectKey && entry.projectKey === project.projectKey)
+      || (projectNameKey && normalizeKey(
+        entry.gp?.project_name || entry.gp?.project || entry.label || ""
+      ) === projectNameKey)
+    ));
+    if (dashboardProject) {
+      return getResolvedContractDurationInfo(dashboardProject.gp, dashboardProject.projectKey);
+    }
+    return getResolvedContractDurationInfo({
+      contract_duration_years: project.contractDuration,
+      correc_ovh_start_year: project.correcOvhStartYear,
+      correc_ovh_end_year: project.correcOvhEndYear,
+      planning_year: project.planningYear,
+      service_year: project.serviceYear,
+    }, project.projectKey || "");
+  }
+
+  window.getBridgeProjectContractDurationInfo = getBridgeProjectContractDurationInfo;
+
   function getRepresentativeProjectEntries(fileIds = getEffectiveFileIds()) {
     const byProject = new Map();
     fileIds.filter(Boolean).forEach((fileId) => {
