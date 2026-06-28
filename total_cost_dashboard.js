@@ -1,6 +1,20 @@
 const TOTAL_COST_UI_STORAGE_KEY = "dashboard-total-cost-ui-v1";
 const TOTAL_COST_SIGNAL_KEY = "cost-summary-mi-mercury-bridge-v1";
 const TOTAL_COST_COLORS = ["#2563eb", "#14b8a6", "#f59e0b", "#8b5cf6", "#ef4444", "#06b6d4", "#22c55e", "#f97316", "#64748b", "#ec4899"];
+const TOTAL_COST_DONUT_COLORS = [
+  "#2563eb",
+  "#f97316",
+  "#16a34a",
+  "#dc2626",
+  "#9333ea",
+  "#0891b2",
+  "#ca8a04",
+  "#db2777",
+  "#0f766e",
+  "#4f46e5",
+  "#65a30d",
+  "#475569",
+];
 
 function normalizeTcText(value) {
   return String(value ?? "")
@@ -24,13 +38,39 @@ function tcNumeric(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function tcColorFor(value, index = 0) {
+function tcColorHash(value) {
   const text = String(value || "");
   let hash = 0;
   for (let position = 0; position < text.length; position += 1) {
     hash = ((hash << 5) - hash + text.charCodeAt(position)) | 0;
   }
-  return TOTAL_COST_COLORS[Math.abs(hash + index) % TOTAL_COST_COLORS.length];
+  return Math.abs(hash);
+}
+
+function tcColorFor(value, index = 0) {
+  return TOTAL_COST_COLORS[(tcColorHash(value) + index) % TOTAL_COST_COLORS.length];
+}
+
+function buildTcDonutColorMap(codes) {
+  const colorMap = new Map();
+  const usedIndexes = new Set();
+  Array.from(new Set((codes || []).map(String))).sort((left, right) => left.localeCompare(right)).forEach((code, codeIndex) => {
+    const preferredIndex = tcColorHash(code) % TOTAL_COST_DONUT_COLORS.length;
+    let colorIndex = preferredIndex;
+    let offset = 0;
+    while (usedIndexes.has(colorIndex) && offset < TOTAL_COST_DONUT_COLORS.length) {
+      offset += 1;
+      colorIndex = (preferredIndex + offset) % TOTAL_COST_DONUT_COLORS.length;
+    }
+    if (offset < TOTAL_COST_DONUT_COLORS.length) {
+      usedIndexes.add(colorIndex);
+      colorMap.set(code, TOTAL_COST_DONUT_COLORS[colorIndex]);
+      return;
+    }
+    const hue = Math.round((codeIndex * 137.508) % 360);
+    colorMap.set(code, `hsl(${hue}, 72%, ${codeIndex % 2 ? 42 : 52}%)`);
+  });
+  return colorMap;
 }
 
 function loadTotalCostUiState() {
@@ -455,6 +495,8 @@ function renderTcDonutChart(svgId, centerId, legendId, rows, plcField) {
   const ringGap = 2;
   const maxRadius = 43;
   const thickness = Math.max(3, Math.min(9, (maxRadius - 10) / phases.length - ringGap));
+  const codeGroups = tcAggregate(positiveRows, plcField);
+  const codeColors = buildTcDonutColorMap(Array.from(codeGroups.keys()));
   let circles = "";
   phases.forEach((phase, phaseIndex) => {
     const phaseRows = positiveRows.filter((row) => String(tcFieldValue(row, "Phase") || "(Blank)") === phase);
@@ -467,7 +509,7 @@ function renderTcDonutChart(svgId, centerId, legendId, rows, plcField) {
     Array.from(groups.entries()).forEach(([code, value]) => {
       const length = phaseTotal > 0 ? value / phaseTotal * circumference : 0;
       const dash = `${length} ${Math.max(0, circumference - length)}`;
-      const color = tcColorFor(code);
+      const color = codeColors.get(code) || tcColorFor(code);
       const title = `${phase} - ${code}: ${phaseTotal > 0 ? (value / phaseTotal * 100).toFixed(1) : "0.0"}% (${formatAmountWithCurrency(value, state.totalCostTargetCurrency)})`;
       circles += `<circle cx="50" cy="50" r="${radius}" fill="none" stroke="${color}" stroke-width="${thickness}" stroke-dasharray="${dash}" stroke-dashoffset="${-offset}" transform="rotate(-90 50 50)" pointer-events="none"/>`;
       circles += `<circle cx="50" cy="50" r="${radius}" fill="none" stroke="transparent" stroke-width="${thickness + 3}" stroke-dasharray="${dash}" stroke-dashoffset="${-offset}" transform="rotate(-90 50 50)" pointer-events="stroke"><title>${escapeHtml(title)}</title></circle>`;
@@ -476,13 +518,12 @@ function renderTcDonutChart(svgId, centerId, legendId, rows, plcField) {
   });
   svg.innerHTML = circles;
 
-  const codeGroups = tcAggregate(positiveRows, plcField);
   const grandPositive = Array.from(codeGroups.values()).reduce((sum, value) => sum + value, 0);
   const codeLegend = Array.from(codeGroups.entries())
     .sort((left, right) => right[1] - left[1])
     .map(([code, value]) => `
       <div class="flex items-center justify-between gap-3 py-1 text-xs">
-        <span class="flex min-w-0 items-center gap-2"><span class="size-2.5 rounded-sm" style="background:${tcColorFor(code)}"></span><span class="truncate">${escapeHtml(code)}</span></span>
+        <span class="flex min-w-0 items-center gap-2"><span class="size-2.5 rounded-sm" style="background:${codeColors.get(code) || tcColorFor(code)}"></span><span class="truncate">${escapeHtml(code)}</span></span>
         <strong>${grandPositive > 0 ? (value / grandPositive * 100).toFixed(1) : "0.0"}%</strong>
       </div>
     `).join("");
